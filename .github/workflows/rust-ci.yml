@@ -1,0 +1,82 @@
+name: Rust CI & cbindgen checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust-tests:
+    name: Rust tests, clippy, fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          default: true
+
+      - name: Install cargo components (fmt, clippy)
+        run: rustup component add rustfmt clippy || true
+
+      - name: Run cargo tests
+        run: |
+          cd rust
+          cargo test --all --all-features
+
+      - name: Run cargo clippy
+        run: |
+          cd rust
+          cargo clippy --all --all-features -- -D warnings
+
+      - name: Run cargo fmt check
+        run: |
+          cd rust
+          cargo fmt --all -- --check
+
+  cbindgen:
+    name: cbindgen golden header check
+    runs-on: ubuntu-latest
+    needs: rust-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust (for cbindgen)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install cbindgen
+        run: cargo install --locked cbindgen
+
+      - name: Run golden header check
+        run: bash ./scripts/check_cbindgen.sh
+
+  cmake-integration:
+    name: CMake + Cargo integration (BUILD_RUST_COMPONENTS=ON)
+    runs-on: ubuntu-latest
+    needs: cbindgen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build gcc g++
+
+      - name: Configure CMake with Rust enabled
+        run: |
+          cmake -S . -B build -DBUILD_RUST_COMPONENTS=ON
+
+      - name: Build Rust libs via CMake
+        run: |
+          cmake --build build --target rust_libs
+
+      - name: Smoke-test FFI from C++ (consumer)
+        run: |
+          bash ./test/rust_consumer/build_and_run.sh
