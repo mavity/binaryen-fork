@@ -3,13 +3,16 @@ name = "binaryen-support"
 version = "0.1.0"
 edition = "2021"
 
+
 [lib]
 name = "binaryen_support"
 path = "src/lib.rs"
+crate-type = ["rlib"]
 
 [dependencies]
 bumpalo = "3"
 ahash = "0.8"
+
 
 [dev-dependencies]
 proptest = "1.0"

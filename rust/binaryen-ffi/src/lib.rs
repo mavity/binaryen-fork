@@ -54,3 +54,31 @@ pub extern "C" fn BinaryenStringInternerIntern(
     }
     std::ptr::null()
 }
+
+// Arena FFI helpers
+#[repr(C)]
+pub struct BinaryenArena { _private: [u8; 0] }
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaCreate() -> *mut BinaryenArena {
+    let arena = Box::new(binaryen_support::Arena::new());
+    Box::into_raw(arena) as *mut BinaryenArena
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaDispose(p: *mut BinaryenArena) {
+    if p.is_null() { return; }
+    unsafe { let _ = Box::from_raw(p as *mut binaryen_support::Arena); }
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaAllocString(p: *mut BinaryenArena, s: *const c_char) -> *const c_char {
+    if p.is_null() || s.is_null() { return std::ptr::null(); }
+    unsafe {
+        let arena = &*(p as *mut binaryen_support::Arena);
+        if let Ok(str_slice) = CStr::from_ptr(s).to_str() {
+            return arena.alloc_str(str_slice);
+        }
+    }
+    std::ptr::null()
+}

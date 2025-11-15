@@ -8,3 +8,4 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 binaryen-support = { path = "../binaryen-support" }
+libc = "0.2"
