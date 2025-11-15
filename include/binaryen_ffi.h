@@ -11,6 +11,14 @@ uint32_t binaryen_ffi_version();
 
 const char* binaryen_ffi_echo(const char* s);
 
+// String interner FFI
+typedef struct BinaryenStringInterner BinaryenStringInterner;
+
+BinaryenStringInterner* BinaryenStringInternerCreate(void);
+void BinaryenStringInternerDispose(BinaryenStringInterner*);
+
+const char* BinaryenStringInternerIntern(BinaryenStringInterner* interner, const char* s);
+
 #ifdef __cplusplus
 }
 #endif

@@ -8,5 +8,9 @@ name = "binaryen_support"
 path = "src/lib.rs"
 
 [dependencies]
+bumpalo = "3"
+ahash = "0.8"
 
 [dev-dependencies]
+proptest = "1.0"
+criterion = "0.4"

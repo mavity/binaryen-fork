@@ -3,5 +3,6 @@ resolver = "2"
 
 members = [
   "binaryen-ffi",
-  "binaryen-support"
+  "binaryen-support",
+  "binaryen-core",
 ]
