@@ -1,0 +1,12 @@
+[package]
+name = "binaryen-support"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "binaryen_support"
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]

@@ -45,6 +45,12 @@ CMakeUserPresets.json
 # files commonly related to building out-of-tree
 /build/
 
+# Ignore Rust build output
+/rust/target/
+
+# Ignore test rust consumer artifacts
+/test/rust_consumer/test_ffi
+
 # macOS
 .DS_Store
 
