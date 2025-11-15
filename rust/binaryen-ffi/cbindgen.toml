@@ -1,0 +1,5 @@
+language = "C"
+parse.dependency = true
+
+[parse]
+include = ["binaryen-ffi"]

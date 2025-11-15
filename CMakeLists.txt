@@ -396,6 +396,11 @@ endif()
 
 # Configure warnings and errors
 
+# Optional Rust build integration
+if(EXISTS ${CMAKE_SOURCE_DIR}/cmake/BinaryenRust.cmake)
+  include(cmake/BinaryenRust.cmake)
+endif()
+
 if(MSVC)
   add_compile_flag("/wd4146") # Ignore warning "warning C4146: unary minus operator applied to unsigned type, result still unsigned", this pattern is used somewhat commonly in the code.
   # 4267 and 4244 are conversion/truncation warnings. We might want to fix these but they are currently pervasive.

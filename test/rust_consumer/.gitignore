@@ -1,0 +1,6 @@
+# Ignore built consumer binary and object files
+/test_ffi
+*.o
+*.so
+*.dll
+*.dylib
