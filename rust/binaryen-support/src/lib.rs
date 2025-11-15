@@ -6,6 +6,10 @@ pub fn version() -> &'static str {
 
 pub mod strings;
 pub use strings::StringInterner;
+pub mod arena;
+pub use arena::Arena;
+pub mod hash;
+pub use hash::FastHashMap;
 
 #[cfg(test)]
 mod tests {

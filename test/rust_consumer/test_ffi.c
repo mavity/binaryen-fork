@@ -14,5 +14,12 @@ int main() {
     const char* i2 = BinaryenStringInternerIntern(interner, "world");
     printf("intern pointers equal: %d\n", i1 == i2);
     BinaryenStringInternerDispose(interner);
+
+    // Test arena
+    BinaryenArena* a = BinaryenArenaCreate();
+    const char* a1 = BinaryenArenaAllocString(a, "arena-hello");
+    const char* a2 = BinaryenArenaAllocString(a, "arena-hello");
+    printf("arena intern pointers equal: %d\n", a1 == a2);
+    BinaryenArenaDispose(a);
     return 0;
 }
