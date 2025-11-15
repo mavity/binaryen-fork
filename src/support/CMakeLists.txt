@@ -19,6 +19,12 @@ set(support_SOURCES
   ${support_HEADERS}
 )
 
+if(BUILD_RUST_COMPONENTS)
+  list(APPEND support_SOURCES
+    strings_rust.cpp
+  )
+endif()
+
 # The below condition is intended for removal once the suffix_tree and
 # suffix_tree_node source files no longer depend on LLVM code in the
 # third_party folder
