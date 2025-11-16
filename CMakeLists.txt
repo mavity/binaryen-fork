@@ -518,6 +518,11 @@ add_subdirectory(test/lit)
 if(BUILD_TESTS)
   # Configure GTest unit tests
   add_subdirectory(test/gtest)
+
+  # Rust consumer smoke-test (builds only when BUILD_RUST_COMPONENTS is enabled)
+  if(EXISTS ${CMAKE_SOURCE_DIR}/test/rust_consumer/CMakeLists.txt)
+    add_subdirectory(test/rust_consumer)
+  endif()
 endif()
 
 # Sources.
@@ -534,6 +539,20 @@ if(INSTALL_LIBS OR NOT BUILD_STATIC_LIB)
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+if(BUILD_RUST_COMPONENTS)
+  # When Rust components are enabled, link the generated Rust static library
+  # into libbinaryen so C++ consumer shims can call into Rust directly.
+  if(TARGET binaryen_ffi_static)
+    target_link_libraries(binaryen binaryen_ffi_static)
+  elseif(RUST_LIBS)
+    target_link_libraries(binaryen ${RUST_LIBS})
+  endif()
+  # Build `rust_libs` before `binaryen` to ensure the static library exists.
+  if(TARGET rust_libs)
+    add_dependencies(binaryen rust_libs)
+  endif()
 endif()
 if(INSTALL_LIBS)
   install(FILES src/binaryen-c.h src/wasm-delegations.def DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

@@ -16,5 +16,4 @@ ahash = "0.8"
 
 [dev-dependencies]
 proptest = "1.0"
-criterion = "0.4"
 criterion = { version = "0.4", default-features = false }
