@@ -92,3 +92,44 @@ pub extern "C" fn BinaryenArenaAllocString(p: *mut BinaryenArena, s: *const c_ch
     }
     std::ptr::null()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::{CStr, CString};
+
+    #[test]
+    fn test_ffi_version() {
+        assert_eq!(binaryen_ffi_version(), 1);
+        assert_eq!(binaryen_ffi_abi_version(), BINARYEN_FFI_ABI_VERSION);
+    }
+
+    #[test]
+    fn test_ffi_echo_and_null() {
+        let cs = CString::new("hello").unwrap();
+        let out = binaryen_ffi_echo(cs.as_ptr());
+        assert_eq!(out, cs.as_ptr());
+        assert!(binaryen_ffi_echo(std::ptr::null()) == std::ptr::null());
+    }
+
+    #[test]
+    fn test_ffi_interner_and_arena() {
+        let it = BinaryenStringInternerCreate();
+        assert!(!it.is_null());
+        let s = CString::new("world").unwrap();
+        let p1 = BinaryenStringInternerIntern(it, s.as_ptr());
+        let p2 = BinaryenStringInternerIntern(it, s.as_ptr());
+        assert_eq!(p1, p2);
+        BinaryenStringInternerDispose(it);
+
+        let a = BinaryenArenaCreate();
+        assert!(!a.is_null());
+        let q = CString::new("arena-test").unwrap();
+        let ap = BinaryenArenaAllocString(a, q.as_ptr());
+        assert!(!ap.is_null());
+        unsafe {
+            assert_eq!(CStr::from_ptr(ap).to_str().unwrap(), "arena-test");
+        }
+        BinaryenArenaDispose(a);
+    }
+}

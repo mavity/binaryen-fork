@@ -15,13 +15,13 @@ impl Arena {
     pub fn alloc_str(&self, s: &str) -> *const c_char {
         // allocate a CString containing the data; leak it into the bump
         let bytes = s.as_bytes();
-        // Allocate string bytes in bump and return C string pointer
-        let vec = self.bump.alloc_slice_copy(bytes);
-        // append null terminator
-        // allocate the terminator in-place -- simpler to append explicitly to
-        // the bump slice. However bumpalo doesn't provide an API to append to the
-        // same object so we'll allocate a single-element slice for the terminator
-        let _term = self.bump.alloc_slice_fill_copy(1, &[0u8]);
+        // Allocate string bytes in bump and return C string pointer. To ensure
+        // a null-terminated C string, create a temporary vector with an extra
+        // null byte and copy it into bump memory.
+        let mut tmp: Vec<u8> = Vec::with_capacity(bytes.len() + 1);
+        tmp.extend_from_slice(bytes);
+        tmp.push(0u8);
+        let vec = self.bump.alloc_slice_copy(&tmp);
         // create a raw pointer to vec's data
         // SAFETY: we ensure a null terminator is present; we won't free this until arena drops
         let ptr = vec.as_mut_ptr() as *mut c_char;
@@ -32,6 +32,7 @@ impl Arena {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn arena_alloc_string() {
@@ -40,5 +41,22 @@ mod tests {
         let p2 = a.alloc_str("hello");
         assert_ne!(p1, std::ptr::null());
         assert_ne!(p2, std::ptr::null());
+        unsafe {
+            use std::ffi::CStr;
+            assert_eq!(CStr::from_ptr(p1).to_str().unwrap(), "hello");
+            assert_eq!(CStr::from_ptr(p2).to_str().unwrap(), "hello");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn arena_alloc_property_returns_equal_string(s in any::<String>()) {
+            proptest::prop_assume!(!s.contains('\0'));
+            let a = Arena::new();
+            let _cs = std::ffi::CString::new(s.clone()).unwrap();
+            let p = a.alloc_str(&s);
+            assert!(!p.is_null());
+            unsafe { prop_assert_eq!(std::ffi::CStr::from_ptr(p).to_str().unwrap(), s); }
+        }
     }
 }
