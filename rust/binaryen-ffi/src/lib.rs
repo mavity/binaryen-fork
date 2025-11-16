@@ -8,6 +8,16 @@ pub extern "C" fn binaryen_ffi_version() -> u32 {
     1
 }
 
+// ABI version macro; bump this when changing any exported symbols or layouts.
+// This is intentionally `pub` so `cbindgen` can emit a corresponding macro in
+// the generated `include/binaryen_ffi.h` header.
+pub const BINARYEN_FFI_ABI_VERSION: u32 = 1;
+
+#[no_mangle]
+pub extern "C" fn binaryen_ffi_abi_version() -> u32 {
+    BINARYEN_FFI_ABI_VERSION
+}
+
 #[no_mangle]
 pub extern "C" fn binaryen_ffi_echo(s: *const c_char) -> *const c_char {
     if s.is_null() {
@@ -15,7 +25,7 @@ pub extern "C" fn binaryen_ffi_echo(s: *const c_char) -> *const c_char {
     }
     unsafe {
         let cstr = CStr::from_ptr(s);
-        if let Ok(str_slice) = cstr.to_str() {
+        if let Ok(_str_slice) = cstr.to_str() {
             // Return the same pointer as a noop (not ideal lifetime, but ok for smoke test)
             return s;
         }
@@ -36,7 +46,7 @@ pub extern "C" fn BinaryenStringInternerCreate() -> *mut BinaryenStringInterner 
 #[no_mangle]
 pub extern "C" fn BinaryenStringInternerDispose(p: *mut BinaryenStringInterner) {
     if p.is_null() { return; }
-    unsafe { Box::from_raw(p as *mut binaryen_support::StringInterner); }
+    unsafe { let _ = Box::from_raw(p as *mut binaryen_support::StringInterner); }
 }
 
 #[no_mangle]
