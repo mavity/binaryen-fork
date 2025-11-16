@@ -39,6 +39,9 @@ impl StringInterner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::thread;
+    use proptest::prelude::*;
 
     #[test]
     fn test_intern_same_string() {
@@ -54,5 +57,35 @@ mod tests {
         let s1 = interner.intern("hello");
         let s2 = interner.intern("world");
         assert_ne!(s1, s2);
+    }
+
+    #[test]
+    fn test_intern_concurrent() {
+        let interner = Arc::new(StringInterner::new());
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let i = interner.clone();
+            handles.push(thread::spawn(move || {
+                let s = i.intern("concurrent");
+                s.as_ptr() as usize
+            }));
+        }
+        let main_ptr = interner.intern("concurrent").as_ptr() as usize;
+        for h in handles {
+            let p = h.join().unwrap();
+            assert_eq!(p, main_ptr);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn intern_property_returns_equal_string(s in any::<String>()) {
+            proptest::prop_assume!(!s.contains('\0'));
+            let interner = StringInterner::new();
+            let interned = interner.intern(&s);
+            prop_assert_eq!(interned, s.as_str());
+            let interned2 = interner.intern(&s);
+            prop_assert_eq!(interned2.as_ptr(), interned.as_ptr());
+        }
     }
 }
