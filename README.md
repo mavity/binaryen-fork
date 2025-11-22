@@ -10,7 +10,7 @@
 # Binaryen
 
 Binaryen is a compiler and toolchain infrastructure library for WebAssembly,
-written in C++. It aims to make [compiling to WebAssembly] **easy, fast, and
+written in C++. It aims to make [compiling to WebAssembly] **easy, fast, and 
 effective**:
 
  * **Easy**: Binaryen has a simple [C API] in a single header, and can also be
@@ -72,6 +72,20 @@ Binaryen's internal IR is designed to be
  * **Flexible and fast** for optimization.
  * **As close as possible to WebAssembly** so it is simple and fast to convert
    it to and from WebAssembly.
+
+## Fuzzing
+
+If you want to run the fuzz harnesses locally, install `cargo-fuzz` and run the `run_cargo_fuzz.sh` script:
+
+```bash
+cargo install cargo-fuzz
+./scripts/run_cargo_fuzz.sh
+```
+
+The fuzz targets are provided under `fuzz/fuzz_targets` and include:
+- `interner.rs` — fuzz the string interner
+- `arena.rs` — fuzz the arena allocation helper
+- `ahash.rs` — fuzz the `ahash_bytes` helper
 
 There are a few differences between Binaryen IR and the WebAssembly language:
 

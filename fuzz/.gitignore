@@ -1,0 +1,12 @@
+# Rust build output
+/target/
+
+# Ignore crates.io index cache when running cargo vendor
+/.cargo/
+
+# Miri
+/target/miri/
+
+# temporary editor files
+*~
+*.swp
