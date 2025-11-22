@@ -2,6 +2,8 @@ name: Rust Miri Test (manual)
 
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: '0 4 * * *' # nightly at 04:00 UTC
 
 jobs:
   miri:
@@ -17,4 +19,8 @@ jobs:
       - name: Run miri tests for binaryen-support
         run: |
           cd rust/binaryen-support
+          RUSTFLAGS='-Awarnings' cargo +nightly miri test -q || true
+      - name: Run miri tests for binaryen-core
+        run: |
+          cd rust/binaryen-core
           RUSTFLAGS='-Awarnings' cargo +nightly miri test -q || true

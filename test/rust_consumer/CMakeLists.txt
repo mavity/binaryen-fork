@@ -5,6 +5,10 @@ if(BUILD_RUST_COMPONENTS)
     test_ffi.c
   )
 
+  add_executable(test_rust_consumer_extra
+    test_ffi_extra.c
+  )
+
   # Some build environments treat the global warning flags as C++-only
   # and will error when compiling .c files. Build this test as C++ to avoid
   # those flags and allow linking against the Rust cdylib. The header is
@@ -24,6 +28,8 @@ if(BUILD_RUST_COMPONENTS)
   find_package(Threads REQUIRED)
   target_link_libraries(test_rust_consumer PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
+  target_link_libraries(test_rust_consumer_extra PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+
   # Ensure the Rust artifacts are built before the test runner is linked
   if(TARGET rust_libs)
     add_dependencies(test_rust_consumer rust_libs)
@@ -33,5 +39,6 @@ if(BUILD_RUST_COMPONENTS)
   # build scripts.
   enable_testing()
   add_test(NAME rust_ffi_smoke COMMAND $<TARGET_FILE:test_rust_consumer>)
+  add_test(NAME rust_ffi_smoke_extra COMMAND $<TARGET_FILE:test_rust_consumer_extra>)
 
 endif()

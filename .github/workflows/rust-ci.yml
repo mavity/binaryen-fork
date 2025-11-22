@@ -125,6 +125,15 @@ jobs:
         run: |
           cmake -S . -B build -DBUILD_RUST_COMPONENTS=ON
 
+      - name: Cache cargo target dir for CMake integration
+        uses: actions/cache@v4
+        with:
+          path: |
+            rust/target
+          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-
+
       - name: Build Rust libs via CMake
         run: |
           cmake --build build --target rust_libs
@@ -132,6 +141,8 @@ jobs:
       - name: Run smoke consumer with ctest
         run: |
           ctest -R rust_ffi_smoke -V || (echo "ctest rust_ffi_smoke failed" && exit 1)
+          # also run extra rust ffI consumer for more cross-language validations
+          ctest -R rust_ffi_smoke_extra -V || (echo "ctest rust_ffi_smoke_extra failed" && exit 1)
 
       - name: Smoke-test FFI from C++ (consumer)
         run: |

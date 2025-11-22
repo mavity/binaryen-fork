@@ -204,6 +204,16 @@ The golden header and build helper `cmake/BinaryenRust.cmake` affect interop bet
     4. Update `include/binaryen_ffi.h` and the `docs/rust` section to explain the change.  
     5. Request explicit approval from the owners listed above.
 
+### Suggested PR gating checklist for ABI changes
+
+- Make sure `rust/scripts/check_cbindgen.sh` and `rust/scripts/check_abi_changes.sh` pass locally.
+- If you intend to change the ABI, add a changelog entry clarifying the change and the reason.
+- Bump `BINARYEN_FFI_ABI_VERSION` in both `include/binaryen_ffi.h` and `rust/binaryen-ffi/src/lib.rs`.
+- Add automated tests demonstrating backward-incompatible behavior or the migration path.
+- Request review by: (fill in maintainers) `@org/rust-maintainers`, `@org/libs-maintainers`.
+
+> Note: We intentionally avoid `CODEOWNERS` gating until we finalize owner membership; please assign reviewers accordingly in the PR description.
+
 Sample `CODEOWNERS` snippet to gate ABI changes (do not add automatically — this is guidance you can apply):
 
 ```
