@@ -40,7 +40,7 @@ Key tasks:
   - [x] Implement `StringInterner` with tests and FFI wrapper in `binaryen-ffi`.
   - [x] Implement arena (`bumpalo` style) and basic containers (`ahash`) for IR.
   - [x] Add benchmarks (`criterion`) and property tests (`proptest`).
-  - [x] Add `cargo-fuzz` harnesses for fuzzing interner/arena/ahash (manual `workflow_dispatch` + `scripts/run_cargo_fuzz.sh`).
+  - [x] Add `cargo-fuzz` harnesses for fuzzing interner/arena/ahash (manual `workflow_dispatch` + `rust/scripts/run_cargo_fuzz.sh`).
 - [ ] Add CI `cargo test` and `miri` checks.
 
 Dependencies:

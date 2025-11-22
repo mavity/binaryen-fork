@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 libfuzzer-sys = "0.4"
 binaryen-support = { path = "../../rust/binaryen-support", package = "binaryen-support" }
+arbitrary = "1"
 
 [lib]
 name = "binaryen_fuzz"
@@ -32,6 +33,13 @@ bench = false
 [[bin]]
 name = "ahash"
 path = "fuzz_targets/ahash.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fastmap"
+path = "fuzz_targets/fastmap.rs"
 test = false
 doc = false
 bench = false

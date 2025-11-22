@@ -94,7 +94,8 @@ jobs:
           fi
 
       - name: Run golden header check
-        run: bash ./scripts/check_cbindgen.sh
+          run: |
+            bash ./rust/scripts/check_cbindgen.sh
 
   cmake-integration:
     name: CMake + Cargo integration (BUILD_RUST_COMPONENTS=ON)
