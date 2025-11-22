@@ -9,7 +9,7 @@ on:
 jobs:
   rust-tests:
     name: Rust tests, clippy, fmt
-    runs-on: ubuntu-latest
+    # runs-on is set by matrix below
     steps:
       - uses: actions/checkout@v4
 
@@ -115,6 +115,10 @@ jobs:
     needs: cbindgen
     # Only run the heavy CMake+Rust integration on pushes to `main` (not on PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 

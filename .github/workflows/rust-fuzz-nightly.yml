@@ -1,0 +1,34 @@
+name: Rust nightly fuzzing
+
+on:
+  schedule:
+    - cron: '30 2 * * *' # daily at 02:30 UTC
+  workflow_dispatch:
+
+jobs:
+  run-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - name: Install cargo-fuzz
+        run: |
+          cargo install cargo-fuzz || true
+      - name: Run short fuzz targets
+        run: |
+          cd fuzz
+          # run for a short time (15s) to build small corpora
+          if command -v cargo-fuzz >/dev/null; then
+            cargo fuzz run arena -- -max_total_time=15 || true
+          else
+            echo "cargo-fuzz not installed; skipping"
+          fi
+      - name: Upload corpora/artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz_corpus
+          path: fuzz/artifacts || true

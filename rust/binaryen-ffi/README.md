@@ -41,3 +41,21 @@ Ownership and memory model
 - The `Arena` returns pointers valid until `BinaryenArenaDispose` is called — callers must avoid using pointers after the corresponding arena is disposed.
 
 For more detailed ownership rules, see `docs/rust/vision/arena-ownership.md`.
+
+FFI reference (short)
+---------------------
+- `BinaryenArenaCreate()` -> returns `BinaryenArena*` (non-null on success).
+- `BinaryenArenaIsAlive(a)` -> returns `1` if `a` is still alive, `0` otherwise.
+- `BinaryenArenaAllocString(a, s)` -> returns a `const char*` valid until `BinaryenArenaDispose(a)`.
+- `BinaryenArenaDispose(a)` -> dispose and free arena memory; using `a` afterwards is invalid.
+
+Example (C++):
+```cpp
+BinaryenArena* a = BinaryenArenaCreate();
+const char* s = BinaryenArenaAllocString(a, "foo");
+printf("%s\n", s);
+BinaryenArenaDispose(a);
+if (BinaryenArenaIsAlive(a) == 0) {
+	// pointer is invalid
+}
+```
