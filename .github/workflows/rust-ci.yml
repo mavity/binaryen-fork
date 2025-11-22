@@ -113,6 +113,8 @@ jobs:
     name: CMake + Cargo integration (BUILD_RUST_COMPONENTS=ON)
     runs-on: ubuntu-latest
     needs: cbindgen
+    # Only run the heavy CMake+Rust integration on pushes to `main` (not on PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
