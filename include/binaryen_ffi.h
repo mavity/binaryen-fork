@@ -1,50 +1,48 @@
-#ifndef BINARYEN_FFI_H
-#define BINARYEN_FFI_H
-
-#include <stdint.h>
+#include <stdarg.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-// An integer ABI version identifier for the FFI. Bump this when making
-// incompatible changes to the exported symbols, types, or ownership semantics.
 #define BINARYEN_FFI_ABI_VERSION 1
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+typedef struct BinaryenStringInterner {
+  uint8_t _private[0];
+} BinaryenStringInterner;
 
-uint32_t binaryen_ffi_version();
-uint32_t binaryen_ffi_abi_version();
+typedef struct BinaryenArena {
+  uint8_t _private[0];
+} BinaryenArena;
 
-const char* binaryen_ffi_echo(const char* s);
+typedef struct BinaryenFastHashMap {
+  uint8_t _private[0];
+} BinaryenFastHashMap;
 
-// String interner FFI
-typedef struct BinaryenStringInterner BinaryenStringInterner;
+uint32_t binaryen_ffi_version(void);
 
-BinaryenStringInterner* BinaryenStringInternerCreate(void);
-void BinaryenStringInternerDispose(BinaryenStringInterner*);
+uint32_t binaryen_ffi_abi_version(void);
 
-const char* BinaryenStringInternerIntern(BinaryenStringInterner* interner, const char* s);
+const char *binaryen_ffi_echo(const char *s);
 
-// Arena FFI
-typedef struct BinaryenArena BinaryenArena;
-BinaryenArena* BinaryenArenaCreate(void);
-void BinaryenArenaDispose(BinaryenArena*);
+struct BinaryenStringInterner *BinaryenStringInternerCreate(void);
 
-const char* BinaryenArenaAllocString(BinaryenArena* arena, const char* s);
+void BinaryenStringInternerDispose(struct BinaryenStringInterner *p);
 
-// Hash helpers
-uint64_t BinaryenAhashBytes(const uint8_t* data, size_t len);
+const char *BinaryenStringInternerIntern(struct BinaryenStringInterner *p, const char *s);
 
-// FastHashMap FFI helpers (String -> uint64)
-typedef struct BinaryenFastHashMap BinaryenFastHashMap;
-BinaryenFastHashMap* BinaryenFastHashMapCreate(void);
-void BinaryenFastHashMapDispose(BinaryenFastHashMap*);
-bool BinaryenFastHashMapInsert(BinaryenFastHashMap* map, const char* key, uint64_t value);
-bool BinaryenFastHashMapGet(BinaryenFastHashMap* map, const char* key, uint64_t* out_value);
-size_t BinaryenFastHashMapLen(BinaryenFastHashMap* map);
+struct BinaryenArena *BinaryenArenaCreate(void);
 
-#ifdef __cplusplus
-}
-#endif
+void BinaryenArenaDispose(struct BinaryenArena *p);
 
-#endif // BINARYEN_FFI_H
+const char *BinaryenArenaAllocString(struct BinaryenArena *p, const char *s);
+
+uint64_t BinaryenAhashBytes(const unsigned char *data, uintptr_t len);
+
+struct BinaryenFastHashMap *BinaryenFastHashMapCreate(void);
+
+void BinaryenFastHashMapDispose(struct BinaryenFastHashMap *p);
+
+bool BinaryenFastHashMapInsert(struct BinaryenFastHashMap *p, const char *key, uint64_t value);
+
+bool BinaryenFastHashMapGet(struct BinaryenFastHashMap *p, const char *key, uint64_t *out_value);
+
+uintptr_t BinaryenFastHashMapLen(struct BinaryenFastHashMap *p);
