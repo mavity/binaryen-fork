@@ -23,13 +23,15 @@ jobs:
       - name: Run fuzz targets (short)
         run: |
           cd fuzz
-          # Run quick fuzz runs to validate there are no immediate crashes
-          cargo +nightly fuzz run interner -- -max_total_time=90 || true
-          cargo +nightly fuzz run arena -- -max_total_time=90 || true
-          cargo +nightly fuzz run ahash -- -max_total_time=90 || true
-          cargo +nightly fuzz run fastmap -- -max_total_time=90 || true
+          # Run fuzz targets for longer short runs to reduce flakiness
+          cargo +nightly fuzz run interner -- -max_total_time=180 || true
+          cargo +nightly fuzz run arena -- -max_total_time=180 || true
+          cargo +nightly fuzz run ahash -- -max_total_time=180 || true
+          cargo +nightly fuzz run fastmap -- -max_total_time=180 || true
       - name: Upload artifacts (if any)
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-artifacts
           path: fuzz/fuzz/artifacts/**
+          # Keep artifacts for 14 days for short investigation and repro
+          retention-days: 14

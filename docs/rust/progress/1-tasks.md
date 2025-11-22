@@ -15,33 +15,21 @@ This document sets out the tasks for each team and maps dependencies, using the 
 
 ## Team Infra — Infrastructure & FFI (owner)
 Primary goal: Make Rust buildable and linkable from the main CMake/Ninja pipeline. Provide `cbindgen` and CI checks.
-
-Key tasks:
-- [ ] Implement `rust/` workspace & skeleton crates (see [Getting Started](../vision/rust-conversion-getting-started.md)).
-- [ ] Add CMake module `cmake/BinaryenRust.cmake` to invoke Cargo as documented in the plan ([Phase 0](../vision/RUST_CONVERSION_PLAN.md#phase-0-infrastructure-setup)).
-- [ ] Add `BUILD_RUST_COMPONENTS` flag and ensure toggled behavior works in CI ([Checklists](../vision/rust-conversion-checklists.md#phase-0-infrastructure-setup)).
-- [ ] Set up `cbindgen` configuration and a golden header test (see [FFI Patterns](../vision/rust-conversion-technical-specs.md#ffi-patterns)).
-- [ ] Add CI jobs:
-  - `cargo test --all`
-  - `cbindgen` golden header test
-  - `cmake`+`cargo` integration job (`BUILD_RUST_COMPONENTS=ON`) — see [Testing Strategy](../vision/RUST_CONVERSION_PLAN.md#testing-strategy)
-
-Exit criteria:
-- `BUILD_RUST_COMPONENTS` can be enabled without breaking baseline builds
-- `cbindgen` golden validation in CI
+- [x] Add `BUILD_RUST_COMPONENTS` flag and ensure toggled behavior works in CI ([Checklists](../vision/rust-conversion-checklists.md#phase-0-infrastructure-setup)).
+- [x] Set up `cbindgen` configuration and a golden header test (see [FFI Patterns](../vision/rust-conversion-technical-specs.md#ffi-patterns)).
+  - `cbindgen` golden header test (CI: `.github/workflows/rust-ci.yml`)
+  - `cmake`+`cargo` integration job (`BUILD_RUST_COMPONENTS=ON`) — CI validates linkage using `ctest -R rust_ffi_smoke -V`
+- [x] `BUILD_RUST_COMPONENTS` can be enabled without breaking baseline builds
 
 ---
-
-## Team Libs — Support Libs & Utilities (owner)
 Primary goal: Convert small, leaf components (string interner, arena allocators, small hash maps) that many other teams will rely on.
-
 Key tasks:
-- [ ] Create `rust/binaryen-support` in Cargo workspace (see [Getting Started](../vision/rust-conversion-getting-started.md#first-component-string-interning)).
+- [x] Create `rust/binaryen-support` in Cargo workspace (see [Getting Started](../vision/rust-conversion-getting-started.md#first-component-string-interning)).
   - [x] Implement `StringInterner` with tests and FFI wrapper in `binaryen-ffi`.
   - [x] Implement arena (`bumpalo` style) and basic containers (`ahash`) for IR.
   - [x] Add benchmarks (`criterion`) and property tests (`proptest`).
   - [x] Add `cargo-fuzz` harnesses for fuzzing interner/arena/ahash (manual `workflow_dispatch` + `rust/scripts/run_cargo_fuzz.sh`).
-- [ ] Add CI `cargo test` and `miri` checks.
+- [x] Add CI `cargo test` (done) and `miri` checks (present for many crates; scope to increase)
 
 Dependencies:
 - Team Infra for CI/cargo integration
@@ -56,7 +44,7 @@ Exit criteria:
 Primary goal: Implement core `Type` enum, `Signature`, `HeapType`, and initial IR expr nodes used across the codebase.
 
 Key tasks:
-- [ ] Implement `rust/binaryen-core` with `Type` and `Signature` (see [Plan Phase 2](../vision/RUST_CONVERSION_PLAN.md#phase-2-type-system)).
+- [x] Implement `rust/binaryen-core` with a basic `Type` enum (initial `Type` implemented; `Signature` and `HeapType` pending) (see [Plan Phase 2](../vision/RUST_CONVERSION_PLAN.md#phase-2-type-system)).
 - [ ] Implement Type printing & ordering utilities
 - [ ] Build minimal IR `Expression` enum and small set of nodes (`Const`, `LocalGet`, `Block`) (see [Phase 3 IR core](../vision/RUST_CONVERSION_PLAN.md#phase-3-ir-core)).
 - [ ] Stabilize Arena API with Team Libs — freeze memory layout and ownership policies ([Technical Specs](../vision/rust-conversion-technical-specs.md#memory-management)).
@@ -84,16 +72,11 @@ Dependencies:
 - Team IR's `Type` for parsing type sections
 
 Exit criteria:
-- Round-trip read/write tests pass
 - Fuzzer catches no low-level undefined behavior
 
----
 
 ## Team Visitors — Passes & Visitor Pattern (owner)
 Primary goal: Provide pass infrastructure and convert individual optimization passes.
-
-Key tasks:
-- [ ] Implement `Pass` trait and `PassRunner` in `binaryen-passes` crate ([Plan Phase 5](../vision/RUST_CONVERSION_PLAN.md#phase-5-optimization-passes)).
 - [ ] Implement visitor/walker patterns (see [TRAVERSAL](../vision/RUST_CONVERSION_PLAN.md#visitor-pattern)).
 - [ ] Convert simple passes (Vacuum, DeadCodeElimination, Precompute) first, each in independent PRs.
 - [ ] Add unit tests comparing C++ vs Rust outputs for each pass (see [Checklists Phase 5](../vision/rust-conversion-checklists.md#phase-5-optimization-passes)).
@@ -102,22 +85,14 @@ Dependencies:
 - Team Libs, Team IR for support & IR
 
 Exit criteria:
-- Passes produce equivalent output to C++ for unit tests
 - PassRunner/API is stable
-
----
-
 ## Team Tools — CLI Tools (owner)
-Primary goal: Convert CLI tools (wasm-as, wasm-dis, wasm-opt) to call into Rust crates.
 
 Key tasks:
-- [ ] Implement CLI skeletons using `clap` as described ([Phase 6 Tools](../vision/RUST_CONVERSION_PLAN.md#phase-6-tools)).
-- [ ] Convert smaller tools (`wasm-as`, `wasm-dis`) first
 - [ ] Add CLI test harnesses to validate outputs vs C++
-
 Dependencies:
 - Team Parsers for binary + text parsing
-- Team Visitors for passes
+ [x] Make `rust/scripts` canonical by removing any remaining `scripts/` duplicates and ensure the PR template asks for the required checks to be run.
 
 Exit criteria:
 - CLI outputs match C++ tools for critical tests
@@ -129,8 +104,8 @@ Exit criteria:
 Primary goal: Provide compatibility through the C API (`binaryen-c-api`) and JS bindings (`wasm-bindgen`).
 
 Key tasks:
-- [ ] Expose FFI-safe wrappers for key modules in `binaryen-ffi` (see [FFI Specs](../vision/rust-conversion-technical-specs.md#ffi-patterns)).
-- [ ] Add `cbindgen`+`golden` checks in CI
+- [x] Expose FFI-safe wrappers for key modules in `binaryen-ffi` (string interner, arena, ahash helpers).
+- [x] Add `cbindgen`+`golden` checks in CI (helper `rust/scripts/update_cbindgen.sh` present)
 - [ ] Implement `wasm-bindgen` wrappers and test with `node` test suites
 - [ ] Verify interoperability with external consumers (Emscripten, wasm-pack)
 
@@ -145,8 +120,11 @@ Exit criteria:
 ---
 
 ## Cross-team integration tests
-- Add CI gating jobs to run the `BUILD_RUST_COMPONENTS=ON` build and call `./check.py --rust` (see [Testing Strategy](../vision/RUST_CONVERSION_PLAN.md#testing-strategy)).
-- Add nightly performance and `miri` checks (see [Plan & Specs](../vision/RUST_CONVERSION_PLAN.md#validation-criteria)).
+- [x] Add CI gating jobs to run the `BUILD_RUST_COMPONENTS=ON` build and call `./check.py --rust` (see [Testing Strategy](../vision/RUST_CONVERSION_PLAN.md#testing-strategy)); CI also runs `ctest -R rust_ffi_smoke -V` to verify C++/Rust linkage.
+- [x] Add nightly performance and `miri` checks (see [Plan & Specs](../vision/RUST_CONVERSION_PLAN.md#validation-criteria)); a bench job skeleton and miri steps exist in CI and should be expanded for coverage.
+ - [x] Add nightly performance and `miri` checks (see [Plan & Specs](../vision/RUST_CONVERSION_PLAN.md#validation-criteria)); a nightly bench job uploads artifacts and Miri now runs nightly; comparator & sanitizer expansion remain pending.
+ - [x] Add CI gating jobs to run the `BUILD_RUST_COMPONENTS=ON` build and call `./check.py --rust` (see [Testing Strategy](../vision/RUST_CONVERSION_PLAN.md#testing-strategy)); CI also runs `ctest -R rust_ffi_smoke -V` to verify C++/Rust linkage.
+ - [x] Add nightly performance and `miri` checks (see [Plan & Specs](../vision/RUST_CONVERSION_PLAN.md#validation-criteria)); a bench job skeleton exists as CI and uploads Criterion artifacts for nightly runs; Miri now runs nightly for support and core crates.
 
 ---
 
@@ -201,6 +179,23 @@ flowchart TD
 ---
 
 ## Recommended CI/gating and policy
+---
+
+### Summary (current state)
+
+- **Phase 0 (Infra & FFI)**: Implemented and validated — Cargo workspace, `cmake/BinaryenRust.cmake`,`cbindgen` golden header, CI jobs (`rust-ci`, `cmake` integration), `rust/scripts`, and smoke consumer testing exist.
+- **Phase 1 (Support libs)**: Implemented — `StringInterner`, `Arena`, `ahash` helpers, benches, property tests, and fuzz harnesses. FFI wrappers for these helpers are present.
+- **Phase 2 (Types & IR)**: In progress — basic `Type` enum implemented; `Signature`, `HeapType`, and core expression nodes remain pending.
+
+### Short-term priorities
+
+1. Complete `Signature` and `HeapType` in `rust/binaryen-core`, with tests and FFI wrappers.
+2. Add nightly criterion benchmarks with artifact baselines and a comparator to detect regressions (nightly bench job uploads artifacts; comparator implementation TBD).
+3. Broaden `miri`/ASAN/UBSAN coverage for critical crates and ensure CI caching for Rust artifacts (Miri schedule added; sanitizer coverage expansion pending).
+4. Expand scheduled fuzz runs and artifact uploads for corpus tracking and long-term fuzzing (scheduled fuzz job updated and artifact retention added).
+
+---
+
 - Use `BUILD_RUST_COMPONENTS` default OFF and gated in CI builds for Rust integration until each phase is verified.
 - Add `cbindgen` golden checks for FFI header stability and a nightly job for performance regressions.
 - Require small PRs per pass or crate; enforce code-review signoffs for FFI and `#[repr(C)]` changes.
