@@ -1,0 +1,25 @@
+name: Rust Fuzz (manual)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustup default stable
+      - name: Install cargo-fuzz
+        run: |
+          source $HOME/.cargo/env
+          cargo install cargo-fuzz
+      - name: Run fuzz targets (short)
+        run: |
+          cd fuzz
+          cargo fuzz run interner -- -max_total_time=60 || true
+          cargo fuzz run arena -- -max_total_time=60 || true
+          cargo fuzz run ahash -- -max_total_time=60 || true

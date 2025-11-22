@@ -1,0 +1,37 @@
+[package]
+name = "binaryen-fuzz"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+binaryen-support = { path = "../../rust/binaryen-support", package = "binaryen-support" }
+
+[lib]
+name = "binaryen_fuzz"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[package.metadata]
+cargo-fuzz = true
+
+[[bin]]
+name = "interner"
+path = "fuzz_targets/interner.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "arena"
+path = "fuzz_targets/arena.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ahash"
+path = "fuzz_targets/ahash.rs"
+test = false
+doc = false
+bench = false
