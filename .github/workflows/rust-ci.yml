@@ -147,6 +147,7 @@ jobs:
           ctest -R rust_ffi_smoke_extra -V || (echo "ctest rust_ffi_smoke_extra failed" && exit 1)
           ctest -R rust_ffi_smoke_threaded -V || (echo "ctest rust_ffi_smoke_threaded failed" && exit 1)
           ctest -R rust_ffi_smoke_arena_threads -V || (echo "ctest rust_ffi_smoke_arena_threads failed" && exit 1)
+          ctest -R rust_ffi_smoke_arena_misuse -V || (echo "ctest rust_ffi_smoke_arena_misuse failed" && exit 1)
 
       - name: Smoke-test FFI from C++ (consumer)
         run: |

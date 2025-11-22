@@ -13,6 +13,10 @@ if(BUILD_RUST_COMPONENTS)
     test_ffi_arena_threads.cpp
   )
 
+  add_executable(test_rust_consumer_arena_misuse
+    test_ffi_arena_misuse.cpp
+  )
+
   add_executable(test_rust_consumer_extra
     test_ffi_extra.c
   )
@@ -44,6 +48,7 @@ if(BUILD_RUST_COMPONENTS)
 
   target_link_libraries(test_rust_consumer_threaded PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_threads PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+  target_link_libraries(test_rust_consumer_arena_misuse PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
   # Ensure the Rust artifacts are built before the test runner is linked
   if(TARGET rust_libs)
@@ -59,5 +64,6 @@ if(BUILD_RUST_COMPONENTS)
   add_test(NAME rust_ffi_smoke_extra COMMAND $<TARGET_FILE:test_rust_consumer_extra>)
   add_test(NAME rust_ffi_smoke_threaded COMMAND $<TARGET_FILE:test_rust_consumer_threaded>)
   add_test(NAME rust_ffi_smoke_arena_threads COMMAND $<TARGET_FILE:test_rust_consumer_arena_threads>)
+  add_test(NAME rust_ffi_smoke_arena_misuse COMMAND $<TARGET_FILE:test_rust_consumer_arena_misuse>)
 
 endif()
