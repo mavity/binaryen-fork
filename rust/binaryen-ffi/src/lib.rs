@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 use std::ffi::CStr;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_uchar};
 
 #[no_mangle]
 pub extern "C" fn binaryen_ffi_version() -> u32 {
@@ -93,6 +93,77 @@ pub extern "C" fn BinaryenArenaAllocString(p: *mut BinaryenArena, s: *const c_ch
     std::ptr::null()
 }
 
+// Hash helper to compute ahash of a byte buffer
+#[no_mangle]
+pub extern "C" fn BinaryenAhashBytes(data: *const c_uchar, len: usize) -> u64 {
+    if data.is_null() { return 0; }
+    unsafe {
+        let slice = std::slice::from_raw_parts(data, len);
+        return binaryen_support::hash::ahash_bytes(slice);
+    }
+}
+
+// FastHashMap FFI helpers (String -> u64)
+#[repr(C)]
+pub struct BinaryenFastHashMap { _private: [u8; 0] }
+
+#[no_mangle]
+pub extern "C" fn BinaryenFastHashMapCreate() -> *mut BinaryenFastHashMap {
+    let m: Box<binaryen_support::hash::FastHashMap<String, u64>> = Box::new(Default::default());
+    Box::into_raw(m) as *mut BinaryenFastHashMap
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenFastHashMapDispose(p: *mut BinaryenFastHashMap) {
+    if p.is_null() { return; }
+    unsafe { let _ = Box::from_raw(p as *mut binaryen_support::hash::FastHashMap<String, u64>); }
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenFastHashMapInsert(
+    p: *mut BinaryenFastHashMap,
+    key: *const c_char,
+    value: u64,
+) -> bool {
+    if p.is_null() || key.is_null() { return false; }
+    unsafe {
+        let map = &mut *(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
+        if let Ok(s) = CStr::from_ptr(key).to_str() {
+            map.insert(s.to_string(), value);
+            return true;
+        }
+    }
+    false
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenFastHashMapGet(
+    p: *mut BinaryenFastHashMap,
+    key: *const c_char,
+    out_value: *mut u64,
+) -> bool {
+    if p.is_null() || key.is_null() || out_value.is_null() { return false; }
+    unsafe {
+        let map = &*(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
+        if let Ok(s) = CStr::from_ptr(key).to_str() {
+            if let Some(v) = map.get(s) {
+                *out_value = *v;
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenFastHashMapLen(p: *mut BinaryenFastHashMap) -> usize {
+    if p.is_null() { return 0; }
+    unsafe {
+        let map = &*(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
+        map.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +202,28 @@ mod tests {
             assert_eq!(CStr::from_ptr(ap).to_str().unwrap(), "arena-test");
         }
         BinaryenArenaDispose(a);
+    }
+
+    #[test]
+    fn test_ffi_ahash() {
+        let s = CString::new("hello").unwrap();
+        let out = BinaryenAhashBytes(s.as_ptr() as *const u8, 5);
+        assert_ne!(out, 0);
+        let out2 = BinaryenAhashBytes(s.as_ptr() as *const u8, 5);
+        assert_eq!(out, out2);
+    }
+
+    #[test]
+    fn test_ffi_fast_hashmap() {
+        let map = BinaryenFastHashMapCreate();
+        assert!(!map.is_null());
+        assert!(BinaryenFastHashMapInsert(map, CString::new("k1").unwrap().as_ptr(), 100));
+        assert!(BinaryenFastHashMapInsert(map, CString::new("k2").unwrap().as_ptr(), 200));
+        let mut outv: u64 = 0;
+        assert!(BinaryenFastHashMapGet(map, CString::new("k1").unwrap().as_ptr(), &mut outv as *mut u64));
+        assert_eq!(outv, 100);
+        let len = BinaryenFastHashMapLen(map);
+        assert_eq!(len, 2);
+        BinaryenFastHashMapDispose(map);
     }
 }

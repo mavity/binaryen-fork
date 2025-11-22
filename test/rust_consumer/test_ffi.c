@@ -31,6 +31,29 @@ int main() {
     printf("arena intern pointers equal: %d\n", a1 == a2);
     BinaryenArenaDispose(a);
     
+    // Test hash helper
+    uint64_t hv = BinaryenAhashBytes((const uint8_t*)"hello", 5);
+    uint64_t hv2 = BinaryenAhashBytes((const uint8_t*)"hello", 5);
+    printf("ahash(hello) = %llu\n", (unsigned long long)hv);
+    if (hv != hv2) {
+        fprintf(stderr, "hash mismatch: %llu != %llu\n", (unsigned long long)hv, (unsigned long long)hv2);
+        return 2;
+    }
+
+    // Test FastHashMap via FFI
+    BinaryenFastHashMap* fm = BinaryenFastHashMapCreate();
+    if (!fm) { fprintf(stderr, "fast map create failed\n"); return 2; }
+    if (!BinaryenFastHashMapInsert(fm, "one", 42)) { fprintf(stderr, "map insert failed\n"); return 2; }
+    if (!BinaryenFastHashMapInsert(fm, "two", 7)) { fprintf(stderr, "map insert failed\n"); return 2; }
+    // len should be 2
+    size_t len = BinaryenFastHashMapLen(fm);
+    printf("fastmap len = %zu\n", len);
+    uint64_t outv = 0;
+    if (!BinaryenFastHashMapGet(fm, "one", &outv)) { fprintf(stderr, "map get failed\n"); return 2; }
+    printf("fastmap[one] = %llu\n", (unsigned long long)outv);
+    if (outv != 42) { fprintf(stderr, "unexpected value: %llu\n", (unsigned long long)outv); return 2; }
+    BinaryenFastHashMapDispose(fm);
+    
     // Runtime ABI check — ensure library ABI matches the header macro.
     if (binaryen_ffi_abi_version() != BINARYEN_FFI_ABI_VERSION) {
         fprintf(stderr, "ABI mismatch: runtime=%u header=%u\n", binaryen_ffi_abi_version(), BINARYEN_FFI_ABI_VERSION);
