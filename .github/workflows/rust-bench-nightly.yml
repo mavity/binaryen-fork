@@ -1,0 +1,32 @@
+name: Rust Bench (nightly: criterion)
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily at 03:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+      - name: Run benchmark
+        run: |
+          cd rust/binaryen-support
+          # Run benches in release mode for consistent measurement
+          cargo bench --quiet || true
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-bench-results
+          path: |
+            rust/binaryen-support/target/criterion/**

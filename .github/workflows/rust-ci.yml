@@ -13,6 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect duplicate rust scripts in `scripts/`
+        run: |
+          set -euo pipefail
+          duplicates=(check_cbindgen.sh check_abi_changes.sh run_cargo_fuzz.sh update_cbindgen.sh)
+          for s in "${duplicates[@]}"; do
+            if [[ -f "scripts/$s" ]]; then
+              echo "Found $s in scripts/. Please keep authoritative copy in rust/scripts/."
+              exit 1
+            fi
+          done
+          echo "No duplicate Rust scripts found in scripts/"
+
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
