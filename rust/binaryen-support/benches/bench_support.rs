@@ -1,6 +1,7 @@
 use criterion::{black_box, Criterion, criterion_group, criterion_main};
 use binaryen_support::StringInterner;
 use binaryen_support::Arena;
+use binaryen_support::hash::ahash_bytes;
 
 fn bench_intern(c: &mut Criterion) {
     let interner = StringInterner::new();
@@ -22,5 +23,14 @@ fn bench_arena_alloc(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_intern, bench_arena_alloc);
+fn bench_ahash(c: &mut Criterion) {
+    c.bench_function("ahash_hello", |b| {
+        b.iter(|| {
+            let p = ahash_bytes(black_box(b"hello"));
+            black_box(p);
+        })
+    });
+}
+
+criterion_group!(benches, bench_intern, bench_arena_alloc, bench_ahash);
 criterion_main!(benches);

@@ -37,9 +37,9 @@ Primary goal: Convert small, leaf components (string interner, arena allocators,
 
 Key tasks:
 - [ ] Create `rust/binaryen-support` in Cargo workspace (see [Getting Started](../vision/rust-conversion-getting-started.md#first-component-string-interning)).
-- [ ] Implement `StringInterner` with tests and FFI wrapper in `binaryen-ffi`.
-- [ ] Implement arena (`bumpalo` style) and basic containers (`ahash`) for IR.
-- [ ] Add benchmarks (`criterion`) and property tests (`proptest`).
+  - [x] Implement `StringInterner` with tests and FFI wrapper in `binaryen-ffi`.
+  - [x] Implement arena (`bumpalo` style) and basic containers (`ahash`) for IR.
+- [x] Add benchmarks (`criterion`) and property tests (`proptest`).
 - [ ] Add CI `cargo test` and `miri` checks.
 
 Dependencies:
