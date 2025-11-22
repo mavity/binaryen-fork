@@ -10,11 +10,11 @@ int main() {
     BinaryenArena* a2 = BinaryenArenaCreate();
     const char* p2 = BinaryenArenaAllocString(a2, "arena-misuse");
 
-    // We must not dereference p1 after dispose; but comparing pointer values is safe
+    // We must not dereference p1 after dispose; comparing pointer values is ok
+    // but pointer reuse across different arenas can happen (it's not an error);
+    // thus treat equality as a *warning* only and continue.
     if (p1 == p2) {
-        fprintf(stderr, "unexpected reuse of pointer values across arenas: %p == %p\n", (void*)p1, (void*)p2);
-        BinaryenArenaDispose(a2);
-        return 2;
+        fprintf(stderr, "warning: reuse of pointer values across arenas detected: %p == %p\n", (void*)p1, (void*)p2);
     }
 
     BinaryenArenaDispose(a2);

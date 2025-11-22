@@ -21,6 +21,11 @@ uint32_t binaryen_ffi_version(void);
 
 uint32_t binaryen_ffi_abi_version(void);
 
+// `extern "C"` guard for C++ consumers to ensure C linkage when included from C++
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 const char *binaryen_ffi_echo(const char *s);
 
 struct BinaryenStringInterner *BinaryenStringInternerCreate(void);
@@ -35,6 +40,8 @@ void BinaryenArenaDispose(struct BinaryenArena *p);
 
 const char *BinaryenArenaAllocString(struct BinaryenArena *p, const char *s);
 
+int BinaryenArenaIsAlive(struct BinaryenArena *p);
+
 uint64_t BinaryenAhashBytes(const unsigned char *data, uintptr_t len);
 
 struct BinaryenFastHashMap *BinaryenFastHashMapCreate(void);
@@ -46,3 +53,7 @@ bool BinaryenFastHashMapInsert(struct BinaryenFastHashMap *p, const char *key, u
 bool BinaryenFastHashMapGet(struct BinaryenFastHashMap *p, const char *key, uint64_t *out_value);
 
 uintptr_t BinaryenFastHashMapLen(struct BinaryenFastHashMap *p);
+
+#ifdef __cplusplus
+}
+#endif

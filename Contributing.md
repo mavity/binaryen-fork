@@ -30,3 +30,11 @@ Use this handy checklist to make sure your new instructions are fully supported:
  - [ ] JS API tested in test/binaryen.js/kitchen-sink.js
  - [ ] Tests added in test/spec
  - [ ] Tests added in test/lit
+
+## Rust FFI and ABI changes
+
+If you're changing the Rust FFI (the `binaryen-ffi` crate) or any ABI-exposed symbols:
+
+- Run `rust/scripts/check_cbindgen.sh` and update `include/binaryen_ffi.h` if necessary with `rust/scripts/update_cbindgen.sh`.
+- Add Rust unit tests and appropriate C++ smoke tests in `test/rust_consumer` exercising the change.
+- If the change is ABI-incompatible, bump `BINARYEN_FFI_ABI_VERSION` and add migration notes in the PR; ensure `CODEOWNERS` review.

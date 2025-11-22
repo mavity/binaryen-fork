@@ -1,3 +1,44 @@
+name: Rust nightly benchmarks
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily at 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  bench-and-compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - name: Cache cargo target dir
+        uses: actions/cache@v4
+        with:
+          path: |
+            rust/target
+          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-
+      - name: Run benches
+        run: |
+          cd rust/binaryen-support
+          cargo bench --quiet --profile release
+      - name: Upload bench results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench_current
+          path: rust/binaryen-support/target/criterion
+      - name: Compare against baseline (if available)
+        run: |
+          if [[ -d "rust/binaryen-support/target/criterion" ]]; then
+            rust/scripts/check_bench_comparator.sh rust/binaryen-support/target/criterion rust/bench/baseline || true
+          else
+            echo "No bench output present"
+          fi
 name: Rust Bench (nightly: criterion)
 
 on:

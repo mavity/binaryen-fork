@@ -1,6 +1,9 @@
 #![allow(non_camel_case_types)]
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar};
+use std::collections::HashSet;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 
 #[no_mangle]
 pub extern "C" fn binaryen_ffi_version() -> u32 {
@@ -69,28 +72,63 @@ pub extern "C" fn BinaryenStringInternerIntern(
 #[repr(C)]
 pub struct BinaryenArena { _private: [u8; 0] }
 
+// Track live arena pointers to detect use-after-free from external callers.
+// We store the raw pointer value and use a Mutex for the registry; the cost is
+// small and this prevents misuse across the FFI boundary.
+static LIVE_ARENAS: Lazy<Mutex<HashSet<usize>>> = Lazy::new(|| Mutex::new(HashSet::new()));
+
 #[no_mangle]
 pub extern "C" fn BinaryenArenaCreate() -> *mut BinaryenArena {
     let arena = Box::new(binaryen_support::Arena::new());
-    Box::into_raw(arena) as *mut BinaryenArena
+    let ptr = Box::into_raw(arena);
+    {
+        let mut set = LIVE_ARENAS.lock().unwrap();
+        set.insert(ptr as usize);
+    }
+    ptr as *mut BinaryenArena
 }
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaDispose(p: *mut BinaryenArena) {
     if p.is_null() { return; }
-    unsafe { let _ = Box::from_raw(p as *mut binaryen_support::Arena); }
+    unsafe {
+        let real_ptr = p as *mut binaryen_support::Arena;
+        {
+            let mut set = LIVE_ARENAS.lock().unwrap();
+            set.remove(&(real_ptr as usize));
+        }
+        let _ = Box::from_raw(real_ptr);
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaAllocString(p: *mut BinaryenArena, s: *const c_char) -> *const c_char {
     if p.is_null() || s.is_null() { return std::ptr::null(); }
     unsafe {
-        let arena = &*(p as *mut binaryen_support::Arena);
+        let real_ptr = p as *mut binaryen_support::Arena;
+        let set = LIVE_ARENAS.lock().unwrap();
+        if !set.contains(&(real_ptr as usize)) { return std::ptr::null(); }
+        let arena = &*real_ptr;
         if let Ok(str_slice) = CStr::from_ptr(s).to_str() {
             return arena.alloc_str(str_slice);
         }
     }
     std::ptr::null()
+}
+
+/// Returns 1 if `p` is a live arena previously created by `BinaryenArenaCreate`, 0 otherwise.
+/// This is a convenience helper for C/C++ consumers to validate pointer liveness; the
+/// runtime uses an internal registry to track arenas and detect use-after-free errors.
+///
+/// Note: `BinaryenArenaIsAlive` is intended for debugging and safety checks; it is not
+/// a replacement for proper ownership handling.
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaIsAlive(p: *mut BinaryenArena) -> i32 {
+    if p.is_null() { return 0; }
+    let ptr = p as usize;
+    let set = LIVE_ARENAS.lock().unwrap();
+    if set.contains(&ptr) { 1 } else { 0 }
 }
 
 // Hash helper to compute ahash of a byte buffer
@@ -195,6 +233,7 @@ mod tests {
 
         let a = BinaryenArenaCreate();
         assert!(!a.is_null());
+        assert_eq!(BinaryenArenaIsAlive(a), 1);
         let q = CString::new("arena-test").unwrap();
         let ap = BinaryenArenaAllocString(a, q.as_ptr());
         assert!(!ap.is_null());
@@ -202,6 +241,7 @@ mod tests {
             assert_eq!(CStr::from_ptr(ap).to_str().unwrap(), "arena-test");
         }
         BinaryenArenaDispose(a);
+        assert_eq!(BinaryenArenaIsAlive(a), 0);
     }
 
     #[test]
@@ -246,6 +286,9 @@ mod tests {
         assert_eq!(BinaryenArenaAllocString(std::ptr::null_mut(), std::ptr::null()), std::ptr::null());
         assert_eq!(BinaryenArenaAllocString(a, std::ptr::null()), std::ptr::null());
         BinaryenArenaDispose(a);
+        // After dispose, it should not be alive and allocation should return null
+        assert_eq!(BinaryenArenaIsAlive(a), 0);
+        assert_eq!(BinaryenArenaAllocString(a, CString::new("foo").unwrap().as_ptr()), std::ptr::null());
     }
 
     #[test]
