@@ -239,6 +239,9 @@ Binaryen intrinsic functions look like calls to imports, e.g.,
 (import "binaryen-intrinsics" "foo" (func $foo))
 ```
 
+CI note: This repository runs scheduled short fuzz checks and nightly benchmarks in GitHub Actions (see `.github/workflows/rust-fuzz-scheduled.yml` and `.github/workflows/rust-bench-nightly.yml`). These are low-cost runs intended to catch regressions early; full fuzzing runs remain a manual or scheduled operation.
+
+
 Implementing them that way allows them to be read and written by other tools,
 and it avoids confusing errors on a binary format error that could happen in
 those tools if we had a custom binary format extension.

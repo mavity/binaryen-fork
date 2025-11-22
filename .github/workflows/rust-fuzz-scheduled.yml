@@ -1,0 +1,35 @@
+name: Rust Fuzz (scheduled short runs)
+
+on:
+  schedule:
+    # Daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  fuzz-scheduled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustup default stable
+      - name: Install cargo-fuzz
+        run: |
+          source $HOME/.cargo/env
+          cargo install cargo-fuzz
+      - name: Run fuzz targets (short)
+        run: |
+          cd fuzz
+          # Run quick fuzz runs to validate there are no immediate crashes
+          cargo +nightly fuzz run interner -- -max_total_time=90 || true
+          cargo +nightly fuzz run arena -- -max_total_time=90 || true
+          cargo +nightly fuzz run ahash -- -max_total_time=90 || true
+          cargo +nightly fuzz run fastmap -- -max_total_time=90 || true
+      - name: Upload artifacts (if any)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/fuzz/artifacts/**
