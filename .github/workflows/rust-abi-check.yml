@@ -1,0 +1,24 @@
+name: Rust FFI ABI check
+
+on:
+  pull_request:
+    paths:
+      - 'include/binaryen_ffi.h'
+      - 'rust/binaryen-ffi/**'
+      - 'cmake/BinaryenRust.cmake'
+
+jobs:
+  check-abi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure toolchain is installed
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustup default stable
+      - name: Run ABI check
+        env:
+          CI: true
+        run: |
+          bash rust/scripts/check_abi_changes.sh

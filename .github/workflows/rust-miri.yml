@@ -1,0 +1,20 @@
+name: Rust Miri Test (manual)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust + Miri (nightly)
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustup toolchain install nightly
+          rustup component add miri --toolchain nightly
+      - name: Run miri tests for binaryen-support
+        run: |
+          cd rust/binaryen-support
+          RUSTFLAGS='-Awarnings' cargo +nightly miri test -q || true

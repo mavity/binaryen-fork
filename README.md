@@ -79,7 +79,7 @@ If you want to run the fuzz harnesses locally, install `cargo-fuzz` and run the 
 
 ```bash
 cargo install cargo-fuzz
-./scripts/run_cargo_fuzz.sh
+./rust/scripts/run_cargo_fuzz.sh
 ```
 
 The fuzz targets are provided under `fuzz/fuzz_targets` and include:

@@ -1,6 +1,8 @@
 # Rust build output
 /target/
 
+/fuzz/corpus/
+
 # Ignore crates.io index cache when running cargo vendor
 /.cargo/
 
