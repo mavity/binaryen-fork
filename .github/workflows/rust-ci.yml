@@ -73,46 +73,14 @@ jobs:
           cd rust
           cargo fmt --all -- --check
 
-  cbindgen:
-    name: cbindgen golden header check
-    runs-on: ubuntu-latest
-    needs: rust-tests
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Rust (for cbindgen)
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-
-      - name: Cache Cargo for cbindgen install
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cbindgen-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cbindgen-
-
-      - name: Install cbindgen
-        run: |
-          if ! command -v cbindgen >/dev/null; then
-            cargo install --locked cbindgen
-          else
-            echo "cbindgen already installed"
-          fi
-
-      - name: Run golden header check
-          run: |
-            bash ./rust/scripts/check_cbindgen.sh
+  # Note: The former `cbindgen` job (golden header enforcement) was removed
+  # because the `binaryen-ffi` header is internal-only. If you need to run
+  # `cbindgen` checks manually, maintainers can use `rust/scripts/check_cbindgen.sh`.
 
   cmake-integration:
     name: CMake + Cargo integration (BUILD_RUST_COMPONENTS=ON)
     runs-on: ubuntu-latest
-    needs: cbindgen
+    needs: rust-tests
     # Only run the heavy CMake+Rust integration on pushes to `main` (not on PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
@@ -181,7 +149,7 @@ jobs:
   asan-ubsan:
     name: ASAN UB/Detect checks
     runs-on: ubuntu-latest
-    needs: cbindgen
+    needs: rust-tests
     steps:
       - uses: actions/checkout@v4
       - name: Install system deps (clang & cmake)

@@ -88,4 +88,36 @@ mod tests {
             prop_assert_eq!(interned2.as_ptr(), interned.as_ptr());
         }
     }
+
+    proptest! {
+        #[test]
+        fn intern_property_concurrent(svec in proptest::collection::vec(".*", 0..64)) {
+            use std::sync::Arc;
+            use std::thread;
+            proptest::prop_assume!(svec.len() > 0);
+            let interner = Arc::new(StringInterner::new());
+            let mut handles = vec![];
+            for _ in 0..4 {
+                let iv = interner.clone();
+                let v = svec.clone();
+                handles.push(thread::spawn(move || {
+                    for s in v.iter() {
+                        let p = iv.intern(s.as_str());
+                        // ensure returned string equals original
+                        assert_eq!(p, s.as_str());
+                    }
+                    true
+                }));
+            }
+            for h in handles { assert!(h.join().unwrap()); }
+            // Validate canonicalization
+            for s in svec.iter() {
+                let main_ptr = interner.intern(s.as_str());
+                for _ in 0..4 {
+                    let p = interner.intern(s.as_str());
+                    assert_eq!(p.as_ptr(), main_ptr.as_ptr());
+                }
+            }
+        }
+    }
 }

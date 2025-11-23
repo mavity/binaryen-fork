@@ -47,4 +47,15 @@ mod tests {
             prop_assert_eq!(out1, out2);
         }
     }
+
+    proptest! {
+        #[test]
+        fn fastmap_ops(ops in proptest::collection::vec((".*", any::<u64>()), 0..128)) {
+            let mut map: FastHashMap<String, u64> = FastHashMap::default();
+            for (k, v) in ops {
+                map.insert(k.clone(), v);
+                if let Some(found_v) = map.get(&k) { assert_eq!(*found_v, v); }
+            }
+        }
+    }
 }
