@@ -18,6 +18,8 @@ Thread-safety Guarantees
 ------------------------
 - `Arena` is thread-safe: allocations from multiple threads are supported concurrently. This is implemented by using a `Mutex` internally.
 - `BinaryenArenaAllocString` may be called concurrently from multiple threads. However, pointers remain valid only while the owning arena remains alive.
+ - `Arena` is thread-safe: allocations from multiple threads are supported concurrently (implemented using a `Mutex`).
+ - `BinaryenArenaAllocString` may be called concurrently from multiple threads; however, pointers remain valid only while the owning arena remains alive.
 
 Recommended FFI usage from C++
 ------------------------------
@@ -69,6 +71,7 @@ Overview
   - Any pointers returned from `BinaryenArenaAllocString()` are valid for the lifetime of the `Arena` instance.
   - It is undefined behavior to use pointers returned by `BinaryenArenaAllocString()` after `BinaryenArenaDispose()` is called for that arena.
   - The `Arena` object itself is not thread-local. If you share the `Arena` across threads, ensure you manage synchronization in the caller (the current implementation is not thread-safe).
+   - The `Arena` object is thread-safe; no additional synchronization is required to allocate concurrently.
 
 - `StringInterner`: The current `StringInterner` implementation leaks `String`s to return `&'static str` references. As a result:
   - Pointers returned by `BinaryenStringInternerIntern` are valid for the process lifetime (they are intentionally leaked and not freed).
@@ -85,6 +88,7 @@ Rules for cross-language usage
 - Threading rules:
   - `StringInterner` is safe to use from multiple threads on the current implementation (it uses `RwLock` internally); concurrent `intern` calls for the same string will return the same pointer.
   - `Arena` is NOT guaranteed thread-safe in the current implementation; callers that share an `Arena` across threads should protect operations with a mutex or ensure thread-safety in the caller.
+   - `Arena` is thread-safe with the current implementation; allocations are protected by an internal mutex.
 
 Recommended reviewer checklist for FFI changes
 ----------------------------------------------
