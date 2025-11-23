@@ -15,6 +15,11 @@ Arena
 - `BinaryenArenaAllocString(p, s)` -> `const char*` valid until `p` is disposed
 - `BinaryenArenaIsAlive(p)` -> return `1` if arena is live, `0` otherwise; handy for debugging and conditional deref safety tests
 
+Sanitizers & Safety Checks
+--------------------------
+- For pointer-safety changes, run ASAN checks described in `docs/rust/vision/asan-guide.md` to detect use-after-free errors and race conditions.
+- Use `BinaryenArenaIsAlive` in consumer code to verify pointer validity. For example, before dereferencing a pointer, check whether the arena is still alive.
+
 FastHashMap (String -> u64)
 --------------------------
 - `BinaryenFastHashMapCreate()` -> create instance

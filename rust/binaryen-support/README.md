@@ -23,6 +23,10 @@ assert!(!p.is_null());
 
 FFI usage and tests are provided via `rust/binaryen-ffi` crate and `test/rust_consumer` C++ smoke tests. See `rust-binaryen-ffi/README.md` for the public FFI surface and usage.
 
+Safety and Debugging
+--------------------
+See `docs/rust/vision/asan-guide.md` for how to run ASAN/UBSAN on cross-language tests and `docs/rust/vision/arena-ownership.md` for ownership/lifetime rules and recommended patterns.
+
 Testing
 -------
 

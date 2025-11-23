@@ -17,6 +17,14 @@ if(BUILD_RUST_COMPONENTS)
     test_ffi_arena_misuse.cpp
   )
 
+  add_executable(test_rust_consumer_arena_deref_after_dispose
+    test_ffi_arena_deref_after_dispose.cpp
+  )
+
+  add_executable(test_rust_consumer_arena_race_dispose
+    test_ffi_arena_race_dispose.cpp
+  )
+
   add_executable(test_rust_consumer_arena_use_after_dispose
     test_ffi_arena_use_after_dispose.cpp
   )
@@ -57,6 +65,8 @@ if(BUILD_RUST_COMPONENTS)
   target_link_libraries(test_rust_consumer_threaded PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_threads PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_misuse PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+  target_link_libraries(test_rust_consumer_arena_deref_after_dispose PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+  target_link_libraries(test_rust_consumer_arena_race_dispose PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_use_after_dispose PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_many_threads PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
@@ -75,6 +85,8 @@ if(BUILD_RUST_COMPONENTS)
   add_test(NAME rust_ffi_smoke_threaded COMMAND $<TARGET_FILE:test_rust_consumer_threaded>)
   add_test(NAME rust_ffi_smoke_arena_threads COMMAND $<TARGET_FILE:test_rust_consumer_arena_threads>)
   add_test(NAME rust_ffi_smoke_arena_misuse COMMAND $<TARGET_FILE:test_rust_consumer_arena_misuse>)
+  add_test(NAME rust_ffi_smoke_arena_deref_after_dispose COMMAND $<TARGET_FILE:test_rust_consumer_arena_deref_after_dispose>)
+  add_test(NAME rust_ffi_smoke_arena_race_dispose COMMAND $<TARGET_FILE:test_rust_consumer_arena_race_dispose>)
   add_test(NAME rust_ffi_smoke_arena_use_after_dispose COMMAND $<TARGET_FILE:test_rust_consumer_arena_use_after_dispose>)
   add_test(NAME rust_ffi_smoke_arena_many_threads COMMAND $<TARGET_FILE:test_rust_consumer_arena_many_threads>)
 

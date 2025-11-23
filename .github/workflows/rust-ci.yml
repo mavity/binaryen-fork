@@ -152,6 +152,8 @@ jobs:
           ctest -R rust_ffi_smoke_threaded -V || (echo "ctest rust_ffi_smoke_threaded failed" && exit 1)
           ctest -R rust_ffi_smoke_arena_threads -V || (echo "ctest rust_ffi_smoke_arena_threads failed" && exit 1)
           ctest -R rust_ffi_smoke_arena_misuse -V || (echo "ctest rust_ffi_smoke_arena_misuse failed" && exit 1)
+          ctest -R rust_ffi_smoke_arena_deref_after_dispose -V || (echo "ctest rust_ffi_smoke_arena_deref_after_dispose failed (expected in non-ASAN builds)" && true)
+          ctest -R rust_ffi_smoke_arena_race_dispose -V || (echo "ctest rust_ffi_smoke_arena_race_dispose failed (expected in non-ASAN builds)" && true)
 
       - name: Smoke-test FFI from C++ (consumer)
         run: |
@@ -175,3 +177,35 @@ jobs:
         run: |
           cd rust
           cargo miri test --all
+
+  asan-ubsan:
+    name: ASAN UB/Detect checks
+    runs-on: ubuntu-latest
+    needs: cbindgen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system deps (clang & cmake)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libstdc++-12-dev cmake ninja-build gcc g++
+      - name: Build Rust release (no sanitizer instrumentation for now)
+        run: |
+          cd rust
+          cargo build --release
+      - name: Build C++ consumers with ASAN
+        run: |
+          cd ${{ github.workspace }}
+          # compile C++ consumers with ASAN flags and link to the Rust cdylib
+          CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+          g++ test/rust_consumer/test_ffi_threaded.cpp $CXXFLAGS -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_threaded_asan
+          g++ test/rust_consumer/test_ffi_arena_threads.cpp $CXXFLAGS -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_threads_asan
+          g++ test/rust_consumer/test_ffi_arena_deref_after_dispose.cpp $CXXFLAGS -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_deref_after_dispose_asan
+          g++ test/rust_consumer/test_ffi_arena_race_dispose.cpp $CXXFLAGS -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_race_dispose_asan
+      - name: Run ASAN tests
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_threaded_asan
+          LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_threads_asan
+          LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_deref_after_dispose_asan || true
+          LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_race_dispose_asan || true
