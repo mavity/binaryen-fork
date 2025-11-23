@@ -1,4 +1,0 @@
-# Owners for rust infra & ABI
-/include/binaryen_ffi.h @mavity
-/cmake/BinaryenRust.cmake @mavity
-/rust/* @mavity
