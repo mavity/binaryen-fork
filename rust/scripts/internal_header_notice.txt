@@ -1,0 +1,13 @@
+// ---------------------------------------------------------------------------
+// INTERNAL-ONLY: WARNING
+// ---------------------------------------------------------------------------
+// This header declares the C ABI exported by the Rust `binaryen-ffi` crate.
+// It is intended for INTERNAL use within this repository only — for the Rust
+// port and the `test/rust_consumer` smoke tests. It is NOT a supported public
+// ABI for external consumers. External use is FORBIDDEN and DISCOURAGED.
+//
+// The symbols and layout can change without notice. Do not rely on this header
+// from external code. If you need stable public ABI, use the C API provided by
+// `binaryen` core or request a supported public API to be added.
+// ---------------------------------------------------------------------------
+

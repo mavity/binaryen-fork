@@ -1,7 +1,8 @@
 #![allow(non_camel_case_types)]
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
@@ -76,6 +77,9 @@ pub struct BinaryenArena { _private: [u8; 0] }
 // We store the raw pointer value and use a Mutex for the registry; the cost is
 // small and this prevents misuse across the FFI boundary.
 static LIVE_ARENAS: Lazy<Mutex<HashSet<usize>>> = Lazy::new(|| Mutex::new(HashSet::new()));
+// Handle mapping support: map handle id -> arena pointer
+static HANDLE_MAP: Lazy<Mutex<HashMap<u64, usize>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaCreate() -> *mut BinaryenArena {
@@ -86,6 +90,83 @@ pub extern "C" fn BinaryenArenaCreate() -> *mut BinaryenArena {
         set.insert(ptr as usize);
     }
     ptr as *mut BinaryenArena
+}
+
+// Handle-based API: A small convenience wrapper that maps a numeric handle to
+// a real arena pointer. The handle is embedded in a small heap-allocated u64
+// box used as an opaque pointer for C callers (so it can be `BinaryenArenaHandle*`).
+#[repr(C)]
+pub struct BinaryenArenaHandle { _private: [u8; 0] }
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaHandleCreate() -> *mut BinaryenArenaHandle {
+    let arena = Box::new(binaryen_support::Arena::new());
+    let ptr = Box::into_raw(arena);
+    let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::SeqCst);
+    {
+        let mut map = HANDLE_MAP.lock().unwrap();
+        map.insert(id, ptr as usize);
+    }
+    {
+        let mut set = LIVE_ARENAS.lock().unwrap();
+        set.insert(ptr as usize);
+    }
+    // Return a small boxed handle id to the caller as an opaque pointer
+    let boxed_id = Box::new(id);
+    Box::into_raw(boxed_id) as *mut BinaryenArenaHandle
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaHandleDispose(h: *mut BinaryenArenaHandle) {
+    if h.is_null() { return; }
+    unsafe {
+        let boxed_id = Box::from_raw(h as *mut u64);
+        let id = *boxed_id;
+        let mut map = HANDLE_MAP.lock().unwrap();
+        if let Some(ptr) = map.remove(&id) {
+            // cleanup arena pointer
+            let real_ptr = ptr as *mut binaryen_support::Arena;
+            {
+                let mut set = LIVE_ARENAS.lock().unwrap();
+                set.remove(&ptr);
+            }
+            let _ = Box::from_raw(real_ptr);
+        }
+    }
+}
+
+fn handle_to_arena_ptr(h: *mut BinaryenArenaHandle) -> Option<*mut binaryen_support::Arena> {
+    if h.is_null() { return None; }
+    unsafe {
+        let id = *(h as *mut u64);
+        let map = HANDLE_MAP.lock().unwrap();
+        if let Some(ptr) = map.get(&id) { Some((*ptr) as *mut binaryen_support::Arena) } else { None }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaHandleAllocString(h: *mut BinaryenArenaHandle, s: *const c_char) -> *const c_char {
+    if h.is_null() || s.is_null() { return std::ptr::null(); }
+    if let Some(real_ptr) = handle_to_arena_ptr(h) {
+        unsafe {
+            let set = LIVE_ARENAS.lock().unwrap();
+            if !set.contains(&(real_ptr as usize)) { return std::ptr::null(); }
+            let arena = &*real_ptr;
+            if let Ok(str_slice) = CStr::from_ptr(s).to_str() {
+                return arena.alloc_str(str_slice);
+            }
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub extern "C" fn BinaryenArenaHandleIsAlive(h: *mut BinaryenArenaHandle) -> i32 {
+    if h.is_null() { return 0; }
+    if let Some(real_ptr) = handle_to_arena_ptr(h) {
+        let set = LIVE_ARENAS.lock().unwrap();
+        if set.contains(&(real_ptr as usize)) { 1 } else { 0 }
+    } else { 0 }
 }
 
 #[no_mangle]
@@ -376,6 +457,21 @@ mod tests {
             }
         }
         BinaryenArenaDispose(a);
+    }
+
+    #[test]
+    fn test_ffi_arena_handle_smoke() {
+        let h = BinaryenArenaHandleCreate();
+        assert!(!h.is_null());
+        let s = CString::new("handle-help").unwrap();
+        let p = BinaryenArenaHandleAllocString(h, s.as_ptr());
+        assert!(!p.is_null());
+        unsafe { assert_eq!(CStr::from_ptr(p).to_str().unwrap(), "handle-help"); }
+        assert_eq!(BinaryenArenaHandleIsAlive(h), 1);
+        BinaryenArenaHandleDispose(h);
+        assert_eq!(BinaryenArenaHandleIsAlive(h), 0);
+        // After dispose, allocation should be null
+        assert_eq!(BinaryenArenaHandleAllocString(h, s.as_ptr()), std::ptr::null());
     }
 
     #[test]

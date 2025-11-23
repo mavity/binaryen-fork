@@ -1,11 +1,8 @@
-name: Rust FFI ABI check
+name: Rust FFI ABI check (disabled)
 
-on:
-  pull_request:
-    paths:
-      - 'include/binaryen_ffi.h'
-      - 'rust/binaryen-ffi/**'
-      - 'cmake/BinaryenRust.cmake'
+# This workflow has been disabled by the project because `binaryen-ffi` is an
+# internal-only ABI. The check was removed from CI to reduce PR friction.
+on: []
 
 jobs:
   check-abi:

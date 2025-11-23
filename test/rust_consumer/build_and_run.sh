@@ -18,6 +18,7 @@ g++ test/rust_consumer/test_ffi_arena_use_after_dispose.cpp -Lrust/target/releas
 g++ test/rust_consumer/test_ffi_arena_many_threads.cpp -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_many_threads
 g++ test/rust_consumer/test_ffi_arena_deref_after_dispose.cpp -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_deref_after_dispose
 g++ test/rust_consumer/test_ffi_arena_race_dispose.cpp -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_race_dispose
+g++ test/rust_consumer/test_ffi_arena_handle.cpp -Lrust/target/release -l:libbinaryen_ffi.so -ldl -pthread -o test/rust_consumer/test_ffi_arena_handle
 
 # Run with dynamic loader search path so the runtime linker finds the Rust cdylib
 LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi
@@ -28,3 +29,4 @@ LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consum
 LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_many_threads
 LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_deref_after_dispose || true
 LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_race_dispose || true
+LD_LIBRARY_PATH=$PWD/rust/target/release:${LD_LIBRARY_PATH:-} ./test/rust_consumer/test_ffi_arena_handle

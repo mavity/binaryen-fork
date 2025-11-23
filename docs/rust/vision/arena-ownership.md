@@ -2,6 +2,11 @@
 
 This document describes the ownership, lifetime, and thread-safety guarantees for `Arena` in `binaryen-support` (Rust) and the `BinaryenArena*` FFI functions in `binaryen-ffi`.
 
+Note: The `binaryen-ffi` crate and the FFI types declared here are INTERNAL to
+this port. They are not a public ABI and are not intended for use outside the
+project. If you use or rely on these types externally, your code may break at
+any time and is unsupported.
+
 Overview
 --------
 - `Arena` is a bump allocator intended for short-lived allocations. It provides faster allocation for many short-lived string allocations.
@@ -70,8 +75,9 @@ Overview
 - `BinaryenArena`: Rust-owned `Arena` created via `BinaryenArenaCreate()` and disposed with `BinaryenArenaDispose()`.
   - Any pointers returned from `BinaryenArenaAllocString()` are valid for the lifetime of the `Arena` instance.
   - It is undefined behavior to use pointers returned by `BinaryenArenaAllocString()` after `BinaryenArenaDispose()` is called for that arena.
-  - The `Arena` object itself is not thread-local. If you share the `Arena` across threads, ensure you manage synchronization in the caller (the current implementation is not thread-safe).
-   - The `Arena` object is thread-safe; no additional synchronization is required to allocate concurrently.
+  - The `Arena` object itself is not thread-local: it may be shared across threads. The
+    current implementation provides internal synchronization and is thread-safe; no
+    additional synchronization is required to allocate concurrently.
 
 - `StringInterner`: The current `StringInterner` implementation leaks `String`s to return `&'static str` references. As a result:
   - Pointers returned by `BinaryenStringInternerIntern` are valid for the process lifetime (they are intentionally leaked and not freed).
@@ -87,7 +93,7 @@ Rules for cross-language usage
 
 - Threading rules:
   - `StringInterner` is safe to use from multiple threads on the current implementation (it uses `RwLock` internally); concurrent `intern` calls for the same string will return the same pointer.
-  - `Arena` is NOT guaranteed thread-safe in the current implementation; callers that share an `Arena` across threads should protect operations with a mutex or ensure thread-safety in the caller.
+  - `Arena` is thread-safe in the current implementation: allocations are protected by an internal `Mutex`.
    - `Arena` is thread-safe with the current implementation; allocations are protected by an internal mutex.
 
 Recommended reviewer checklist for FFI changes

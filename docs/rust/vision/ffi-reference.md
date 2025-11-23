@@ -1,5 +1,11 @@
 # Rust FFI Reference (binaryen-ffi)
 
+IMPORTANT: This header and FFI are INTERNAL to the Rust port and are not
+intended for use by external consumers. The `include/binaryen_ffi.h` header is
+maintained for integration tests and the rust port. External projects should
+not include or depend on this header; do not ship it as part of external
+releases.
+
 Short reference for the FFI surface provided by `binaryen-ffi` (see `include/binaryen_ffi.h` for the canonical C header).
 
 String Interner
@@ -14,6 +20,18 @@ Arena
 - `BinaryenArenaDispose(p)` -> dispose arena; after dispose, `p` is invalid and any returned pointers must not be used
 - `BinaryenArenaAllocString(p, s)` -> `const char*` valid until `p` is disposed
 - `BinaryenArenaIsAlive(p)` -> return `1` if arena is live, `0` otherwise; handy for debugging and conditional deref safety tests
+
+Handles (alternative API)
+-------------------------
+- `BinaryenArenaHandleCreate()` -> `BinaryenArenaHandle*` (create an arena handle)
+- `BinaryenArenaHandleDispose(h)` -> dispose handle; `h` is invalid afterwards
+- `BinaryenArenaHandleAllocString(h, s)` -> returns `const char*` valid while the handle is alive
+- `BinaryenArenaHandleIsAlive(h)` -> return `1` if handle is live, `0` otherwise
+
+Notes on handle usage
+---------------------
+- The handle-based API provides an indirection for safely using arena objects across language boundaries; handles are small opaque pointer wrappers to ensure safer cleanup and detection of stale handles.
+- Handle-based `AllocString` will return `NULL` if the handle is not found or not alive.
 
 Sanitizers & Safety Checks
 --------------------------

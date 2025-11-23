@@ -44,5 +44,14 @@ if git diff --no-index --quiet include/binaryen_ffi.h "$TMP"; then
 fi
 
 echo "Header differs from golden header. Updating include/binaryen_ffi.h"
-mv "$TMP" include/binaryen_ffi.h
+# If the generated header doesn't contain the INTERNAL-ONLY warning, prepend
+# our internal-only guidance to discourage external usage.
+if ! grep -q "INTERNAL-ONLY: WARNING" "$TMP"; then
+  echo "Detected cbindgen output without internal header notice. Prepending internal notice."
+  CAT_TMP=$(mktemp)
+  cat "$ROOT/rust/scripts/internal_header_notice.txt" "$TMP" > "$CAT_TMP"
+  mv "$CAT_TMP" include/binaryen_ffi.h
+else
+  mv "$TMP" include/binaryen_ffi.h
+fi
 echo "Updated include/binaryen_ffi.h — please review and commit the change."

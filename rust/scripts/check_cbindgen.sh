@@ -41,7 +41,16 @@ cd rust/binaryen-ffi
 cbindgen --config cbindgen.toml --crate binaryen-ffi --output "$TMP_HEADER"
 
 cd "$ROOT"
-if ! git diff --no-index --exit-code include/binaryen_ffi.h "$TMP_HEADER"; then
+# If our golden header contains the INTERNAL-ONLY marker but cbindgen output
+# doesn't, prepend the internal header notice before comparing to match the
+# golden file.
+TMP_WITH_NOTICE=$(mktemp)
+if ! grep -q "INTERNAL-ONLY: WARNING" "$TMP_HEADER" && grep -q "INTERNAL-ONLY: WARNING" include/binaryen_ffi.h; then
+  cat rust/scripts/internal_header_notice.txt "$TMP_HEADER" > "$TMP_WITH_NOTICE"
+else
+  cp "$TMP_HEADER" "$TMP_WITH_NOTICE"
+fi
+if ! git diff --no-index --exit-code include/binaryen_ffi.h "$TMP_WITH_NOTICE"; then
   echo "Generated header differs from committed golden header. If intentional, update include/binaryen_ffi.h after review."
   exit 1
 fi

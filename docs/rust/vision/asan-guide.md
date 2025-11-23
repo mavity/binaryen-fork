@@ -2,9 +2,16 @@
 
 This guide documents how to run AddressSanitizer (ASAN) or UndefinedBehaviorSanitizer (UBSAN) for the C++ consumer tests that exercise Rust FFI. These tools help detect memory-safety issues like use-after-free, races, or invalid reads/writes.
 
+# ASAN / UBSAN Guide for Rust + C++ cross-language tests
+
+This guide documents how to run AddressSanitizer (ASAN) or UndefinedBehaviorSanitizer (UBSAN) for the C++ consumer tests that exercise Rust FFI. These tools help detect memory-safety issues like use-after-free, races, or invalid reads/writes.
+
 When to use
------------
-- Run ASAN/UBSAN when changing code that affects memory lifetimes across the FFI boundary (e.g. Arena, interner, or FFI handle management).
+
+Note: The sanitizer guidance below is meant for maintainers and internal tests
+only. `binaryen-ffi` is an INTERNAL FFI used for port integration tests; do not
+headline or promote these instructions as general-purpose external consumer
+instructions.
 
 How to run ASAN locally (recommended)
 -------------------------------------

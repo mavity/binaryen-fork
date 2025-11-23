@@ -1,10 +1,16 @@
 # binaryen-ffi
 
+IMPORTANT: This crate exposes a C ABI for integration tests and internal
+consumers. It is INTERNAL to the Rust port of Binaryen used in this repo. Do
+NOT rely on this header from external projects.
+
 Rust crate that exports a C FFI for the `binaryen-support` utilities.
 
-Public FFI surface (C header: `include/binaryen_ffi.h`)
+Internal FFI surface (C header: `include/binaryen_ffi.h`) — INTERNAL use only
 - `BinaryenStringInternerCreate/Dispose/Intern`
 - `BinaryenArenaCreate/Dispose/AllocString`
+ - `BinaryenArenaCreate/Dispose/AllocString`
+ - `BinaryenArenaHandleCreate/Dispose/AllocString` — an alternative handle-based API to safely manage arena lifetimes across FFI
 - `BinaryenAhashBytes`
 - `BinaryenFastHashMap*` helpers
 
@@ -58,4 +64,10 @@ BinaryenArenaDispose(a);
 if (BinaryenArenaIsAlive(a) == 0) {
 	// pointer is invalid
 }
+
+// Handle-based API example (safer to allow long-lived opaque handles):
+BinaryenArenaHandle* h = BinaryenArenaHandleCreate();
+const char* sp = BinaryenArenaHandleAllocString(h, "hello-handled");
+printf("%s\n", sp);
+BinaryenArenaHandleDispose(h);
 ```
