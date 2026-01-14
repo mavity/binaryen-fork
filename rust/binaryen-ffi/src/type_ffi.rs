@@ -93,27 +93,31 @@ mod tests {
     fn test_ffi_create_signature() {
         let sig_ty = BinaryenTypeCreateSignature(Type::I32, Type::I64);
         assert!(sig_ty.is_signature(), "Should create signature Type");
-        
+
         let params = BinaryenTypeGetParams(sig_ty);
         let results = BinaryenTypeGetResults(sig_ty);
-        
+
         assert_eq!(params, Type::I32);
         assert_eq!(results, Type::I64);
     }
-    
+
     #[test]
     fn test_ffi_signature_interning() {
         let sig1 = BinaryenTypeCreateSignature(Type::F32, Type::F64);
         let sig2 = BinaryenTypeCreateSignature(Type::F32, Type::F64);
         assert_eq!(sig1, sig2, "Same signature should be interned to same ID");
     }
-    
+
     #[test]
     fn test_ffi_get_params_on_basic_type() {
         let params = BinaryenTypeGetParams(Type::I32);
-        assert_eq!(params, Type::NONE, "Basic types should return NONE for params");
+        assert_eq!(
+            params,
+            Type::NONE,
+            "Basic types should return NONE for params"
+        );
     }
-    
+
     #[test]
     fn test_ffi_basic_type_constants() {
         assert_eq!(BinaryenTypeInt32(), Type::I32);

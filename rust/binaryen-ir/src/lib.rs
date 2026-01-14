@@ -1,8 +1,10 @@
 pub mod expression;
+pub mod module;
 pub mod ops;
 pub mod visitor;
 
 pub use expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+pub use module::{Function, Module};
 pub use ops::{BinaryOp, UnaryOp};
 pub use visitor::Visitor;
 
@@ -86,5 +88,38 @@ mod tests {
 
         // Block (1) -> Add (1) -> Const (1) + Const (1) = 4 expressions
         assert_eq!(v.count, 4);
+    }
+
+    #[test]
+    fn test_module_construction() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // fn add_one(x: i32) -> i32
+        let local_get = builder.local_get(0, Type::I32);
+        let const_1 = builder.const_(Literal::I32(1));
+        let add = builder.binary(BinaryOp::AddInt32, local_get, const_1, Type::I32);
+        
+        let func = Function::new(
+            "add_one".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(add)
+        );
+        
+        let mut module = Module::new();
+        module.add_function(func);
+        
+        assert!(module.get_function("add_one").is_some());
+        
+        let f = module.get_function("add_one").unwrap();
+        if let Some(body) = &f.body {
+             if let ExpressionKind::Binary { op, .. } = body.kind {
+                 assert_eq!(op, BinaryOp::AddInt32);
+             } else {
+                 panic!("Expected Binary");
+             }
+        }
     }
 }

@@ -59,7 +59,9 @@ name = "binaryen-ffi"
 version = "0.1.0"
 dependencies = [
  "binaryen-core",
+ "binaryen-ir",
  "binaryen-support",
+ "bumpalo",
  "libc",
  "once_cell",
 ]

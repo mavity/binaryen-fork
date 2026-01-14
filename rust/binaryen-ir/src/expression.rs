@@ -28,6 +28,36 @@ pub enum ExpressionKind<'a> {
         left: ExprRef<'a>,
         right: ExprRef<'a>,
     },
+    Call {
+        target: &'a str,
+        operands: BumpVec<'a, ExprRef<'a>>,
+        is_return: bool,
+    },
+    LocalGet {
+        index: u32,
+    },
+    LocalSet {
+        index: u32,
+        value: ExprRef<'a>,
+    },
+    LocalTee {
+        index: u32,
+        value: ExprRef<'a>,
+    },
+    If {
+        condition: ExprRef<'a>,
+        if_true: ExprRef<'a>,
+        if_false: Option<ExprRef<'a>>,
+    },
+    Loop {
+        name: Option<&'a str>,
+        body: ExprRef<'a>,
+    },
+    Break {
+        name: &'a str,
+        condition: Option<ExprRef<'a>>,
+        value: Option<ExprRef<'a>>,
+    },
     Nop,
 }
 
@@ -77,5 +107,83 @@ impl<'a> IrBuilder<'a> {
         type_: Type,
     ) -> ExprRef<'a> {
         Expression::new(self.bump, ExpressionKind::Binary { op, left, right }, type_)
+    }
+
+    pub fn call(
+        &self,
+        target: &'a str,
+        operands: BumpVec<'a, ExprRef<'a>>,
+        type_: Type,
+        is_return: bool,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::Call {
+                target,
+                operands,
+                is_return,
+            },
+            type_,
+        )
+    }
+
+    pub fn local_get(&self, index: u32, type_: Type) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::LocalGet { index }, type_)
+    }
+
+    pub fn local_set(&self, index: u32, value: ExprRef<'a>) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::LocalSet { index, value },
+            Type::NONE,
+        )
+    }
+
+    pub fn local_tee(&self, index: u32, value: ExprRef<'a>, type_: Type) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::LocalTee { index, value },
+            type_,
+        )
+    }
+
+    pub fn if_(
+        &self,
+        condition: ExprRef<'a>,
+        if_true: ExprRef<'a>,
+        if_false: Option<ExprRef<'a>>,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::If {
+                condition,
+                if_true,
+                if_false,
+            },
+            type_,
+        )
+    }
+
+    pub fn loop_(&self, name: Option<&'a str>, body: ExprRef<'a>, type_: Type) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::Loop { name, body }, type_)
+    }
+
+    pub fn break_(
+        &self,
+        name: &'a str,
+        condition: Option<ExprRef<'a>>,
+        value: Option<ExprRef<'a>>,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            },
+            type_,
+        )
     }
 }

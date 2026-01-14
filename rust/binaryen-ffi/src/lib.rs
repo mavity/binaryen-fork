@@ -1,13 +1,16 @@
 #![allow(non_camel_case_types)]
+use once_cell::sync::Lazy;
+use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar};
-use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
 pub mod type_ffi;
 pub use type_ffi::*;
+
+pub mod ir_ffi;
+pub use ir_ffi::*;
 
 #[no_mangle]
 pub extern "C" fn binaryen_ffi_version() -> u32 {
@@ -42,7 +45,9 @@ pub extern "C" fn binaryen_ffi_echo(s: *const c_char) -> *const c_char {
 
 // String interner FFI helpers
 #[repr(C)]
-pub struct BinaryenStringInterner { _private: [u8; 0] }
+pub struct BinaryenStringInterner {
+    _private: [u8; 0],
+}
 
 #[no_mangle]
 pub extern "C" fn BinaryenStringInternerCreate() -> *mut BinaryenStringInterner {
@@ -52,8 +57,12 @@ pub extern "C" fn BinaryenStringInternerCreate() -> *mut BinaryenStringInterner 
 
 #[no_mangle]
 pub extern "C" fn BinaryenStringInternerDispose(p: *mut BinaryenStringInterner) {
-    if p.is_null() { return; }
-    unsafe { let _ = Box::from_raw(p as *mut binaryen_support::StringInterner); }
+    if p.is_null() {
+        return;
+    }
+    unsafe {
+        let _ = Box::from_raw(p as *mut binaryen_support::StringInterner);
+    }
 }
 
 #[no_mangle]
@@ -61,7 +70,9 @@ pub extern "C" fn BinaryenStringInternerIntern(
     p: *mut BinaryenStringInterner,
     s: *const c_char,
 ) -> *const c_char {
-    if p.is_null() || s.is_null() { return std::ptr::null(); }
+    if p.is_null() || s.is_null() {
+        return std::ptr::null();
+    }
     unsafe {
         let interner = &*(p as *mut binaryen_support::StringInterner);
         if let Ok(str_slice) = CStr::from_ptr(s).to_str() {
@@ -74,7 +85,9 @@ pub extern "C" fn BinaryenStringInternerIntern(
 
 // Arena FFI helpers
 #[repr(C)]
-pub struct BinaryenArena { _private: [u8; 0] }
+pub struct BinaryenArena {
+    _private: [u8; 0],
+}
 
 // Track live arena pointers to detect use-after-free from external callers.
 // We store the raw pointer value and use a Mutex for the registry; the cost is
@@ -99,7 +112,9 @@ pub extern "C" fn BinaryenArenaCreate() -> *mut BinaryenArena {
 // a real arena pointer. The handle is embedded in a small heap-allocated u64
 // box used as an opaque pointer for C callers (so it can be `BinaryenArenaHandle*`).
 #[repr(C)]
-pub struct BinaryenArenaHandle { _private: [u8; 0] }
+pub struct BinaryenArenaHandle {
+    _private: [u8; 0],
+}
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaHandleCreate() -> *mut BinaryenArenaHandle {
@@ -121,7 +136,9 @@ pub extern "C" fn BinaryenArenaHandleCreate() -> *mut BinaryenArenaHandle {
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaHandleDispose(h: *mut BinaryenArenaHandle) {
-    if h.is_null() { return; }
+    if h.is_null() {
+        return;
+    }
     unsafe {
         let boxed_id = Box::from_raw(h as *mut u64);
         let id = *boxed_id;
@@ -139,21 +156,34 @@ pub extern "C" fn BinaryenArenaHandleDispose(h: *mut BinaryenArenaHandle) {
 }
 
 fn handle_to_arena_ptr(h: *mut BinaryenArenaHandle) -> Option<*mut binaryen_support::Arena> {
-    if h.is_null() { return None; }
+    if h.is_null() {
+        return None;
+    }
     unsafe {
         let id = *(h as *mut u64);
         let map = HANDLE_MAP.lock().unwrap();
-        if let Some(ptr) = map.get(&id) { Some((*ptr) as *mut binaryen_support::Arena) } else { None }
+        if let Some(ptr) = map.get(&id) {
+            Some((*ptr) as *mut binaryen_support::Arena)
+        } else {
+            None
+        }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn BinaryenArenaHandleAllocString(h: *mut BinaryenArenaHandle, s: *const c_char) -> *const c_char {
-    if h.is_null() || s.is_null() { return std::ptr::null(); }
+pub extern "C" fn BinaryenArenaHandleAllocString(
+    h: *mut BinaryenArenaHandle,
+    s: *const c_char,
+) -> *const c_char {
+    if h.is_null() || s.is_null() {
+        return std::ptr::null();
+    }
     if let Some(real_ptr) = handle_to_arena_ptr(h) {
         unsafe {
             let set = LIVE_ARENAS.lock().unwrap();
-            if !set.contains(&(real_ptr as usize)) { return std::ptr::null(); }
+            if !set.contains(&(real_ptr as usize)) {
+                return std::ptr::null();
+            }
             let arena = &*real_ptr;
             if let Ok(str_slice) = CStr::from_ptr(s).to_str() {
                 return arena.alloc_str(str_slice);
@@ -165,16 +195,26 @@ pub extern "C" fn BinaryenArenaHandleAllocString(h: *mut BinaryenArenaHandle, s:
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaHandleIsAlive(h: *mut BinaryenArenaHandle) -> i32 {
-    if h.is_null() { return 0; }
+    if h.is_null() {
+        return 0;
+    }
     if let Some(real_ptr) = handle_to_arena_ptr(h) {
         let set = LIVE_ARENAS.lock().unwrap();
-        if set.contains(&(real_ptr as usize)) { 1 } else { 0 }
-    } else { 0 }
+        if set.contains(&(real_ptr as usize)) {
+            1
+        } else {
+            0
+        }
+    } else {
+        0
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaDispose(p: *mut BinaryenArena) {
-    if p.is_null() { return; }
+    if p.is_null() {
+        return;
+    }
     unsafe {
         let real_ptr = p as *mut binaryen_support::Arena;
         {
@@ -186,12 +226,19 @@ pub extern "C" fn BinaryenArenaDispose(p: *mut BinaryenArena) {
 }
 
 #[no_mangle]
-pub extern "C" fn BinaryenArenaAllocString(p: *mut BinaryenArena, s: *const c_char) -> *const c_char {
-    if p.is_null() || s.is_null() { return std::ptr::null(); }
+pub extern "C" fn BinaryenArenaAllocString(
+    p: *mut BinaryenArena,
+    s: *const c_char,
+) -> *const c_char {
+    if p.is_null() || s.is_null() {
+        return std::ptr::null();
+    }
     unsafe {
         let real_ptr = p as *mut binaryen_support::Arena;
         let set = LIVE_ARENAS.lock().unwrap();
-        if !set.contains(&(real_ptr as usize)) { return std::ptr::null(); }
+        if !set.contains(&(real_ptr as usize)) {
+            return std::ptr::null();
+        }
         let arena = &*real_ptr;
         if let Ok(str_slice) = CStr::from_ptr(s).to_str() {
             return arena.alloc_str(str_slice);
@@ -209,16 +256,24 @@ pub extern "C" fn BinaryenArenaAllocString(p: *mut BinaryenArena, s: *const c_ch
 
 #[no_mangle]
 pub extern "C" fn BinaryenArenaIsAlive(p: *mut BinaryenArena) -> i32 {
-    if p.is_null() { return 0; }
+    if p.is_null() {
+        return 0;
+    }
     let ptr = p as usize;
     let set = LIVE_ARENAS.lock().unwrap();
-    if set.contains(&ptr) { 1 } else { 0 }
+    if set.contains(&ptr) {
+        1
+    } else {
+        0
+    }
 }
 
 // Hash helper to compute ahash of a byte buffer
 #[no_mangle]
 pub extern "C" fn BinaryenAhashBytes(data: *const c_uchar, len: usize) -> u64 {
-    if data.is_null() { return 0; }
+    if data.is_null() {
+        return 0;
+    }
     unsafe {
         let slice = std::slice::from_raw_parts(data, len);
         return binaryen_support::hash::ahash_bytes(slice);
@@ -227,7 +282,9 @@ pub extern "C" fn BinaryenAhashBytes(data: *const c_uchar, len: usize) -> u64 {
 
 // FastHashMap FFI helpers (String -> u64)
 #[repr(C)]
-pub struct BinaryenFastHashMap { _private: [u8; 0] }
+pub struct BinaryenFastHashMap {
+    _private: [u8; 0],
+}
 
 #[no_mangle]
 pub extern "C" fn BinaryenFastHashMapCreate() -> *mut BinaryenFastHashMap {
@@ -237,8 +294,12 @@ pub extern "C" fn BinaryenFastHashMapCreate() -> *mut BinaryenFastHashMap {
 
 #[no_mangle]
 pub extern "C" fn BinaryenFastHashMapDispose(p: *mut BinaryenFastHashMap) {
-    if p.is_null() { return; }
-    unsafe { let _ = Box::from_raw(p as *mut binaryen_support::hash::FastHashMap<String, u64>); }
+    if p.is_null() {
+        return;
+    }
+    unsafe {
+        let _ = Box::from_raw(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
+    }
 }
 
 #[no_mangle]
@@ -247,7 +308,9 @@ pub extern "C" fn BinaryenFastHashMapInsert(
     key: *const c_char,
     value: u64,
 ) -> bool {
-    if p.is_null() || key.is_null() { return false; }
+    if p.is_null() || key.is_null() {
+        return false;
+    }
     unsafe {
         let map = &mut *(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
         if let Ok(s) = CStr::from_ptr(key).to_str() {
@@ -264,7 +327,9 @@ pub extern "C" fn BinaryenFastHashMapGet(
     key: *const c_char,
     out_value: *mut u64,
 ) -> bool {
-    if p.is_null() || key.is_null() || out_value.is_null() { return false; }
+    if p.is_null() || key.is_null() || out_value.is_null() {
+        return false;
+    }
     unsafe {
         let map = &*(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
         if let Ok(s) = CStr::from_ptr(key).to_str() {
@@ -279,7 +344,9 @@ pub extern "C" fn BinaryenFastHashMapGet(
 
 #[no_mangle]
 pub extern "C" fn BinaryenFastHashMapLen(p: *mut BinaryenFastHashMap) -> usize {
-    if p.is_null() { return 0; }
+    if p.is_null() {
+        return 0;
+    }
     unsafe {
         let map = &*(p as *mut binaryen_support::hash::FastHashMap<String, u64>);
         map.len()
@@ -341,10 +408,22 @@ mod tests {
     fn test_ffi_fast_hashmap() {
         let map = BinaryenFastHashMapCreate();
         assert!(!map.is_null());
-        assert!(BinaryenFastHashMapInsert(map, CString::new("k1").unwrap().as_ptr(), 100));
-        assert!(BinaryenFastHashMapInsert(map, CString::new("k2").unwrap().as_ptr(), 200));
+        assert!(BinaryenFastHashMapInsert(
+            map,
+            CString::new("k1").unwrap().as_ptr(),
+            100
+        ));
+        assert!(BinaryenFastHashMapInsert(
+            map,
+            CString::new("k2").unwrap().as_ptr(),
+            200
+        ));
         let mut outv: u64 = 0;
-        assert!(BinaryenFastHashMapGet(map, CString::new("k1").unwrap().as_ptr(), &mut outv as *mut u64));
+        assert!(BinaryenFastHashMapGet(
+            map,
+            CString::new("k1").unwrap().as_ptr(),
+            &mut outv as *mut u64
+        ));
         assert_eq!(outv, 100);
         let len = BinaryenFastHashMapLen(map);
         assert_eq!(len, 2);
@@ -357,8 +436,14 @@ mod tests {
         // Test null pointer handling
         BinaryenStringInternerDispose(std::ptr::null_mut());
         let it = BinaryenStringInternerCreate();
-        assert_eq!(BinaryenStringInternerIntern(std::ptr::null_mut(), std::ptr::null()), std::ptr::null());
-        assert_eq!(BinaryenStringInternerIntern(it, std::ptr::null()), std::ptr::null());
+        assert_eq!(
+            BinaryenStringInternerIntern(std::ptr::null_mut(), std::ptr::null()),
+            std::ptr::null()
+        );
+        assert_eq!(
+            BinaryenStringInternerIntern(it, std::ptr::null()),
+            std::ptr::null()
+        );
         BinaryenStringInternerDispose(it);
     }
 
@@ -367,12 +452,21 @@ mod tests {
         // Test null pointer handling for arena
         BinaryenArenaDispose(std::ptr::null_mut());
         let a = BinaryenArenaCreate();
-        assert_eq!(BinaryenArenaAllocString(std::ptr::null_mut(), std::ptr::null()), std::ptr::null());
-        assert_eq!(BinaryenArenaAllocString(a, std::ptr::null()), std::ptr::null());
+        assert_eq!(
+            BinaryenArenaAllocString(std::ptr::null_mut(), std::ptr::null()),
+            std::ptr::null()
+        );
+        assert_eq!(
+            BinaryenArenaAllocString(a, std::ptr::null()),
+            std::ptr::null()
+        );
         BinaryenArenaDispose(a);
         // After dispose, it should not be alive and allocation should return null
         assert_eq!(BinaryenArenaIsAlive(a), 0);
-        assert_eq!(BinaryenArenaAllocString(a, CString::new("foo").unwrap().as_ptr()), std::ptr::null());
+        assert_eq!(
+            BinaryenArenaAllocString(a, CString::new("foo").unwrap().as_ptr()),
+            std::ptr::null()
+        );
     }
 
     #[test]
@@ -380,12 +474,24 @@ mod tests {
         // Test null pointer handling for hashmap
         BinaryenFastHashMapDispose(std::ptr::null_mut());
         let map = BinaryenFastHashMapCreate();
-        assert!(!BinaryenFastHashMapInsert(std::ptr::null_mut(), CString::new("k").unwrap().as_ptr(), 1));
+        assert!(!BinaryenFastHashMapInsert(
+            std::ptr::null_mut(),
+            CString::new("k").unwrap().as_ptr(),
+            1
+        ));
         assert!(!BinaryenFastHashMapInsert(map, std::ptr::null(), 1));
         let mut outv: u64 = 0;
-        assert!(!BinaryenFastHashMapGet(std::ptr::null_mut(), CString::new("k").unwrap().as_ptr(), &mut outv));
+        assert!(!BinaryenFastHashMapGet(
+            std::ptr::null_mut(),
+            CString::new("k").unwrap().as_ptr(),
+            &mut outv
+        ));
         assert!(!BinaryenFastHashMapGet(map, std::ptr::null(), &mut outv));
-        assert!(!BinaryenFastHashMapGet(map, CString::new("k").unwrap().as_ptr(), std::ptr::null_mut()));
+        assert!(!BinaryenFastHashMapGet(
+            map,
+            CString::new("k").unwrap().as_ptr(),
+            std::ptr::null_mut()
+        ));
         assert_eq!(BinaryenFastHashMapLen(std::ptr::null_mut()), 0);
         BinaryenFastHashMapDispose(map);
     }
@@ -394,13 +500,29 @@ mod tests {
     fn test_ffi_hashmap_overwrite() {
         // Test that inserting the same key overwrites the value
         let map = BinaryenFastHashMapCreate();
-        assert!(BinaryenFastHashMapInsert(map, CString::new("key").unwrap().as_ptr(), 100));
+        assert!(BinaryenFastHashMapInsert(
+            map,
+            CString::new("key").unwrap().as_ptr(),
+            100
+        ));
         let mut outv: u64 = 0;
-        assert!(BinaryenFastHashMapGet(map, CString::new("key").unwrap().as_ptr(), &mut outv));
+        assert!(BinaryenFastHashMapGet(
+            map,
+            CString::new("key").unwrap().as_ptr(),
+            &mut outv
+        ));
         assert_eq!(outv, 100);
         // Overwrite with new value
-        assert!(BinaryenFastHashMapInsert(map, CString::new("key").unwrap().as_ptr(), 200));
-        assert!(BinaryenFastHashMapGet(map, CString::new("key").unwrap().as_ptr(), &mut outv));
+        assert!(BinaryenFastHashMapInsert(
+            map,
+            CString::new("key").unwrap().as_ptr(),
+            200
+        ));
+        assert!(BinaryenFastHashMapGet(
+            map,
+            CString::new("key").unwrap().as_ptr(),
+            &mut outv
+        ));
         assert_eq!(outv, 200);
         BinaryenFastHashMapDispose(map);
     }
@@ -410,7 +532,11 @@ mod tests {
         // Test that getting a missing key returns false
         let map = BinaryenFastHashMapCreate();
         let mut outv: u64 = 0;
-        assert!(!BinaryenFastHashMapGet(map, CString::new("missing").unwrap().as_ptr(), &mut outv));
+        assert!(!BinaryenFastHashMapGet(
+            map,
+            CString::new("missing").unwrap().as_ptr(),
+            &mut outv
+        ));
         BinaryenFastHashMapDispose(map);
     }
 
@@ -455,7 +581,7 @@ mod tests {
         }
         // All pointers should be different (arena allocates new space each time)
         for i in 0..ptrs.len() {
-            for j in (i+1)..ptrs.len() {
+            for j in (i + 1)..ptrs.len() {
                 assert_ne!(ptrs[i], ptrs[j]);
             }
         }
@@ -469,12 +595,17 @@ mod tests {
         let s = CString::new("handle-help").unwrap();
         let p = BinaryenArenaHandleAllocString(h, s.as_ptr());
         assert!(!p.is_null());
-        unsafe { assert_eq!(CStr::from_ptr(p).to_str().unwrap(), "handle-help"); }
+        unsafe {
+            assert_eq!(CStr::from_ptr(p).to_str().unwrap(), "handle-help");
+        }
         assert_eq!(BinaryenArenaHandleIsAlive(h), 1);
         BinaryenArenaHandleDispose(h);
         assert_eq!(BinaryenArenaHandleIsAlive(h), 0);
         // After dispose, allocation should be null
-        assert_eq!(BinaryenArenaHandleAllocString(h, s.as_ptr()), std::ptr::null());
+        assert_eq!(
+            BinaryenArenaHandleAllocString(h, s.as_ptr()),
+            std::ptr::null()
+        );
     }
 
     #[test]
@@ -482,17 +613,17 @@ mod tests {
         // Test hashing empty data
         let h0 = BinaryenAhashBytes(std::ptr::null(), 0);
         assert_eq!(h0, 0); // null pointer returns 0
-        
+
         // Test various sizes
         let data = b"test data for hashing with various sizes";
         let h1 = BinaryenAhashBytes(data.as_ptr(), 1);
         let h2 = BinaryenAhashBytes(data.as_ptr(), 5);
         let h3 = BinaryenAhashBytes(data.as_ptr(), data.len());
-        
+
         // Different lengths should generally produce different hashes
         assert_ne!(h1, h2);
         assert_ne!(h2, h3);
-        
+
         // Same data and length should produce same hash (deterministic)
         assert_eq!(h1, BinaryenAhashBytes(data.as_ptr(), 1));
         assert_eq!(h2, BinaryenAhashBytes(data.as_ptr(), 5));
