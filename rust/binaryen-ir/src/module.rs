@@ -34,6 +34,14 @@ pub struct MemoryLimits {
     pub maximum: Option<u32>, // Optional maximum size
 }
 
+#[derive(Debug)]
+pub struct Global<'a> {
+    pub name: String,
+    pub type_: Type,
+    pub mutable: bool,
+    pub init: ExprRef<'a>, // Initialization expression (must be constant)
+}
+
 #[derive(Debug, Clone)]
 pub struct Export {
     pub name: String,
@@ -52,6 +60,7 @@ pub enum ExportKind {
 #[derive(Debug, Default)]
 pub struct Module<'a> {
     pub functions: Vec<Function<'a>>,
+    pub globals: Vec<Global<'a>>,
     pub memory: Option<MemoryLimits>,
     pub exports: Vec<Export>,
 }
@@ -60,6 +69,7 @@ impl<'a> Module<'a> {
     pub fn new() -> Self {
         Self {
             functions: Vec::new(),
+            globals: Vec::new(),
             memory: None,
             exports: Vec::new(),
         }
@@ -87,5 +97,17 @@ impl<'a> Module<'a> {
 
     pub fn export_function(&mut self, func_index: u32, export_name: String) {
         self.add_export(export_name, ExportKind::Function, func_index);
+    }
+
+    pub fn add_global(&mut self, global: Global<'a>) {
+        self.globals.push(global);
+    }
+
+    pub fn get_global(&self, name: &str) -> Option<&Global<'a>> {
+        self.globals.iter().find(|g| g.name == name)
+    }
+
+    pub fn export_global(&mut self, global_index: u32, export_name: String) {
+        self.add_export(export_name, ExportKind::Global, global_index);
     }
 }

@@ -44,6 +44,13 @@ pub enum ExpressionKind<'a> {
         index: u32,
         value: ExprRef<'a>,
     },
+    GlobalGet {
+        index: u32,
+    },
+    GlobalSet {
+        index: u32,
+        value: ExprRef<'a>,
+    },
     If {
         condition: ExprRef<'a>,
         if_true: ExprRef<'a>,
@@ -135,6 +142,10 @@ impl<'a> IrBuilder<'a> {
         Expression::new(self.bump, ExpressionKind::Binary { op, left, right }, type_)
     }
 
+    pub fn drop(&self, value: ExprRef<'a>) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::Drop { value }, Type::NONE)
+    }
+
     pub fn call(
         &self,
         target: &'a str,
@@ -167,6 +178,18 @@ impl<'a> IrBuilder<'a> {
 
     pub fn local_tee(&self, index: u32, value: ExprRef<'a>, type_: Type) -> ExprRef<'a> {
         Expression::new(self.bump, ExpressionKind::LocalTee { index, value }, type_)
+    }
+
+    pub fn global_get(&self, index: u32, type_: Type) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::GlobalGet { index }, type_)
+    }
+
+    pub fn global_set(&self, index: u32, value: ExprRef<'a>) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::GlobalSet { index, value },
+            Type::NONE,
+        )
     }
 
     pub fn if_(

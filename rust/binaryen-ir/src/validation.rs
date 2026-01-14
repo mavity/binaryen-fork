@@ -67,6 +67,35 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             ExpressionKind::LocalGet { index: _ } => {
                 // TODO: Validate index bounds (need Type tuple support)
             }
+            ExpressionKind::GlobalGet { index } => {
+                if *index as usize >= self.module.globals.len() {
+                    self.fail(&format!("GlobalGet: Index {} out of bounds", index));
+                } else {
+                    let global = &self.module.globals[*index as usize];
+                    if expr.type_ != global.type_ {
+                        self.fail(&format!(
+                            "GlobalGet: Expression type {:?} does not match global type {:?}",
+                            expr.type_, global.type_
+                        ));
+                    }
+                }
+            }
+            ExpressionKind::GlobalSet { index, value } => {
+                if *index as usize >= self.module.globals.len() {
+                    self.fail(&format!("GlobalSet: Index {} out of bounds", index));
+                } else {
+                    let global = &self.module.globals[*index as usize];
+                    if !global.mutable {
+                        self.fail(&format!("GlobalSet: Global {} is immutable", index));
+                    }
+                    if value.type_ != global.type_ && value.type_ != Type::UNREACHABLE {
+                        self.fail(&format!(
+                            "GlobalSet: Value type {:?} does not match global type {:?}",
+                            value.type_, global.type_
+                        ));
+                    }
+                }
+            }
             ExpressionKind::Call {
                 target, operands, ..
             } => {

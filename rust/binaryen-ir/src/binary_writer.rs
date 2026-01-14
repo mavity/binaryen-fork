@@ -83,6 +83,11 @@ impl BinaryWriter {
             self.write_memory_section(memory)?;
         }
 
+        // Write Global section
+        if !module.globals.is_empty() {
+            self.write_global_section(&module.globals)?;
+        }
+
         // Write Export section
         if !module.exports.is_empty() {
             self.write_export_section(&module.exports)?;
@@ -167,6 +172,39 @@ impl BinaryWriter {
 
         // Section id (5 = Memory)
         self.buffer.push(0x05);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
+        Ok(())
+    }
+
+    fn write_global_section(&mut self, globals: &[crate::module::Global]) -> Result<()> {
+        let mut section_buf = Vec::new();
+
+        // Count
+        Self::write_leb128_u32(&mut section_buf, globals.len() as u32)?;
+
+        for global in globals {
+            // Global Type
+            Self::write_value_type(&mut section_buf, global.type_)?;
+
+            // Mutability
+            section_buf.push(if global.mutable { 0x01 } else { 0x00 });
+
+            // Init expression
+            // Global init expression must be constant and simple (no labels, no function calls)
+            let mut label_stack = Vec::new(); // should stay empty
+            let dummy_map = std::collections::HashMap::new();
+            Self::write_expression(&mut section_buf, global.init, &mut label_stack, &dummy_map)?;
+
+            // End opcode for expression
+            section_buf.push(0x0B);
+        }
+
+        // Section id (6 = Global)
+        self.buffer.push(0x06);
         // Section size
         Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
         // Section content
@@ -292,6 +330,15 @@ impl BinaryWriter {
             ExpressionKind::LocalTee { index, value } => {
                 Self::write_expression(buf, value, label_stack, func_map)?;
                 buf.push(0x22); // local.tee
+                Self::write_leb128_u32(buf, *index)?;
+            }
+            ExpressionKind::GlobalGet { index } => {
+                buf.push(0x23); // global.get
+                Self::write_leb128_u32(buf, *index)?;
+            }
+            ExpressionKind::GlobalSet { index, value } => {
+                Self::write_expression(buf, value, label_stack, func_map)?;
+                buf.push(0x24); // global.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::Binary { op, left, right } => {
@@ -1594,5 +1641,87 @@ mod tests {
         assert!(process_func.body.is_some());
 
         println!("Multi-function program test passed!");
+    }
+
+    #[test]
+    fn test_globals_roundtrip() {
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        // 1. Define global: mut i32 g0 = 100
+        let builder = IrBuilder::new(&bump);
+        let init0 = builder.const_(Literal::I32(100)); // Fixed
+        module.add_global(crate::module::Global {
+            name: "g0".to_string(),
+            type_: Type::I32,
+            mutable: true,
+            init: init0,
+        });
+
+        // 2. Define global: const f32 g1 = 3.14
+        let builder2 = IrBuilder::new(&bump);
+        let init1 = builder2.const_(Literal::F32(3.14)); // Fixed
+        module.add_global(crate::module::Global {
+            name: "g1".to_string(),
+            type_: Type::F32,
+            mutable: false,
+            init: init1,
+        });
+
+        // 3. Define function that uses globals
+        let builder3 = IrBuilder::new(&bump);
+
+        let get_g0 = builder3.global_get(0, Type::I32);
+        let const_1 = builder3.const_(Literal::I32(1)); // Fixed
+        let add = builder3.binary(BinaryOp::AddInt32, get_g0, const_1, Type::I32); // Fixed
+        let set_g0 = builder3.global_set(0, add); // g0 = g0 + 1
+
+        let get_g1 = builder3.global_get(1, Type::F32);
+        let drop_g1 = builder3.drop(get_g1); // Fixed
+
+        let body = builder3.block(
+            None,
+            BumpVec::from_iter_in([set_g0, drop_g1], &bump),
+            Type::NONE,
+        );
+
+        // Function with no params/results/locals
+        let func = Function::new(
+            "test_globals".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            Some(body),
+        );
+        module.add_function(func);
+        module.export_function(0, "test_globals".to_string());
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer
+            .write_module(&module)
+            .expect("Failed to write module with globals");
+
+        // Read back
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader
+            .parse_module()
+            .expect("Failed to read back module with globals");
+
+        // Checks
+        assert_eq!(module2.globals.len(), 2);
+
+        let g0 = &module2.globals[0];
+        assert_eq!(g0.type_, Type::I32);
+        assert_eq!(g0.mutable, true);
+
+        let g1 = &module2.globals[1];
+        assert_eq!(g1.type_, Type::F32);
+        assert_eq!(g1.mutable, false);
+
+        assert_eq!(module2.functions.len(), 1);
+        let func = &module2.functions[0];
+        assert!(func.body.is_some());
     }
 }

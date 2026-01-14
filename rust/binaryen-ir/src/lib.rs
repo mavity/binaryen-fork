@@ -59,6 +59,7 @@ mod tests {
 
         let module = Module {
             functions,
+            globals: Vec::new(),
             memory: None,
             exports: Vec::new(),
         };
@@ -69,6 +70,109 @@ mod tests {
         assert!(!valid, "Validation should fail for mismatched types");
         assert!(errors.len() > 0);
         assert!(errors[0].contains("Binary op AddInt32 operands type mismatch"));
+    }
+
+    #[test]
+    fn test_global_validation() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Helper to create standard globals
+        let create_globals = || {
+            vec![
+                crate::module::Global {
+                    name: "g0".to_string(),
+                    type_: Type::I32,
+                    mutable: false,
+                    init: builder.const_(Literal::I32(0)),
+                },
+                crate::module::Global {
+                    name: "g1".to_string(),
+                    type_: Type::F32,
+                    mutable: true,
+                    init: builder.const_(Literal::F32(0.0)),
+                },
+            ]
+        };
+
+        // 1. Test GlobalSet on immutable global (g0)
+        {
+            let val = builder.const_(Literal::I32(42));
+            let set_immutable = builder.global_set(0, val);
+
+            let func = Function::new(
+                "fail_immut".to_string(),
+                Type::NONE,
+                Type::NONE,
+                vec![],
+                Some(set_immutable),
+            );
+
+            let module = Module {
+                functions: vec![func],
+                globals: create_globals(),
+                memory: None,
+                exports: vec![],
+            };
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Setting immutable global should fail");
+            assert!(errors.iter().any(|e| e.contains("is immutable")));
+        }
+
+        // 2. Test GlobalSet type mismatch
+        {
+            let val = builder.const_(Literal::I32(42)); // i32
+            let set_mismatch = builder.global_set(1, val); // trying to set to g1 (f32)
+
+            let func = Function::new(
+                "fail_type".to_string(),
+                Type::NONE,
+                Type::NONE,
+                vec![],
+                Some(set_mismatch),
+            );
+
+            let module = Module {
+                functions: vec![func],
+                globals: create_globals(),
+                memory: None,
+                exports: vec![],
+            };
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "GlobalSet type mismatch should fail");
+            assert!(errors
+                .iter()
+                .any(|e| e.contains("Value type i32 does not match global type f32")));
+        }
+
+        // 3. Test GlobalGet out of bounds
+        {
+            let get_oob = builder.global_get(99, Type::I32);
+
+            let func = Function::new(
+                "fail_oob".to_string(),
+                Type::NONE,
+                Type::I32,
+                vec![],
+                Some(get_oob),
+            );
+
+            let module = Module {
+                functions: vec![func],
+                globals: create_globals(),
+                memory: None,
+                exports: vec![],
+            };
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "OOB GlobalGet should fail");
+            assert!(errors.iter().any(|e| e.contains("out of bounds")));
+        }
     }
 
     #[test]

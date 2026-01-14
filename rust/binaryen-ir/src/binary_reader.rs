@@ -85,6 +85,7 @@ impl<'a> BinaryReader<'a> {
 
         // Parse sections
         let mut memory_section = None;
+        let mut global_section = Vec::new();
         let mut export_section = Vec::new();
 
         while self.pos < self.data.len() {
@@ -104,6 +105,10 @@ impl<'a> BinaryReader<'a> {
                 5 => {
                     // Memory section
                     memory_section = self.parse_memory_section()?;
+                }
+                6 => {
+                    // Global section
+                    global_section = self.parse_global_section()?;
                 }
                 7 => {
                     // Export section
@@ -125,6 +130,11 @@ impl<'a> BinaryReader<'a> {
         // Set memory limits
         if let Some(limits) = memory_section {
             module.set_memory(limits.initial, limits.maximum);
+        }
+
+        // Add globals
+        for global in global_section {
+            module.add_global(global);
         }
 
         // Add exports
@@ -195,6 +205,34 @@ impl<'a> BinaryReader<'a> {
         }
 
         Ok(funcs)
+    }
+
+    fn parse_global_section(&mut self) -> Result<Vec<crate::module::Global<'a>>> {
+        let count = self.read_leb128_u32()?;
+        let mut globals = Vec::new();
+
+        for i in 0..count {
+            let type_ = self.read_value_type()?;
+            let mutability = self.read_u8()?;
+            let mutable = mutability == 0x01;
+
+            // Init expression
+            let mut label_stack = Vec::new();
+            let init_expr = self
+                .parse_expression_impl(&mut label_stack)?
+                .ok_or(ParseError::UnexpectedEof)?;
+
+            let name = format!("global_{}", i);
+
+            globals.push(crate::module::Global {
+                name,
+                type_,
+                mutable,
+                init: init_expr,
+            });
+        }
+
+        Ok(globals)
     }
 
     fn parse_memory_section(&mut self) -> Result<Option<MemoryLimits>> {
@@ -507,6 +545,17 @@ impl<'a> BinaryReader<'a> {
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     let value_type = value.type_;
                     stack.push(builder.local_tee(idx, value, value_type));
+                }
+                0x23 => {
+                    // global.get
+                    let idx = self.read_leb128_u32()?;
+                    stack.push(builder.global_get(idx, Type::I32)); // TODO: Lookup actual global type
+                }
+                0x24 => {
+                    // global.set
+                    let idx = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.global_set(idx, value));
                 }
                 0x28 => {
                     // i32.load

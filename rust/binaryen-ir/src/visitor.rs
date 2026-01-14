@@ -30,6 +30,9 @@ pub trait Visitor<'a> {
             ExpressionKind::LocalSet { value, .. } | ExpressionKind::LocalTee { value, .. } => {
                 self.visit(value);
             }
+            ExpressionKind::GlobalSet { value, .. } => {
+                self.visit(value);
+            }
             ExpressionKind::If {
                 condition,
                 if_true,
@@ -81,7 +84,8 @@ pub trait Visitor<'a> {
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
-            | ExpressionKind::LocalGet { .. } => {}
+            | ExpressionKind::LocalGet { .. }
+            | ExpressionKind::GlobalGet { .. } => {}
         }
     }
 }
@@ -116,6 +120,9 @@ pub trait ReadOnlyVisitor<'a> {
             ExpressionKind::LocalSet { value, .. } | ExpressionKind::LocalTee { value, .. } => {
                 self.visit(value);
             }
+            ExpressionKind::GlobalSet { value, .. } => {
+                self.visit(value);
+            }
             ExpressionKind::If {
                 condition,
                 if_true,
@@ -167,7 +174,8 @@ pub trait ReadOnlyVisitor<'a> {
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
-            | ExpressionKind::LocalGet { .. } => {}
+            | ExpressionKind::LocalGet { .. }
+            | ExpressionKind::GlobalGet { .. } => {}
         }
     }
 }
