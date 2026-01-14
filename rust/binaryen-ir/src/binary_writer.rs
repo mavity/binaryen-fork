@@ -78,6 +78,16 @@ impl BinaryWriter {
             self.write_function_section(&func_type_indices)?;
         }
 
+        // Write Memory section
+        if let Some(ref memory) = module.memory {
+            self.write_memory_section(memory)?;
+        }
+
+        // Write Export section
+        if !module.exports.is_empty() {
+            self.write_export_section(&module.exports)?;
+        }
+
         // Write Code section
         if !module.functions.is_empty() {
             self.write_code_section(&module.functions)?;
@@ -131,6 +141,64 @@ impl BinaryWriter {
 
         // Section id (3 = Function)
         self.buffer.push(0x03);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
+        Ok(())
+    }
+
+    fn write_memory_section(&mut self, memory: &crate::module::MemoryLimits) -> Result<()> {
+        let mut section_buf = Vec::new();
+
+        // Count (always 1 for now - WASM 1.0 supports only one memory)
+        Self::write_leb128_u32(&mut section_buf, 1)?;
+
+        // Limits flag: 0x00 = min only, 0x01 = min and max
+        if let Some(max) = memory.maximum {
+            section_buf.push(0x01);
+            Self::write_leb128_u32(&mut section_buf, memory.initial)?;
+            Self::write_leb128_u32(&mut section_buf, max)?;
+        } else {
+            section_buf.push(0x00);
+            Self::write_leb128_u32(&mut section_buf, memory.initial)?;
+        }
+
+        // Section id (5 = Memory)
+        self.buffer.push(0x05);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
+        Ok(())
+    }
+
+    fn write_export_section(&mut self, exports: &[crate::module::Export]) -> Result<()> {
+        if exports.is_empty() {
+            return Ok(());
+        }
+
+        let mut section_buf = Vec::new();
+
+        // Count
+        Self::write_leb128_u32(&mut section_buf, exports.len() as u32)?;
+
+        for export in exports {
+            // Name
+            Self::write_leb128_u32(&mut section_buf, export.name.len() as u32)?;
+            section_buf.extend_from_slice(export.name.as_bytes());
+
+            // Kind
+            section_buf.push(export.kind as u8);
+
+            // Index
+            Self::write_leb128_u32(&mut section_buf, export.index)?;
+        }
+
+        // Section id (7 = Export)
+        self.buffer.push(0x07);
         // Section size
         Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
         // Section content
@@ -495,6 +563,9 @@ impl BinaryWriter {
 mod tests {
     use super::*;
     use crate::binary_reader::BinaryReader;
+    use crate::expression::IrBuilder;
+    use crate::module::ExportKind;
+    use binaryen_core::Literal;
     use bumpalo::Bump;
 
     #[test]
@@ -1013,5 +1084,229 @@ mod tests {
 
         assert_eq!(module2.functions.len(), 1);
         println!("Memory offsets and alignment test passed!");
+    }
+
+    #[test]
+    fn test_memory_section() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Add memory with limits
+        module.set_memory(1, Some(10)); // 1 initial page, 10 max pages
+
+        // Add a simple function that uses memory
+        let ptr = builder.const_(Literal::I32(0));
+        let val = builder.const_(Literal::I32(42));
+        let store = builder.store(4, 0, 2, ptr, val);
+
+        module.add_function(Function::new(
+            "init_memory".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            Some(store),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify memory limits
+        assert!(module2.memory.is_some());
+        let memory = module2.memory.unwrap();
+        assert_eq!(memory.initial, 1);
+        assert_eq!(memory.maximum, Some(10));
+
+        assert_eq!(module2.functions.len(), 1);
+        println!("Memory section test passed!");
+    }
+
+    #[test]
+    fn test_export_section() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Add a function
+        let result = builder.const_(Literal::I32(42));
+        module.add_function(Function::new(
+            "get_answer".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(result),
+        ));
+
+        // Export the function
+        module.export_function(0, "answer".to_string());
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify export
+        assert_eq!(module2.exports.len(), 1);
+        let export = &module2.exports[0];
+        assert_eq!(export.name, "answer");
+        assert_eq!(export.kind, ExportKind::Function);
+        assert_eq!(export.index, 0);
+
+        println!("Export section test passed!");
+    }
+
+    #[test]
+    fn test_memory_and_exports_combined() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Set memory
+        module.set_memory(2, None); // 2 pages, no max
+
+        // Add a function that loads from memory
+        let ptr = builder.const_(Literal::I32(0));
+        let load = builder.load(4, false, 0, 2, ptr, Type::I32);
+
+        module.add_function(Function::new(
+            "read_mem".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(load),
+        ));
+
+        // Export both function and memory
+        module.export_function(0, "read".to_string());
+        module.add_export("mem".to_string(), ExportKind::Memory, 0);
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify memory
+        assert!(module2.memory.is_some());
+        let memory = module2.memory.unwrap();
+        assert_eq!(memory.initial, 2);
+        assert_eq!(memory.maximum, None);
+
+        // Verify exports
+        assert_eq!(module2.exports.len(), 2);
+
+        let func_export = module2.exports.iter().find(|e| e.name == "read").unwrap();
+        assert_eq!(func_export.kind, ExportKind::Function);
+        assert_eq!(func_export.index, 0);
+
+        let mem_export = module2.exports.iter().find(|e| e.name == "mem").unwrap();
+        assert_eq!(mem_export.kind, ExportKind::Memory);
+        assert_eq!(mem_export.index, 0);
+
+        println!("Memory and exports combined test passed!");
+    }
+
+    #[test]
+    fn test_complete_wasm_module() {
+        use std::fs;
+        use std::process::Command;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Set memory (1 page = 64KB)
+        module.set_memory(1, Some(10));
+
+        // Function 1: get42 - returns constant 42
+        let result = builder.const_(Literal::I32(42));
+
+        module.add_function(Function::new(
+            "get42".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(result),
+        ));
+
+        // Function 2: store_value - stores a value in memory
+        let value_param = builder.local_get(0, Type::I32);
+        let ptr = builder.const_(Literal::I32(0));
+        let store = builder.store(4, 0, 2, ptr, value_param);
+
+        module.add_function(Function::new(
+            "store_value".to_string(),
+            Type::I32,
+            Type::NONE,
+            vec![],
+            Some(store),
+        ));
+
+        // Function 3: load_value - loads value from memory
+        let ptr3 = builder.const_(Literal::I32(0));
+        let load = builder.load(4, false, 0, 2, ptr3, Type::I32);
+
+        module.add_function(Function::new(
+            "load_value".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(load),
+        ));
+
+        // Export all functions and memory
+        module.export_function(0, "get42".to_string());
+        module.export_function(1, "store_value".to_string());
+        module.export_function(2, "load_value".to_string());
+        module.add_export("memory".to_string(), ExportKind::Memory, 0);
+
+        // Write to file
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let test_file = "/tmp/test_module.wasm";
+        fs::write(test_file, &bytes).expect("Failed to write WASM file");
+
+        // Validate with wasmtime
+        let output = Command::new("wasmtime")
+            .arg("compile")
+            .arg(test_file)
+            .arg("-o")
+            .arg("/tmp/test_module.cwasm")
+            .output();
+
+        match output {
+            Ok(result) => {
+                if !result.status.success() {
+                    let stderr = String::from_utf8_lossy(&result.stderr);
+                    panic!("wasmtime compilation failed:\n{}", stderr);
+                }
+                println!("✓ Module compiled successfully with wasmtime!");
+            }
+            Err(e) => {
+                println!("⚠ Could not run wasmtime ({}), skipping validation", e);
+            }
+        }
+
+        // Verify round-trip
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read back");
+
+        assert_eq!(module2.functions.len(), 3);
+        assert_eq!(module2.exports.len(), 4);
+        assert!(module2.memory.is_some());
+
+        println!("Complete WASM module test passed!");
     }
 }

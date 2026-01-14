@@ -1,5 +1,5 @@
 use crate::expression::{Expression, ExpressionKind, IrBuilder};
-use crate::module::{Function, Module};
+use crate::module::{Export, ExportKind, Function, MemoryLimits, Module};
 use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
@@ -20,6 +20,8 @@ pub enum ParseError {
     InvalidSection,
     InvalidOpcode(u8),
     InvalidType,
+    InvalidUtf8,
+    InvalidExportKind,
     Io(io::Error),
 }
 
@@ -82,6 +84,9 @@ impl<'a> BinaryReader<'a> {
         let mut code_section = Vec::new();
 
         // Parse sections
+        let mut memory_section = None;
+        let mut export_section = Vec::new();
+
         while self.pos < self.data.len() {
             let section_id = self.read_u8()?;
             let section_size = self.read_leb128_u32()? as usize;
@@ -96,6 +101,14 @@ impl<'a> BinaryReader<'a> {
                     // Function section
                     function_section = self.parse_function_section()?;
                 }
+                5 => {
+                    // Memory section
+                    memory_section = self.parse_memory_section()?;
+                }
+                7 => {
+                    // Export section
+                    export_section = self.parse_export_section()?;
+                }
                 10 => {
                     // Code section
                     code_section = self.parse_code_section()?;
@@ -107,6 +120,16 @@ impl<'a> BinaryReader<'a> {
             }
 
             self.pos = section_end;
+        }
+
+        // Set memory limits
+        if let Some(limits) = memory_section {
+            module.set_memory(limits.initial, limits.maximum);
+        }
+
+        // Add exports
+        for export in export_section {
+            module.add_export(export.name, export.kind, export.index);
         }
 
         // Combine function signatures with code
@@ -172,6 +195,60 @@ impl<'a> BinaryReader<'a> {
         }
 
         Ok(funcs)
+    }
+
+    fn parse_memory_section(&mut self) -> Result<Option<MemoryLimits>> {
+        let count = self.read_leb128_u32()?;
+        if count == 0 {
+            return Ok(None);
+        }
+
+        // Read first memory (WASM 1.0 supports only one memory)
+        let flags = self.read_u8()?;
+        let initial = self.read_leb128_u32()?;
+        let maximum = if flags & 0x01 != 0 {
+            Some(self.read_leb128_u32()?)
+        } else {
+            None
+        };
+
+        // Skip remaining memories if any
+        for _ in 1..count {
+            let flags = self.read_u8()?;
+            let _initial = self.read_leb128_u32()?;
+            if flags & 0x01 != 0 {
+                let _maximum = self.read_leb128_u32()?;
+            }
+        }
+
+        Ok(Some(MemoryLimits { initial, maximum }))
+    }
+
+    fn parse_export_section(&mut self) -> Result<Vec<Export>> {
+        let count = self.read_leb128_u32()?;
+        let mut exports = Vec::new();
+
+        for _ in 0..count {
+            let name_len = self.read_leb128_u32()? as usize;
+            let name_bytes = self.read_bytes(name_len)?;
+            let name =
+                String::from_utf8(name_bytes.to_vec()).map_err(|_| ParseError::InvalidUtf8)?;
+
+            let kind_byte = self.read_u8()?;
+            let kind = match kind_byte {
+                0 => ExportKind::Function,
+                1 => ExportKind::Table,
+                2 => ExportKind::Memory,
+                3 => ExportKind::Global,
+                _ => return Err(ParseError::InvalidExportKind),
+            };
+
+            let index = self.read_leb128_u32()?;
+
+            exports.push(Export { name, kind, index });
+        }
+
+        Ok(exports)
     }
 
     fn parse_code_section(&mut self) -> Result<Vec<(Vec<Type>, Option<&'a mut Expression<'a>>)>> {

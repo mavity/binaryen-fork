@@ -57,7 +57,11 @@ mod tests {
             body: Some(binary_expr),
         });
 
-        let module = Module { functions };
+        let module = Module {
+            functions,
+            memory: None,
+            exports: Vec::new(),
+        };
 
         let validator = Validator::new(&module);
         let (valid, errors) = validator.validate();
