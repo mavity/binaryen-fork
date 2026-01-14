@@ -64,6 +64,12 @@ pub struct Import {
     pub kind: ImportKind,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FuncType {
+    pub params: Type,  // Parameter types
+    pub results: Type, // Result types
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ImportKind {
     Function(Type, Type),          // params, results
@@ -95,6 +101,7 @@ pub struct ElementSegment<'a> {
 
 #[derive(Debug, Default)]
 pub struct Module<'a> {
+    pub types: Vec<FuncType>, // Type section
     pub imports: Vec<Import>,
     pub functions: Vec<Function<'a>>,
     pub table: Option<TableLimits>, // Table section (MVP: single table)
@@ -109,6 +116,7 @@ pub struct Module<'a> {
 impl<'a> Module<'a> {
     pub fn new() -> Self {
         Self {
+            types: Vec::new(),
             imports: Vec::new(),
             functions: Vec::new(),
             table: None,
@@ -179,5 +187,11 @@ impl<'a> Module<'a> {
 
     pub fn add_element_segment(&mut self, segment: ElementSegment<'a>) {
         self.elements.push(segment);
+    }
+
+    pub fn add_type(&mut self, params: Type, results: Type) -> u32 {
+        let type_idx = self.types.len() as u32;
+        self.types.push(FuncType { params, results });
+        type_idx
     }
 }

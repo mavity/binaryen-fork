@@ -40,10 +40,25 @@ impl BinaryWriter {
         // Version: 1
         self.write_u32(1)?;
 
-        // Collect function types
+        // Use types from module if available, otherwise infer from functions/imports
         let mut type_map: Vec<(Vec<Type>, Vec<Type>)> = Vec::new();
 
-        // Collect types from imports
+        // First, use any explicit types from module.types
+        for func_type in &module.types {
+            let params_vec = if func_type.params == Type::NONE {
+                vec![]
+            } else {
+                vec![func_type.params]
+            };
+            let results_vec = if func_type.results == Type::NONE {
+                vec![]
+            } else {
+                vec![func_type.results]
+            };
+            type_map.push((params_vec, results_vec));
+        }
+
+        // Collect types from imports (if not already in type_map)
         for import in &module.imports {
             if let crate::module::ImportKind::Function(params, results) = import.kind {
                 let params_vec = if params == Type::NONE {

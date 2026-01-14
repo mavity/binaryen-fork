@@ -58,6 +58,7 @@ mod tests {
         });
 
         let module = Module {
+            types: vec![],
             imports: vec![],
             functions,
             globals: Vec::new(),
@@ -114,6 +115,7 @@ mod tests {
             );
 
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![func],
                 globals: create_globals(),
@@ -145,6 +147,7 @@ mod tests {
             );
 
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![func],
                 globals: create_globals(),
@@ -177,6 +180,7 @@ mod tests {
             );
 
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![func],
                 globals: create_globals(),
@@ -332,6 +336,7 @@ mod tests {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
 
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![func_valid],  // f0 is index 0
                 globals: vec![global],        // g0 is index 0
@@ -367,6 +372,7 @@ mod tests {
         // 2. Duplicate export name
         {
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![],
                 globals: vec![],
@@ -398,6 +404,7 @@ mod tests {
         {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![func_valid],
                 globals: vec![],
@@ -423,6 +430,7 @@ mod tests {
         // 4. Global OOB
         {
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![],
                 globals: vec![],
@@ -448,6 +456,7 @@ mod tests {
         // 5. Memory OOB / No Memory
         {
             let module = Module {
+                types: vec![],
                 imports: vec![],
                 functions: vec![],
                 globals: vec![],
@@ -493,6 +502,7 @@ mod tests {
         };
 
         let module = Module {
+            types: vec![],
             imports: vec![],
             functions: vec![func],
             globals: vec![global],
@@ -1085,5 +1095,403 @@ mod tests {
             assert!(!valid, "Invalid table index should fail");
             assert!(errors.iter().any(|e| e.contains("invalid table index")));
         }
+    }
+
+    #[test]
+    fn test_type_section_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test 1: Empty types
+        {
+            let mut module = Module::new();
+
+            let mut writer = BinaryWriter::new();
+            let bytes = writer.write_module(&module).expect("Failed to write");
+
+            let mut reader = BinaryReader::new(&bump, bytes);
+            let parsed = reader.parse_module().expect("Failed to parse");
+
+            assert_eq!(parsed.types.len(), 0);
+        }
+
+        // Test 2: Single type (i32) -> (i32)
+        {
+            let mut module = Module::new();
+            module.add_type(Type::I32, Type::I32);
+
+            let mut writer = BinaryWriter::new();
+            let bytes = writer.write_module(&module).expect("Failed to write");
+
+            let mut reader = BinaryReader::new(&bump, bytes);
+            let parsed = reader.parse_module().expect("Failed to parse");
+
+            assert_eq!(parsed.types.len(), 1);
+            assert_eq!(parsed.types[0].params, Type::I32);
+            assert_eq!(parsed.types[0].results, Type::I32);
+        }
+
+        // Test 3: Multiple types
+        {
+            let mut module = Module::new();
+            module.add_type(Type::I32, Type::I32);
+            module.add_type(Type::I32, Type::NONE);
+            module.add_type(Type::NONE, Type::F64);
+
+            let mut writer = BinaryWriter::new();
+            let bytes = writer.write_module(&module).expect("Failed to write");
+
+            let mut reader = BinaryReader::new(&bump, bytes);
+            let parsed = reader.parse_module().expect("Failed to parse");
+
+            assert_eq!(parsed.types.len(), 3);
+            assert_eq!(parsed.types[0].params, Type::I32);
+            assert_eq!(parsed.types[0].results, Type::I32);
+            assert_eq!(parsed.types[1].params, Type::I32);
+            assert_eq!(parsed.types[1].results, Type::NONE);
+            assert_eq!(parsed.types[2].params, Type::NONE);
+            assert_eq!(parsed.types[2].results, Type::F64);
+        }
+    }
+
+    #[test]
+    fn test_type_section_all_basic_types() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test all basic WebAssembly value types
+        let test_types = [
+            (Type::I32, "i32"),
+            (Type::I64, "i64"),
+            (Type::F32, "f32"),
+            (Type::F64, "f64"),
+            (Type::V128, "v128"),
+        ];
+
+        for (param_type, param_name) in &test_types {
+            for (result_type, result_name) in &test_types {
+                let mut module = Module::new();
+                module.add_type(*param_type, *result_type);
+
+                let mut writer = BinaryWriter::new();
+                let bytes = writer.write_module(&module).expect(&format!(
+                    "Failed to write {} -> {}",
+                    param_name, result_name
+                ));
+
+                let mut reader = BinaryReader::new(&bump, bytes);
+                let parsed = reader.parse_module().expect(&format!(
+                    "Failed to parse {} -> {}",
+                    param_name, result_name
+                ));
+
+                assert_eq!(
+                    parsed.types.len(),
+                    1,
+                    "Wrong type count for {} -> {}",
+                    param_name,
+                    result_name
+                );
+                assert_eq!(
+                    parsed.types[0].params, *param_type,
+                    "Wrong param type for {} -> {}",
+                    param_name, result_name
+                );
+                assert_eq!(
+                    parsed.types[0].results, *result_type,
+                    "Wrong result type for {} -> {}",
+                    param_name, result_name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_type_section_empty_signatures() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test 1: () -> ()
+        {
+            let mut module = Module::new();
+            module.add_type(Type::NONE, Type::NONE);
+
+            let mut writer = BinaryWriter::new();
+            let bytes = writer.write_module(&module).expect("Failed to write");
+
+            let mut reader = BinaryReader::new(&bump, bytes);
+            let parsed = reader.parse_module().expect("Failed to parse");
+
+            assert_eq!(parsed.types.len(), 1);
+            assert_eq!(parsed.types[0].params, Type::NONE);
+            assert_eq!(parsed.types[0].results, Type::NONE);
+        }
+
+        // Test 2: () -> (i32)
+        {
+            let mut module = Module::new();
+            module.add_type(Type::NONE, Type::I32);
+
+            let mut writer = BinaryWriter::new();
+            let bytes = writer.write_module(&module).expect("Failed to write");
+
+            let mut reader = BinaryReader::new(&bump, bytes);
+            let parsed = reader.parse_module().expect("Failed to parse");
+
+            assert_eq!(parsed.types.len(), 1);
+            assert_eq!(parsed.types[0].params, Type::NONE);
+            assert_eq!(parsed.types[0].results, Type::I32);
+        }
+
+        // Test 3: (f64) -> ()
+        {
+            let mut module = Module::new();
+            module.add_type(Type::F64, Type::NONE);
+
+            let mut writer = BinaryWriter::new();
+            let bytes = writer.write_module(&module).expect("Failed to write");
+
+            let mut reader = BinaryReader::new(&bump, bytes);
+            let parsed = reader.parse_module().expect("Failed to parse");
+
+            assert_eq!(parsed.types.len(), 1);
+            assert_eq!(parsed.types[0].params, Type::F64);
+            assert_eq!(parsed.types[0].results, Type::NONE);
+        }
+    }
+
+    #[test]
+    fn test_type_section_reference_types() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test funcref and externref
+        let ref_types = [(Type::FUNCREF, "funcref"), (Type::EXTERNREF, "externref")];
+
+        for (ref_type, name) in &ref_types {
+            // Test: (ref) -> ()
+            {
+                let mut module = Module::new();
+                module.add_type(*ref_type, Type::NONE);
+
+                let mut writer = BinaryWriter::new();
+                let bytes = writer
+                    .write_module(&module)
+                    .expect(&format!("Failed to write {} -> ()", name));
+
+                let mut reader = BinaryReader::new(&bump, bytes);
+                let parsed = reader
+                    .parse_module()
+                    .expect(&format!("Failed to parse {} -> ()", name));
+
+                assert_eq!(parsed.types.len(), 1);
+                assert_eq!(parsed.types[0].params, *ref_type);
+                assert_eq!(parsed.types[0].results, Type::NONE);
+            }
+
+            // Test: () -> (ref)
+            {
+                let mut module = Module::new();
+                module.add_type(Type::NONE, *ref_type);
+
+                let mut writer = BinaryWriter::new();
+                let bytes = writer
+                    .write_module(&module)
+                    .expect(&format!("Failed to write () -> {}", name));
+
+                let mut reader = BinaryReader::new(&bump, bytes);
+                let parsed = reader
+                    .parse_module()
+                    .expect(&format!("Failed to parse () -> {}", name));
+
+                assert_eq!(parsed.types.len(), 1);
+                assert_eq!(parsed.types[0].params, Type::NONE);
+                assert_eq!(parsed.types[0].results, *ref_type);
+            }
+        }
+    }
+
+    #[test]
+    fn test_type_section_many_types() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test with 100 types to ensure proper LEB128 encoding and no limit issues
+        let mut module = Module::new();
+        for i in 0..100 {
+            let param_type = match i % 5 {
+                0 => Type::I32,
+                1 => Type::I64,
+                2 => Type::F32,
+                3 => Type::F64,
+                _ => Type::NONE,
+            };
+            let result_type = match i % 4 {
+                0 => Type::I32,
+                1 => Type::F64,
+                2 => Type::NONE,
+                _ => Type::I64,
+            };
+            module.add_type(param_type, result_type);
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.types.len(), 100, "Should have 100 types");
+
+        // Verify each type matches
+        for i in 0..100 {
+            let expected_param = match i % 5 {
+                0 => Type::I32,
+                1 => Type::I64,
+                2 => Type::F32,
+                3 => Type::F64,
+                _ => Type::NONE,
+            };
+            let expected_result = match i % 4 {
+                0 => Type::I32,
+                1 => Type::F64,
+                2 => Type::NONE,
+                _ => Type::I64,
+            };
+            assert_eq!(
+                parsed.types[i].params, expected_param,
+                "Type {} param mismatch",
+                i
+            );
+            assert_eq!(
+                parsed.types[i].results, expected_result,
+                "Type {} result mismatch",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_type_section_with_functions() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test that types are properly associated with functions
+        let mut module = Module::new();
+
+        // Add explicit types
+        module.add_type(Type::I32, Type::I32); // type 0
+        module.add_type(Type::F64, Type::F64); // type 1
+
+        // Add functions that should reference these types
+        let body1 = builder.const_(Literal::I32(42));
+        let func1 = Function::new("f1".to_string(), Type::I32, Type::I32, vec![], Some(body1));
+        module.add_function(func1);
+
+        let body2 = builder.const_(Literal::F64(3.14));
+        let func2 = Function::new("f2".to_string(), Type::F64, Type::F64, vec![], Some(body2));
+        module.add_function(func2);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        // Should have at least the 2 explicit types (writer may add more if needed)
+        assert!(parsed.types.len() >= 2, "Should have at least 2 types");
+
+        // Functions should be parsed
+        assert_eq!(parsed.functions.len(), 2, "Should have 2 functions");
+    }
+
+    #[test]
+    fn test_type_section_with_imports() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind};
+
+        let bump = Bump::new();
+
+        let mut module = Module::new();
+
+        // Add explicit types
+        module.add_type(Type::I32, Type::I32); // type 0
+        module.add_type(Type::F32, Type::F32); // type 1
+
+        // Add imports that use these types
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "add".to_string(),
+            kind: ImportKind::Function(Type::I32, Type::I32),
+        });
+
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "sqrt".to_string(),
+            kind: ImportKind::Function(Type::F32, Type::F32),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        // Should have the explicit types
+        assert_eq!(parsed.types.len(), 2, "Should have 2 types");
+
+        // Imports should be parsed
+        assert_eq!(parsed.imports.len(), 2, "Should have 2 imports");
+    }
+
+    #[test]
+    fn test_type_section_deduplication() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test that writer deduplicates identical type signatures
+        let mut module = Module::new();
+
+        // Add three functions with the same signature
+        for i in 0..3 {
+            let body = builder.const_(Literal::I32(i as i32));
+            let func = Function::new(format!("f{}", i), Type::I32, Type::I32, vec![], Some(body));
+            module.add_function(func);
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        // Should only have 1 type (deduplicated)
+        assert_eq!(
+            parsed.types.len(),
+            1,
+            "Should deduplicate identical signatures"
+        );
+        assert_eq!(parsed.types[0].params, Type::I32);
+        assert_eq!(parsed.types[0].results, Type::I32);
+
+        // Should still have 3 functions
+        assert_eq!(parsed.functions.len(), 3);
     }
 }

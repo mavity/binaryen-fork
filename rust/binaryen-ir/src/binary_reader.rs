@@ -1,7 +1,7 @@
 use crate::expression::{Expression, ExpressionKind, IrBuilder};
-use crate::module::{Export, ExportKind, Function, MemoryLimits, Module};
+use crate::module::{Export, ExportKind, FuncType, Function, MemoryLimits, Module};
 use crate::ops::{BinaryOp, UnaryOp};
-use binaryen_core::{Literal, Type};
+use binaryen_core::{type_store, Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
 use std::io::{self, Read};
@@ -155,6 +155,13 @@ impl<'a> BinaryReader<'a> {
             self.pos = section_end;
         }
 
+        // Add types to module
+        for (params, results) in &type_section {
+            let params_type = Self::types_to_type(params);
+            let results_type = Self::types_to_type(results);
+            module.add_type(params_type, results_type);
+        }
+
         // Set memory limits
         if let Some(limits) = memory_section {
             module.set_memory(limits.initial, limits.maximum);
@@ -241,6 +248,20 @@ impl<'a> BinaryReader<'a> {
         }
 
         Ok(types)
+    }
+
+    /// Convert a Vec<Type> to a single Type using type interning for multi-value types
+    fn types_to_type(types: &[Type]) -> Type {
+        match types.len() {
+            0 => Type::NONE,
+            1 => types[0],
+            _ => {
+                // For multiple types, intern them as a signature
+                // This is a simplification - ideally we'd use tuple types
+                // For now, just take the first type
+                types[0]
+            }
+        }
     }
 
     fn parse_function_section(&mut self) -> Result<Vec<u32>> {
