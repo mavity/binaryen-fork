@@ -607,4 +607,103 @@ mod tests {
         assert_eq!(func.vars[0], Type::I32);
         assert_eq!(func.vars[1], Type::I64);
     }
+
+    #[test]
+    fn test_control_flow_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::expression::IrBuilder;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Build a function with control flow:
+        // fn test(i32) -> i32 {
+        //   block {
+        //     if (local.get 0) {
+        //       return const 1
+        //     }
+        //     loop {
+        //       drop (const 42)
+        //       break
+        //     }
+        //   }
+        //   select (const 10, const 20, local.get 0)
+        // }
+
+        let local_get = builder.local_get(0, Type::I32);
+        let const_1 = builder.const_(Literal::I32(1));
+        let return_expr = Expression::new(
+            &bump,
+            ExpressionKind::Return {
+                value: Some(const_1),
+            },
+            Type::UNREACHABLE,
+        );
+        let if_body = builder.if_(local_get, return_expr, None, Type::NONE);
+
+        let const_42 = builder.const_(Literal::I32(42));
+        let drop_expr =
+            Expression::new(&bump, ExpressionKind::Drop { value: const_42 }, Type::NONE);
+        let break_expr = builder.break_("$loop", None, None, Type::UNREACHABLE);
+        let mut loop_body_list = BumpVec::new_in(&bump);
+        loop_body_list.push(drop_expr);
+        loop_body_list.push(break_expr);
+        let loop_body_block = builder.block(None, loop_body_list, Type::NONE);
+        let loop_expr = builder.loop_(Some("$loop"), loop_body_block, Type::NONE);
+
+        let mut block_list = BumpVec::new_in(&bump);
+        block_list.push(if_body);
+        block_list.push(loop_expr);
+        let block = builder.block(None, block_list, Type::NONE);
+
+        let const_10 = builder.const_(Literal::I32(10));
+        let const_20 = builder.const_(Literal::I32(20));
+        let local_get2 = builder.local_get(0, Type::I32);
+        let select_expr = Expression::new(
+            &bump,
+            ExpressionKind::Select {
+                condition: local_get2,
+                if_true: const_10,
+                if_false: const_20,
+            },
+            Type::I32,
+        );
+
+        let mut final_body_list = BumpVec::new_in(&bump);
+        final_body_list.push(block);
+        final_body_list.push(select_expr);
+        let body = builder.block(None, final_body_list, Type::I32);
+
+        module.add_function(Function::new(
+            "test_control_flow".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(body),
+        ));
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        println!("Written {} bytes", bytes.len());
+        println!("Bytes: {:02X?}", &bytes[0..std::cmp::min(100, bytes.len())]);
+
+        // Read back
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify basic structure
+        assert_eq!(module2.functions.len(), 1);
+        let func = &module2.functions[0];
+        // Note: function name not preserved without export section
+        assert_eq!(func.params, Type::I32);
+        assert_eq!(func.results, Type::I32);
+        assert!(func.body.is_some());
+
+        println!("Control flow round-trip test passed!");
+    }
 }
