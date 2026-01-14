@@ -235,13 +235,14 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
     fn visit_expression(&mut self, expr: &Expression<'a>) {
         match &expr.kind {
             ExpressionKind::Binary { op, left, right } => {
-                if left.type_ != right.type_ {
-                    if left.type_ != Type::UNREACHABLE && right.type_ != Type::UNREACHABLE {
-                        self.fail(&format!(
-                            "Binary op {:?} operands type mismatch: {:?} vs {:?}",
-                            op, left.type_, right.type_
-                        ));
-                    }
+                if left.type_ != right.type_
+                    && left.type_ != Type::UNREACHABLE
+                    && right.type_ != Type::UNREACHABLE
+                {
+                    self.fail(&format!(
+                        "Binary op {:?} operands type mismatch: {:?} vs {:?}",
+                        op, left.type_, right.type_
+                    ));
                 }
             }
             ExpressionKind::LocalGet { index: _ } => {
@@ -328,7 +329,7 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
                     // Limitation: Type is single value. If mismatch, fail.
                     // If multiple operands, we need tuple support in Type.
                     // For now, simple check.
-                    if operands.len() != 0 {
+                    if !operands.is_empty() {
                         // If we have operands but params is valid (not NONE), check type.
                         // Assuming 1 param only for now as per minimal parser type support.
                         let op_type = operands[0].type_;

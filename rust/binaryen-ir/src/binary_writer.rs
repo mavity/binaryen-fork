@@ -25,6 +25,12 @@ impl From<io::Error> for WriteError {
 
 type Result<T> = std::result::Result<T, WriteError>;
 
+impl Default for BinaryWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BinaryWriter {
     pub fn new() -> Self {
         Self {
@@ -72,7 +78,7 @@ impl BinaryWriter {
                     vec![results]
                 };
                 let sig = (params_vec, results_vec);
-                if !type_map.iter().any(|t| *t == sig) {
+                if !type_map.contains(&sig) {
                     type_map.push(sig);
                 }
             }
@@ -688,9 +694,7 @@ impl BinaryWriter {
                 }
 
                 // Look up function index
-                let func_index = func_map
-                    .get(target)
-                    .ok_or_else(|| WriteError::InvalidExpression)?;
+                let func_index = func_map.get(target).ok_or(WriteError::InvalidExpression)?;
 
                 if *is_return {
                     // return_call (tail call) - opcode 0x12
@@ -1720,7 +1724,7 @@ mod tests {
                 } => {
                     assert_eq!(*target, "func_0"); // Should call function at index 0
                     assert_eq!(operands.len(), 0); // No arguments
-                    assert_eq!(*is_return, false); // Not a tail call
+                    assert!(!(*is_return)); // Not a tail call
                 }
                 _ => panic!("Expected Call expression, got {:?}", body.kind),
             }
@@ -1937,7 +1941,7 @@ mod tests {
 
         // 2. Define global: const f32 g1 = 3.14
         let builder2 = IrBuilder::new(&bump);
-        let init1 = builder2.const_(Literal::F32(3.14)); // Fixed
+        let init1 = builder2.const_(Literal::F32(2.5)); // Fixed
         module.add_global(crate::module::Global {
             name: "g1".to_string(),
             type_: Type::F32,
@@ -1991,11 +1995,11 @@ mod tests {
 
         let g0 = &module2.globals[0];
         assert_eq!(g0.type_, Type::I32);
-        assert_eq!(g0.mutable, true);
+        assert!(g0.mutable);
 
         let g1 = &module2.globals[1];
         assert_eq!(g1.type_, Type::F32);
-        assert_eq!(g1.mutable, false);
+        assert!(!g1.mutable);
 
         assert_eq!(module2.functions.len(), 1);
         let func = &module2.functions[0];

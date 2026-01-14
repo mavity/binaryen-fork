@@ -17,6 +17,10 @@ pub struct WrappedModule {
     module: Module<'static>,
 }
 
+/// Creates a new Binaryen module.
+///
+/// # Safety
+/// Returns a raw pointer that must be freed with `BinaryenRustModuleDispose`.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleCreate() -> BinaryenRustModuleRef {
     let bump = Box::new(Bump::new());
@@ -30,6 +34,10 @@ pub unsafe extern "C" fn BinaryenRustModuleCreate() -> BinaryenRustModuleRef {
     Box::into_raw(wrapper)
 }
 
+/// Frees a module created with `BinaryenRustModuleCreate`.
+///
+/// # Safety
+/// `module` must be a valid pointer from `BinaryenRustModuleCreate` and must not be used after this call.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleDispose(module: BinaryenRustModuleRef) {
     if !module.is_null() {
@@ -38,6 +46,11 @@ pub unsafe extern "C" fn BinaryenRustModuleDispose(module: BinaryenRustModuleRef
 }
 
 // Expression creation
+
+/// Creates a constant i32 expression.
+///
+/// # Safety
+/// `module` must be a valid module pointer. Returns a pointer valid for the module's lifetime.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustConst(
     module: BinaryenRustModuleRef,
@@ -52,6 +65,10 @@ pub unsafe extern "C" fn BinaryenRustConst(
     expr as *mut Expression as *mut c_void
 }
 
+/// Creates a block expression.
+///
+/// # Safety
+/// `module`, `name`, and `children` must be valid pointers. The block name must be null-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustBlock(
     module: BinaryenRustModuleRef,
@@ -99,6 +116,11 @@ fn bump_string<'a>(bump: &'a Bump, s: &str) -> &'a str {
 }
 
 // Function creation
+
+/// Adds a function to a module.
+///
+/// # Safety
+/// `module` and `name` must be valid pointers. `name` must be null-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustAddFunction(
     module: BinaryenRustModuleRef,
@@ -133,6 +155,10 @@ pub unsafe extern "C" fn BinaryenRustAddFunction(
     module_wrapper.module.add_function(func_static);
 }
 
+/// Creates a unary expression.
+///
+/// # Safety
+/// `module` and `value` must be valid pointers. `op` must be a valid UnaryOp discriminant.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustUnary(
     module: BinaryenRustModuleRef,
@@ -152,6 +178,10 @@ pub unsafe extern "C" fn BinaryenRustUnary(
     expr as *mut Expression as *mut c_void
 }
 
+/// Creates a binary expression.
+///
+/// # Safety
+/// `module`, `left`, and `right` must be valid pointers. `op` must be a valid BinaryOp discriminant.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustBinary(
     module: BinaryenRustModuleRef,
@@ -172,6 +202,10 @@ pub unsafe extern "C" fn BinaryenRustBinary(
     expr as *mut Expression as *mut c_void
 }
 
+/// Creates a local.get expression.
+///
+/// # Safety
+/// `module` must be a valid pointer.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustLocalGet(
     module: BinaryenRustModuleRef,
@@ -186,6 +220,10 @@ pub unsafe extern "C" fn BinaryenRustLocalGet(
     expr as *mut Expression as *mut c_void
 }
 
+/// Creates a local.set expression.
+///
+/// # Safety
+/// `module` and `value` must be valid pointers.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustLocalSet(
     module: BinaryenRustModuleRef,
@@ -202,6 +240,10 @@ pub unsafe extern "C" fn BinaryenRustLocalSet(
 
 // Binary I/O functions
 
+/// Parses a WebAssembly binary and creates a module.
+///
+/// # Safety
+/// `bytes` must be a valid pointer to at least `len` bytes. Returns null on parse failure.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleReadBinary(
     bytes: *const u8,
@@ -224,6 +266,10 @@ pub unsafe extern "C" fn BinaryenRustModuleReadBinary(
     }
 }
 
+/// Serializes a module to WebAssembly binary format.
+///
+/// # Safety
+/// All pointers must be valid. The output buffer must be freed with `BinaryenRustModuleFreeBinary`.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleWriteBinary(
     module: BinaryenRustModuleRef,
@@ -249,15 +295,23 @@ pub unsafe extern "C" fn BinaryenRustModuleWriteBinary(
     }
 }
 
+/// Frees a binary buffer allocated by `BinaryenRustModuleWriteBinary`.
+///
+/// # Safety
+/// `ptr` must be from `BinaryenRustModuleWriteBinary` with the correct `len`.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleFreeBinary(ptr: *mut u8, len: usize) {
     if !ptr.is_null() && len > 0 {
-        let _ = Box::from_raw(slice::from_raw_parts_mut(ptr, len));
+        let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len));
     }
 }
 
 // Pass management
 
+/// Runs optimization passes on a module.
+///
+/// # Safety
+/// `module` and `pass_names` must be valid pointers. Each pass name must be null-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleRunPasses(
     module: BinaryenRustModuleRef,

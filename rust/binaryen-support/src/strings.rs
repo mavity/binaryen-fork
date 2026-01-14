@@ -7,6 +7,12 @@ pub struct StringInterner {
     strings: RwLock<HashMap<String, &'static str>>,
 }
 
+impl Default for StringInterner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringInterner {
     pub fn new() -> Self {
         Self {
@@ -94,7 +100,7 @@ mod tests {
         fn intern_property_concurrent(svec in proptest::collection::vec(".*", 0..64)) {
             use std::sync::Arc;
             use std::thread;
-            proptest::prop_assume!(svec.len() > 0);
+            proptest::prop_assume!(!svec.is_empty());
             let interner = Arc::new(StringInterner::new());
             let mut handles = vec![];
             for _ in 0..4 {

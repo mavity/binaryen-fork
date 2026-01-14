@@ -48,14 +48,13 @@ mod tests {
             type_: Type::I32, // Result type claimed to be i32
         });
 
-        let mut functions = Vec::new();
-        functions.push(Function {
+        let functions = vec![Function {
             name: "bad_func".to_string(),
             params: Type::NONE,
             results: Type::I32,
             vars: Vec::new(),
             body: Some(binary_expr),
-        });
+        }];
 
         let module = Module {
             types: vec![],
@@ -74,7 +73,7 @@ mod tests {
         let (valid, errors) = validator.validate();
 
         assert!(!valid, "Validation should fail for mismatched types");
-        assert!(errors.len() > 0);
+        assert!(!errors.is_empty());
         assert!(errors[0].contains("Binary op AddInt32 operands type mismatch"));
     }
 
@@ -626,7 +625,7 @@ mod tests {
         assert_eq!(global_import.name, "limit");
         if let ImportKind::Global(ty, mut_) = global_import.kind {
             assert_eq!(ty, Type::I32);
-            assert_eq!(mut_, false);
+            assert!(!mut_);
         } else {
             panic!("Expected global import");
         }
@@ -1178,16 +1177,14 @@ mod tests {
                 module.add_type(*param_type, *result_type);
 
                 let mut writer = BinaryWriter::new();
-                let bytes = writer.write_module(&module).expect(&format!(
-                    "Failed to write {} -> {}",
-                    param_name, result_name
-                ));
+                let bytes = writer.write_module(&module).unwrap_or_else(|_| {
+                    panic!("Failed to write {} -> {}", param_name, result_name)
+                });
 
                 let mut reader = BinaryReader::new(&bump, bytes);
-                let parsed = reader.parse_module().expect(&format!(
-                    "Failed to parse {} -> {}",
-                    param_name, result_name
-                ));
+                let parsed = reader.parse_module().unwrap_or_else(|_| {
+                    panic!("Failed to parse {} -> {}", param_name, result_name)
+                });
 
                 assert_eq!(
                     parsed.types.len(),
@@ -1285,12 +1282,12 @@ mod tests {
                 let mut writer = BinaryWriter::new();
                 let bytes = writer
                     .write_module(&module)
-                    .expect(&format!("Failed to write {} -> ()", name));
+                    .unwrap_or_else(|_| panic!("Failed to write {} -> ()", name));
 
                 let mut reader = BinaryReader::new(&bump, bytes);
                 let parsed = reader
                     .parse_module()
-                    .expect(&format!("Failed to parse {} -> ()", name));
+                    .unwrap_or_else(|_| panic!("Failed to parse {} -> ()", name));
 
                 assert_eq!(parsed.types.len(), 1);
                 assert_eq!(parsed.types[0].params, *ref_type);
@@ -1305,12 +1302,12 @@ mod tests {
                 let mut writer = BinaryWriter::new();
                 let bytes = writer
                     .write_module(&module)
-                    .expect(&format!("Failed to write () -> {}", name));
+                    .unwrap_or_else(|_| panic!("Failed to write () -> {}", name));
 
                 let mut reader = BinaryReader::new(&bump, bytes);
                 let parsed = reader
                     .parse_module()
-                    .expect(&format!("Failed to parse () -> {}", name));
+                    .unwrap_or_else(|_| panic!("Failed to parse () -> {}", name));
 
                 assert_eq!(parsed.types.len(), 1);
                 assert_eq!(parsed.types[0].params, Type::NONE);
@@ -1401,7 +1398,7 @@ mod tests {
         let func1 = Function::new("f1".to_string(), Type::I32, Type::I32, vec![], Some(body1));
         module.add_function(func1);
 
-        let body2 = builder.const_(Literal::F64(3.14));
+        let body2 = builder.const_(Literal::F64(1.23));
         let func2 = Function::new("f2".to_string(), Type::F64, Type::F64, vec![], Some(body2));
         module.add_function(func2);
 
@@ -1471,7 +1468,7 @@ mod tests {
 
         // Add three functions with the same signature
         for i in 0..3 {
-            let body = builder.const_(Literal::I32(i as i32));
+            let body = builder.const_(Literal::I32(i));
             let func = Function::new(format!("f{}", i), Type::I32, Type::I32, vec![], Some(body));
             module.add_function(func);
         }

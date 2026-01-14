@@ -23,6 +23,12 @@ pub struct Arena {
     bump: Mutex<Bump>,
 }
 
+impl Default for Arena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Arena {
     /// Create a new Arena instance.
     pub fn new() -> Self {

@@ -11,6 +11,12 @@ pub struct PassRunner {
     validate_after_pass: bool,
 }
 
+impl Default for PassRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PassRunner {
     pub fn new() -> Self {
         Self {

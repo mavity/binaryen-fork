@@ -422,7 +422,7 @@ impl<'a> BinaryReader<'a> {
                         label_stack.pop();
                         let block_expr = builder.block(
                             None,
-                            BumpVec::from_iter_in([body].into_iter(), self.bump),
+                            BumpVec::from_iter_in([body], self.bump),
                             Type::NONE,
                         );
                         stack.push(block_expr);
