@@ -71,6 +71,13 @@ pub trait Visitor<'a> {
                 self.visit(if_true);
                 self.visit(if_false);
             }
+            ExpressionKind::Load { ptr, .. } => {
+                self.visit(ptr);
+            }
+            ExpressionKind::Store { ptr, value, .. } => {
+                self.visit(ptr);
+                self.visit(value);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
@@ -149,6 +156,13 @@ pub trait ReadOnlyVisitor<'a> {
                 self.visit(condition);
                 self.visit(if_true);
                 self.visit(if_false);
+            }
+            ExpressionKind::Load { ptr, .. } => {
+                self.visit(ptr);
+            }
+            ExpressionKind::Store { ptr, value, .. } => {
+                self.visit(ptr);
+                self.visit(value);
             }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)

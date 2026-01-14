@@ -14,6 +14,7 @@ pub enum WriteError {
     Io(io::Error),
     UnsupportedFeature(String),
     LabelNotFound(String),
+    InvalidExpression,
 }
 
 impl From<io::Error> for WriteError {
@@ -344,6 +345,53 @@ impl BinaryWriter {
                 Self::write_expression(buf, if_false, label_stack)?;
                 Self::write_expression(buf, condition, label_stack)?;
                 buf.push(0x1B); // select opcode
+            }
+            ExpressionKind::Load {
+                bytes,
+                signed,
+                offset,
+                align,
+                ptr,
+            } => {
+                Self::write_expression(buf, ptr, label_stack)?;
+
+                // Opcode selection based on size and signedness
+                let opcode = match (bytes, signed) {
+                    (4, _) => 0x28,     // i32.load
+                    (8, _) => 0x29,     // i64.load
+                    (1, false) => 0x2D, // i32.load8_u
+                    (1, true) => 0x2C,  // i32.load8_s
+                    (2, false) => 0x2F, // i32.load16_u
+                    (2, true) => 0x2E,  // i32.load16_s
+                    _ => return Err(WriteError::InvalidExpression),
+                };
+
+                buf.push(opcode);
+                Self::write_leb128_u32(buf, *align)?;
+                Self::write_leb128_u32(buf, *offset)?;
+            }
+            ExpressionKind::Store {
+                bytes,
+                offset,
+                align,
+                ptr,
+                value,
+            } => {
+                Self::write_expression(buf, ptr, label_stack)?;
+                Self::write_expression(buf, value, label_stack)?;
+
+                // Opcode selection based on size
+                let opcode = match bytes {
+                    4 => 0x36, // i32.store
+                    8 => 0x37, // i64.store
+                    1 => 0x3A, // i32.store8
+                    2 => 0x3B, // i32.store16
+                    _ => return Err(WriteError::InvalidExpression),
+                };
+
+                buf.push(opcode);
+                Self::write_leb128_u32(buf, *align)?;
+                Self::write_leb128_u32(buf, *offset)?;
             }
             ExpressionKind::Nop => {
                 buf.push(0x01); // nop
@@ -705,5 +753,265 @@ mod tests {
         assert!(func.body.is_some());
 
         println!("Control flow round-trip test passed!");
+    }
+
+    #[test]
+    fn test_memory_operations_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::expression::IrBuilder;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Build a function with memory operations:
+        // fn test(i32) -> i32 {
+        //   let ptr = local.get 0
+        //   i32.store offset=4 align=2 (ptr, const 42)
+        //   i32.load offset=4 align=2 (ptr)
+        // }
+
+        let ptr = builder.local_get(0, Type::I32);
+        let const_42 = builder.const_(Literal::I32(42));
+        let store_expr = builder.store(4, 4, 2, ptr, const_42);
+
+        let ptr2 = builder.local_get(0, Type::I32);
+        let load_expr = builder.load(4, false, 4, 2, ptr2, Type::I32);
+
+        let mut body_list = BumpVec::new_in(&bump);
+        body_list.push(store_expr);
+        body_list.push(load_expr);
+        let body = builder.block(None, body_list, Type::I32);
+
+        module.add_function(Function::new(
+            "test_memory".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(body),
+        ));
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        println!("Memory ops written {} bytes", bytes.len());
+
+        // Read back
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify basic structure
+        assert_eq!(module2.functions.len(), 1);
+        let func = &module2.functions[0];
+        assert_eq!(func.params, Type::I32);
+        assert_eq!(func.results, Type::I32);
+        assert!(func.body.is_some());
+
+        println!("Memory operations round-trip test passed!");
+    }
+
+    #[test]
+    fn test_load_variants() {
+        use crate::binary_reader::BinaryReader;
+        use crate::expression::IrBuilder;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Test all load variants: i32.load8_s, i32.load8_u, i32.load16_s, i32.load16_u, i64.load
+        let ptr = builder.local_get(0, Type::I32);
+        let load8_s = builder.load(1, true, 0, 0, ptr, Type::I32);
+
+        let ptr2 = builder.local_get(0, Type::I32);
+        let load8_u = builder.load(1, false, 1, 0, ptr2, Type::I32);
+
+        let ptr3 = builder.local_get(0, Type::I32);
+        let load16_s = builder.load(2, true, 2, 1, ptr3, Type::I32);
+
+        let ptr4 = builder.local_get(0, Type::I32);
+        let load16_u = builder.load(2, false, 4, 1, ptr4, Type::I32);
+
+        let ptr5 = builder.local_get(0, Type::I32);
+        let load64 = builder.load(8, false, 8, 3, ptr5, Type::I64);
+
+        let mut body_list = BumpVec::new_in(&bump);
+        body_list.push(load8_s);
+        body_list.push(load8_u);
+        body_list.push(load16_s);
+        body_list.push(load16_u);
+        body_list.push(load64);
+        let body = builder.block(None, body_list, Type::I64);
+
+        module.add_function(Function::new(
+            "test_loads".to_string(),
+            Type::I32,
+            Type::I64,
+            vec![],
+            Some(body),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        assert_eq!(module2.functions.len(), 1);
+        println!("All load variants test passed!");
+    }
+
+    #[test]
+    fn test_store_variants() {
+        use crate::binary_reader::BinaryReader;
+        use crate::expression::IrBuilder;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Test all store variants: i32.store8, i32.store16, i64.store
+        let ptr1 = builder.local_get(0, Type::I32);
+        let val1 = builder.const_(Literal::I32(1));
+        let store8 = builder.store(1, 0, 0, ptr1, val1);
+
+        let ptr2 = builder.local_get(0, Type::I32);
+        let val2 = builder.const_(Literal::I32(2));
+        let store16 = builder.store(2, 2, 1, ptr2, val2);
+
+        let ptr3 = builder.local_get(0, Type::I32);
+        let val3 = builder.const_(Literal::I64(3));
+        let store64 = builder.store(8, 4, 3, ptr3, val3);
+
+        let mut body_list = BumpVec::new_in(&bump);
+        body_list.push(store8);
+        body_list.push(store16);
+        body_list.push(store64);
+        let body = builder.block(None, body_list, Type::NONE);
+
+        module.add_function(Function::new(
+            "test_stores".to_string(),
+            Type::I32,
+            Type::NONE,
+            vec![],
+            Some(body),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        assert_eq!(module2.functions.len(), 1);
+        println!("All store variants test passed!");
+    }
+
+    #[test]
+    fn test_memory_with_control_flow() {
+        use crate::binary_reader::BinaryReader;
+        use crate::expression::IrBuilder;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Build: if (local.get 0) { i32.store(ptr, 100) } else { i32.store(ptr, 200) }
+        //        return i32.load(ptr)
+        let condition = builder.local_get(0, Type::I32);
+
+        let ptr_true = builder.local_get(1, Type::I32);
+        let val_true = builder.const_(Literal::I32(100));
+        let store_true = builder.store(4, 0, 2, ptr_true, val_true);
+
+        let ptr_false = builder.local_get(1, Type::I32);
+        let val_false = builder.const_(Literal::I32(200));
+        let store_false = builder.store(4, 0, 2, ptr_false, val_false);
+
+        let if_expr = builder.if_(condition, store_true, Some(store_false), Type::NONE);
+
+        let ptr_load = builder.local_get(1, Type::I32);
+        let load_result = builder.load(4, false, 0, 2, ptr_load, Type::I32);
+
+        let mut body_list = BumpVec::new_in(&bump);
+        body_list.push(if_expr);
+        body_list.push(load_result);
+        let body = builder.block(None, body_list, Type::I32);
+
+        // Note: Using basic types since tuple params not fully supported yet
+        module.add_function(Function::new(
+            "test_mem_control".to_string(),
+            Type::I32, // Simple param for now
+            Type::I32,
+            vec![Type::I32], // local for ptr
+            Some(body),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        assert_eq!(module2.functions.len(), 1);
+        println!("Memory with control flow test passed!");
+    }
+
+    #[test]
+    fn test_memory_offsets_and_alignment() {
+        use crate::binary_reader::BinaryReader;
+        use crate::expression::IrBuilder;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Test various offsets and alignments
+        let ptr1 = builder.local_get(0, Type::I32);
+        let load_offset0 = builder.load(4, false, 0, 0, ptr1, Type::I32);
+
+        let ptr2 = builder.local_get(0, Type::I32);
+        let load_offset8 = builder.load(4, false, 8, 2, ptr2, Type::I32);
+
+        let ptr3 = builder.local_get(0, Type::I32);
+        let load_offset1024 = builder.load(4, false, 1024, 2, ptr3, Type::I32);
+
+        let mut body_list = BumpVec::new_in(&bump);
+        body_list.push(load_offset0);
+        body_list.push(load_offset8);
+        body_list.push(load_offset1024);
+        let body = builder.block(None, body_list, Type::I32);
+
+        module.add_function(Function::new(
+            "test_offsets".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(body),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        assert_eq!(module2.functions.len(), 1);
+        println!("Memory offsets and alignment test passed!");
     }
 }

@@ -88,6 +88,8 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             | ExpressionKind::Unreachable
             | ExpressionKind::Drop { .. }
             | ExpressionKind::Select { .. }
+            | ExpressionKind::Load { .. }
+            | ExpressionKind::Store { .. }
             | ExpressionKind::Const(_)
             | ExpressionKind::LocalSet { .. }
             | ExpressionKind::LocalTee { .. }

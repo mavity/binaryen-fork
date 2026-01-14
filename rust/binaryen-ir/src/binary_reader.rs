@@ -221,6 +221,10 @@ impl<'a> BinaryReader<'a> {
                     // end
                     break;
                 }
+                0x05 => {
+                    // else - only valid inside if, so break to let parent handle it
+                    break;
+                }
                 0x00 => {
                     // unreachable
                     let expr =
@@ -294,7 +298,7 @@ impl<'a> BinaryReader<'a> {
                         .parse_expression_impl(label_stack)?
                         .ok_or(ParseError::UnexpectedEof)?;
 
-                    // Check for else (0x05)
+                    // Check for else (0x05) - parse_expression_impl will have stopped at it
                     let if_false = if self.pos < self.data.len() && self.data[self.pos] == 0x05 {
                         self.read_u8()?; // Consume else
                         self.parse_expression_impl(label_stack)?
@@ -380,6 +384,80 @@ impl<'a> BinaryReader<'a> {
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     let value_type = value.type_;
                     stack.push(builder.local_tee(idx, value, value_type));
+                }
+                0x28 => {
+                    // i32.load
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(4, false, offset, align, ptr, Type::I32));
+                }
+                0x29 => {
+                    // i64.load
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(8, false, offset, align, ptr, Type::I64));
+                }
+                0x2C => {
+                    // i32.load8_s
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(1, true, offset, align, ptr, Type::I32));
+                }
+                0x2D => {
+                    // i32.load8_u
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(1, false, offset, align, ptr, Type::I32));
+                }
+                0x2E => {
+                    // i32.load16_s
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(2, true, offset, align, ptr, Type::I32));
+                }
+                0x2F => {
+                    // i32.load16_u
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(2, false, offset, align, ptr, Type::I32));
+                }
+                0x36 => {
+                    // i32.store
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(4, offset, align, ptr, value));
+                }
+                0x37 => {
+                    // i64.store
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(8, offset, align, ptr, value));
+                }
+                0x3A => {
+                    // i32.store8
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(1, offset, align, ptr, value));
+                }
+                0x3B => {
+                    // i32.store16
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(2, offset, align, ptr, value));
                 }
                 0x41 => {
                     // i32.const

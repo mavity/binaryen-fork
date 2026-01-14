@@ -70,6 +70,20 @@ pub enum ExpressionKind<'a> {
         if_true: ExprRef<'a>,
         if_false: ExprRef<'a>,
     },
+    Load {
+        bytes: u32,       // 1, 2, 4, or 8
+        signed: bool,     // For sub-word loads
+        offset: u32,      // Memory offset
+        align: u32,       // Alignment (power of 2)
+        ptr: ExprRef<'a>, // Address to load from
+    },
+    Store {
+        bytes: u32,         // 1, 2, 4, or 8
+        offset: u32,        // Memory offset
+        align: u32,         // Alignment
+        ptr: ExprRef<'a>,   // Address to store to
+        value: ExprRef<'a>, // Value to store
+    },
     Nop,
 }
 
@@ -192,6 +206,49 @@ impl<'a> IrBuilder<'a> {
                 value,
             },
             type_,
+        )
+    }
+
+    pub fn load(
+        &self,
+        bytes: u32,
+        signed: bool,
+        offset: u32,
+        align: u32,
+        ptr: ExprRef<'a>,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::Load {
+                bytes,
+                signed,
+                offset,
+                align,
+                ptr,
+            },
+            type_,
+        )
+    }
+
+    pub fn store(
+        &self,
+        bytes: u32,
+        offset: u32,
+        align: u32,
+        ptr: ExprRef<'a>,
+        value: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::Store {
+                bytes,
+                offset,
+                align,
+                ptr,
+                value,
+            },
+            Type::NONE,
         )
     }
 }
