@@ -315,4 +315,12 @@ impl<'a> IrBuilder<'a> {
             type_,
         )
     }
+
+    pub fn memory_size(&self) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::MemorySize, Type::I32)
+    }
+
+    pub fn memory_grow(&self, delta: ExprRef<'a>) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::MemoryGrow { delta }, Type::I32)
+    }
 }

@@ -662,6 +662,62 @@ impl<'a> BinaryReader<'a> {
                     let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.load(2, false, offset, align, ptr, Type::I32));
                 }
+                0x2A => {
+                    // f32.load
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(4, false, offset, align, ptr, Type::F32));
+                }
+                0x2B => {
+                    // f64.load
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(8, false, offset, align, ptr, Type::F64));
+                }
+                0x30 => {
+                    // i64.load8_s
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(1, true, offset, align, ptr, Type::I64));
+                }
+                0x31 => {
+                    // i64.load8_u
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(1, false, offset, align, ptr, Type::I64));
+                }
+                0x32 => {
+                    // i64.load16_s
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(2, true, offset, align, ptr, Type::I64));
+                }
+                0x33 => {
+                    // i64.load16_u
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(2, false, offset, align, ptr, Type::I64));
+                }
+                0x34 => {
+                    // i64.load32_s
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(4, true, offset, align, ptr, Type::I64));
+                }
+                0x35 => {
+                    // i64.load32_u
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.load(4, false, offset, align, ptr, Type::I64));
+                }
                 0x36 => {
                     // i32.store
                     let align = self.read_leb128_u32()?;
@@ -693,6 +749,57 @@ impl<'a> BinaryReader<'a> {
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.store(2, offset, align, ptr, value));
+                }
+                0x38 => {
+                    // f32.store
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(4, offset, align, ptr, value));
+                }
+                0x39 => {
+                    // f64.store
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(8, offset, align, ptr, value));
+                }
+                0x3C => {
+                    // i64.store8
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(1, offset, align, ptr, value));
+                }
+                0x3D => {
+                    // i64.store16
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(2, offset, align, ptr, value));
+                }
+                0x3E => {
+                    // i64.store32
+                    let align = self.read_leb128_u32()?;
+                    let offset = self.read_leb128_u32()?;
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.store(4, offset, align, ptr, value));
+                }
+                0x3F => {
+                    // memory.size
+                    let _ = self.read_u8()?; // reserved byte (0x00)
+                    stack.push(builder.memory_size());
+                }
+                0x40 => {
+                    // memory.grow
+                    let _ = self.read_u8()?; // reserved byte (0x00)
+                    let delta = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.memory_grow(delta));
                 }
                 0x41 => {
                     // i32.const
@@ -1058,6 +1165,317 @@ impl<'a> BinaryReader<'a> {
                     // i64.popcnt
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.unary(UnaryOp::PopcntInt64, value, Type::I64));
+                }
+                // f32 binary operations
+                0x92 => {
+                    // f32.add
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::AddFloat32, left, right, Type::F32));
+                }
+                0x93 => {
+                    // f32.sub
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::SubFloat32, left, right, Type::F32));
+                }
+                0x94 => {
+                    // f32.mul
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::MulFloat32, left, right, Type::F32));
+                }
+                0x95 => {
+                    // f32.div
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::DivFloat32, left, right, Type::F32));
+                }
+                0x96 => {
+                    // f32.min
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::MinFloat32, left, right, Type::F32));
+                }
+                0x97 => {
+                    // f32.max
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::MaxFloat32, left, right, Type::F32));
+                }
+                0x98 => {
+                    // f32.copysign
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::CopySignFloat32, left, right, Type::F32));
+                }
+                0x5B => {
+                    // f32.eq
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::EqFloat32, left, right, Type::I32));
+                }
+                0x5C => {
+                    // f32.ne
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::NeFloat32, left, right, Type::I32));
+                }
+                0x5D => {
+                    // f32.lt
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::LtFloat32, left, right, Type::I32));
+                }
+                0x5E => {
+                    // f32.gt
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::GtFloat32, left, right, Type::I32));
+                }
+                0x5F => {
+                    // f32.le
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::LeFloat32, left, right, Type::I32));
+                }
+                0x60 => {
+                    // f32.ge
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::GeFloat32, left, right, Type::I32));
+                }
+                // f64 binary operations
+                0xA0 => {
+                    // f64.add
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::AddFloat64, left, right, Type::F64));
+                }
+                0xA1 => {
+                    // f64.sub
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::SubFloat64, left, right, Type::F64));
+                }
+                0xA2 => {
+                    // f64.mul
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::MulFloat64, left, right, Type::F64));
+                }
+                0xA3 => {
+                    // f64.div
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::DivFloat64, left, right, Type::F64));
+                }
+                0xA4 => {
+                    // f64.min
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::MinFloat64, left, right, Type::F64));
+                }
+                0xA5 => {
+                    // f64.max
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::MaxFloat64, left, right, Type::F64));
+                }
+                0xA6 => {
+                    // f64.copysign
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::CopySignFloat64, left, right, Type::F64));
+                }
+                0x61 => {
+                    // f64.eq
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::EqFloat64, left, right, Type::I32));
+                }
+                0x62 => {
+                    // f64.ne
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::NeFloat64, left, right, Type::I32));
+                }
+                0x63 => {
+                    // f64.lt
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::LtFloat64, left, right, Type::I32));
+                }
+                0x64 => {
+                    // f64.gt
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::GtFloat64, left, right, Type::I32));
+                }
+                0x65 => {
+                    // f64.le
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::LeFloat64, left, right, Type::I32));
+                }
+                0x66 => {
+                    // f64.ge
+                    let right = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let left = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.binary(BinaryOp::GeFloat64, left, right, Type::I32));
+                }
+                // f32 unary operations
+                0x8B => {
+                    // f32.abs
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::AbsFloat32, value, Type::F32));
+                }
+                0x8C => {
+                    // f32.neg
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::NegFloat32, value, Type::F32));
+                }
+                0x8D => {
+                    // f32.ceil
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::CeilFloat32, value, Type::F32));
+                }
+                0x8E => {
+                    // f32.floor
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::FloorFloat32, value, Type::F32));
+                }
+                0x8F => {
+                    // f32.trunc
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncFloat32, value, Type::F32));
+                }
+                0x90 => {
+                    // f32.nearest
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::NearestFloat32, value, Type::F32));
+                }
+                0x91 => {
+                    // f32.sqrt
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::SqrtFloat32, value, Type::F32));
+                }
+                // f64 unary operations
+                0x99 => {
+                    // f64.abs
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::AbsFloat64, value, Type::F64));
+                }
+                0x9A => {
+                    // f64.neg
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::NegFloat64, value, Type::F64));
+                }
+                0x9B => {
+                    // f64.ceil
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::CeilFloat64, value, Type::F64));
+                }
+                0x9C => {
+                    // f64.floor
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::FloorFloat64, value, Type::F64));
+                }
+                0x9D => {
+                    // f64.trunc
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncFloat64, value, Type::F64));
+                }
+                0x9E => {
+                    // f64.nearest
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::NearestFloat64, value, Type::F64));
+                }
+                0x9F => {
+                    // f64.sqrt
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::SqrtFloat64, value, Type::F64));
+                }
+                // Conversion operations
+                0xB2 => {
+                    // i32.convert_s/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertSInt32ToFloat32, value, Type::F32));
+                }
+                0xB3 => {
+                    // i32.convert_u/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertUInt32ToFloat32, value, Type::F32));
+                }
+                0xB4 => {
+                    // i64.convert_s/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertSInt64ToFloat32, value, Type::F32));
+                }
+                0xB5 => {
+                    // i64.convert_u/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertUInt64ToFloat32, value, Type::F32));
+                }
+                0xB7 => {
+                    // i32.convert_s/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertSInt32ToFloat64, value, Type::F64));
+                }
+                0xB8 => {
+                    // i32.convert_u/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertUInt32ToFloat64, value, Type::F64));
+                }
+                0xB9 => {
+                    // i64.convert_s/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertSInt64ToFloat64, value, Type::F64));
+                }
+                0xBA => {
+                    // i64.convert_u/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::ConvertUInt64ToFloat64, value, Type::F64));
+                }
+                0xA8 => {
+                    // i32.trunc_s/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncSFloat32ToInt32, value, Type::I32));
+                }
+                0xA9 => {
+                    // i32.trunc_u/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncUFloat32ToInt32, value, Type::I32));
+                }
+                0xAA => {
+                    // i32.trunc_s/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncSFloat64ToInt32, value, Type::I32));
+                }
+                0xAB => {
+                    // i32.trunc_u/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncUFloat64ToInt32, value, Type::I32));
+                }
+                0xAE => {
+                    // i64.trunc_s/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncSFloat32ToInt64, value, Type::I64));
+                }
+                0xAF => {
+                    // i64.trunc_u/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncUFloat32ToInt64, value, Type::I64));
+                }
+                0xB0 => {
+                    // i64.trunc_s/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncSFloat64ToInt64, value, Type::I64));
+                }
+                0xB1 => {
+                    // i64.trunc_u/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncUFloat64ToInt64, value, Type::I64));
                 }
                 _ => {
                     return Err(ParseError::InvalidOpcode(opcode));
