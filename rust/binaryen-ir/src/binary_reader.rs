@@ -1,10 +1,10 @@
 use crate::expression::{Expression, ExpressionKind, IrBuilder};
-use crate::module::{Export, ExportKind, FuncType, Function, MemoryLimits, Module};
-use crate::ops::{BinaryOp, UnaryOp};
-use binaryen_core::{type_store, Literal, Type};
+use crate::module::{Export, ExportKind, Function, MemoryLimits, Module};
+use crate::ops::BinaryOp;
+use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
-use std::io::{self, Read};
+use std::io;
 
 pub struct BinaryReader<'a> {
     bump: &'a Bump,

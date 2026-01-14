@@ -27,7 +27,7 @@ mod tests {
     #[test]
     fn test_validation_failure() {
         let bump = Bump::new();
-        let module_name = "test_module";
+        let _module_name = "test_module";
 
         // Create mismatched binary op: i32 + f32
         let left = bump.alloc(Expression {
@@ -315,7 +315,7 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Setup a basic valid module components
-        let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+        let _func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
 
         let global_init = builder.const_(Literal::I32(0));
         let global = Global {
@@ -716,7 +716,7 @@ mod tests {
     fn test_data_section_roundtrip() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-        use crate::module::{DataSegment, MemoryLimits};
+        use crate::module::DataSegment;
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
@@ -775,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_data_section_validation() {
-        use crate::module::{DataSegment, MemoryLimits};
+        use crate::module::DataSegment;
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
@@ -955,7 +955,7 @@ mod tests {
     fn test_table_and_element_roundtrip() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-        use crate::module::{ElementSegment, TableLimits};
+        use crate::module::ElementSegment;
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
@@ -1009,7 +1009,7 @@ mod tests {
 
     #[test]
     fn test_table_and_element_validation() {
-        use crate::module::{ElementSegment, TableLimits};
+        use crate::module::ElementSegment;
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
@@ -1106,7 +1106,7 @@ mod tests {
 
         // Test 1: Empty types
         {
-            let mut module = Module::new();
+            let module = Module::new();
 
             let mut writer = BinaryWriter::new();
             let bytes = writer.write_module(&module).expect("Failed to write");

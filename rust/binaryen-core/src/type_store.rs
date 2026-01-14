@@ -3,7 +3,7 @@
 //! This module manages canonicalization of `Signature` and `HeapType` definitions,
 //! ensuring that equivalent types map to identical `Type` handles across the system.
 
-use crate::r#type::{HeapType, Signature, Type};
+use crate::r#type::{Signature, Type};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::RwLock;

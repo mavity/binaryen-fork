@@ -88,7 +88,7 @@ mod tests {
             type_: Type::UNREACHABLE, // Block is unreachable because it contains unreachable
         });
 
-        let mut func = Function::new(
+        let func = Function::new(
             "test".to_string(),
             Type::NONE,
             Type::NONE,

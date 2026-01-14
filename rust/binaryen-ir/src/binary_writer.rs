@@ -2,11 +2,11 @@ use crate::expression::{Expression, ExpressionKind};
 use crate::module::{Function, Module};
 use crate::ops::BinaryOp;
 use binaryen_core::{Literal, Type};
-use std::io::{self, Write};
+use std::io;
 
 pub struct BinaryWriter {
     buffer: Vec<u8>,
-    label_stack: Vec<Option<String>>, // Stack of label names for depth calculation
+    _label_stack: Vec<Option<String>>, // Stack of label names for depth calculation
 }
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl BinaryWriter {
     pub fn new() -> Self {
         Self {
             buffer: Vec::new(),
-            label_stack: Vec::new(),
+            _label_stack: Vec::new(),
         }
     }
 
@@ -1685,7 +1685,7 @@ mod tests {
         ));
 
         // Function 2: caller - calls helper
-        let mut operands = BumpVec::new_in(&bump);
+        let operands = BumpVec::new_in(&bump);
         let call_expr = builder.call("helper", operands, Type::I32, false);
 
         module.add_function(Function::new(
@@ -1784,7 +1784,7 @@ mod tests {
 
         // Recursive factorial function (simplified)
         // factorial(n): if n <= 1 then 1 else n * factorial(n-1)
-        let n = builder.local_get(0, Type::I32);
+        let _n = builder.local_get(0, Type::I32);
         let one = builder.const_(Literal::I32(1));
 
         // For simplicity, just return 1 (base case)

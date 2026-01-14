@@ -1,7 +1,7 @@
 use binaryen_core::{Literal, Type};
 use binaryen_ir::{
-    BinaryOp, BinaryReader, BinaryWriter, Expression, Function, IrBuilder, Module, Pass,
-    PassRunner, UnaryOp,
+    BinaryOp, BinaryReader, BinaryWriter, Expression, Function, IrBuilder, Module, PassRunner,
+    UnaryOp,
 };
 use bumpalo::Bump;
 use std::ffi::{c_void, CStr};

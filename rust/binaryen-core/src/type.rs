@@ -129,7 +129,7 @@ impl fmt::Display for Type {
 pub struct HeapType(u64);
 
 impl HeapType {
-    const USED_BITS: u64 = 3;
+    const _USED_BITS: u64 = 3;
 
     pub const EXT: HeapType = HeapType(1 << 3);
     pub const FUNC: HeapType = HeapType(2 << 3);

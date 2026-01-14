@@ -323,7 +323,7 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
                         })
                 };
 
-                if let Some((params, results)) = sig {
+                if let Some((params, _results)) = sig {
                     // Check params
                     // Limitation: Type is single value. If mismatch, fail.
                     // If multiple operands, we need tuple support in Type.

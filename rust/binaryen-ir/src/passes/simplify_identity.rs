@@ -24,7 +24,12 @@ impl Pass for SimplifyIdentity {
 impl<'a> Visitor<'a> for SimplifyIdentity {
     fn visit_expression(&mut self, expr: &mut Expression<'a>) {
         // Optimization: x + 0 -> x
-        if let ExpressionKind::Binary { op, left, right } = &mut expr.kind {
+        if let ExpressionKind::Binary {
+            op,
+            left: _left,
+            right,
+        } = &mut expr.kind
+        {
             let is_identity = match op {
                 BinaryOp::AddInt32 | BinaryOp::SubInt32 => {
                     matches!(right.kind, ExpressionKind::Const(Literal::I32(0)))
@@ -94,7 +99,7 @@ mod tests {
             type_: Type::I32,
         });
 
-        let mut func = Function::new(
+        let func = Function::new(
             "test".to_string(),
             Type::NONE,
             Type::I32,

@@ -2,7 +2,6 @@ use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
-use std::fmt;
 
 pub type ExprRef<'a> = &'a mut Expression<'a>;
 

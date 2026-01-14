@@ -113,7 +113,7 @@ mod tests {
             type_: Type::I32,
         });
 
-        let mut func = Function::new(
+        let func = Function::new(
             "test".to_string(),
             Type::NONE,
             Type::I32, // Correct
