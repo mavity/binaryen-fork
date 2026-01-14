@@ -2788,4 +2788,371 @@ mod tests {
 
         assert_eq!(parsed.functions.len(), 1);
     }
+
+    // ========== Validation and Edge Case Tests ==========
+
+    #[test]
+    fn test_validation_type_index_out_of_bounds() {
+        use crate::validation::Validator;
+
+        let mut module = Module::new();
+
+        // Add a function with invalid type_idx (no types defined)
+        let func = Function {
+            name: "bad_func".to_string(),
+            params: Type::NONE,
+            results: Type::I32,
+            vars: vec![],
+            body: None,
+            type_idx: Some(99), // Invalid: no types exist
+        };
+        module.add_function(func);
+
+        let validator = Validator::new(&module);
+        let (valid, errors) = validator.validate();
+
+        assert!(
+            !valid,
+            "Should fail validation with out-of-bounds type index"
+        );
+        assert!(!errors.is_empty(), "Should have validation errors");
+    }
+
+    #[test]
+    fn test_validation_type_signature_mismatch() {
+        use crate::validation::Validator;
+
+        let mut module = Module::new();
+
+        // Add a type
+        module.add_type(Type::I32, Type::I64);
+
+        // Add function with mismatched signature
+        let func = Function {
+            name: "mismatch".to_string(),
+            params: Type::I32,
+            results: Type::F32, // Mismatch: type says I64
+            vars: vec![],
+            body: None,
+            type_idx: Some(0),
+        };
+        module.add_function(func);
+
+        let validator = Validator::new(&module);
+        let (valid, errors) = validator.validate();
+
+        assert!(!valid, "Should fail validation with signature mismatch");
+        assert!(!errors.is_empty(), "Should have validation errors");
+    }
+
+    #[test]
+    fn test_validation_valid_type_idx() {
+        use crate::validation::Validator;
+
+        let mut module = Module::new();
+
+        // Add a type
+        module.add_type(Type::I32, Type::I64);
+
+        // Add function with valid type_idx and matching signature
+        let func = Function {
+            name: "valid".to_string(),
+            params: Type::I32,
+            results: Type::I64,
+            vars: vec![],
+            body: None,
+            type_idx: Some(0),
+        };
+        module.add_function(func);
+
+        let validator = Validator::new(&module);
+        let (valid, errors) = validator.validate();
+
+        assert!(valid, "Should pass validation. Errors: {:?}", errors);
+    }
+
+    #[test]
+    fn test_roundtrip_maximum_types() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test with maximum reasonable number of types (1000)
+        let mut module = Module::new();
+        for i in 0..1000 {
+            let params = if i % 2 == 0 { Type::I32 } else { Type::I64 };
+            let results = if i % 3 == 0 { Type::F32 } else { Type::F64 };
+            module.add_type(params, results);
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.types.len(), 1000);
+    }
+
+    #[test]
+    fn test_roundtrip_maximum_functions() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test with many functions (500)
+        let mut module = Module::new();
+        for i in 0..500 {
+            let func = Function::new(format!("func_{}", i), Type::NONE, Type::I32, vec![], None);
+            module.add_function(func);
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.functions.len(), 500);
+    }
+
+    #[test]
+    fn test_roundtrip_various_type_signatures() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test with various single-param single-result types
+        let mut module = Module::new();
+
+        // i32 -> i64
+        module.add_type(Type::I32, Type::I64);
+
+        // f32 -> f64
+        module.add_type(Type::F32, Type::F64);
+
+        // i64 -> i32
+        module.add_type(Type::I64, Type::I32);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.types.len(), 3);
+    }
+
+    #[test]
+    fn test_roundtrip_empty_module() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test completely empty module
+        let module = Module::new();
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer
+            .write_module(&module)
+            .expect("Failed to write empty module");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse empty module");
+
+        assert_eq!(parsed.types.len(), 0);
+        assert_eq!(parsed.functions.len(), 0);
+        assert_eq!(parsed.globals.len(), 0);
+        assert!(parsed.table.is_none());
+    }
+
+    #[test]
+    fn test_roundtrip_mixed_function_types() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+
+        // Test functions with and without type_idx
+        let mut module = Module::new();
+
+        // Add a type
+        module.add_type(Type::I32, Type::I64);
+
+        // Function with explicit type_idx
+        module.add_function(Function {
+            name: "typed".to_string(),
+            params: Type::I32,
+            results: Type::I64,
+            vars: vec![],
+            body: None,
+            type_idx: Some(0),
+        });
+
+        // Function without type_idx (will be inferred)
+        module.add_function(Function::new(
+            "untyped".to_string(),
+            Type::F32,
+            Type::F64,
+            vec![],
+            None,
+        ));
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.functions.len(), 2);
+        // Both functions should have type_idx after parsing
+        assert!(parsed.functions[0].type_idx.is_some());
+        assert!(parsed.functions[1].type_idx.is_some());
+    }
+
+    #[test]
+    fn test_code_section_many_locals() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test function with many local variables (100)
+        let mut module = Module::new();
+
+        let body = builder.const_(Literal::I32(42));
+        let mut vars = Vec::new();
+        for i in 0..100 {
+            vars.push(if i % 2 == 0 { Type::I32 } else { Type::I64 });
+        }
+
+        let func = Function::new(
+            "many_locals".to_string(),
+            Type::NONE,
+            Type::I32,
+            vars,
+            Some(body),
+        );
+        module.add_function(func);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.functions.len(), 1);
+        assert_eq!(parsed.functions[0].vars.len(), 100);
+    }
+
+    #[test]
+    fn test_code_section_function_with_params_and_locals() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test function with parameters and local variables
+        let mut module = Module::new();
+
+        let body = builder.const_(Literal::I32(1));
+        let func = Function::new(
+            "params_and_locals".to_string(),
+            Type::I32, // 1 param
+            Type::I32,
+            vec![Type::F32, Type::F64], // 2 locals
+            Some(body),
+        );
+        module.add_function(func);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.functions.len(), 1);
+        assert_eq!(parsed.functions[0].vars.len(), 2);
+    }
+
+    #[test]
+    fn test_roundtrip_all_sections_together() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Export, Global, Import};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test module with all major sections
+        let mut module = Module::new();
+
+        // Types
+        module.add_type(Type::I32, Type::I64);
+        module.add_type(Type::F32, Type::F64);
+
+        // Imports
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "imported_func".to_string(),
+            kind: crate::module::ImportKind::Function(Type::I32, Type::I64),
+        });
+
+        // Functions
+        let body = builder.const_(Literal::I32(42));
+        module.add_function(Function::new(
+            "local_func".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(body),
+        ));
+
+        // Globals
+        let init = builder.const_(Literal::I32(100));
+        module.add_global(Global {
+            name: "g0".to_string(),
+            type_: Type::I32,
+            mutable: false,
+            init,
+        });
+
+        // Table
+        module.table = Some(crate::module::TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 10,
+            maximum: Some(100),
+        });
+
+        // Exports (export the local function, not the imported one)
+        module.add_export(
+            "exported_func".to_string(),
+            crate::module::ExportKind::Function,
+            1, // Index 1 = first local function (after the import at index 0)
+        );
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer
+            .write_module(&module)
+            .expect("Failed to write complete module");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader
+            .parse_module()
+            .expect("Failed to parse complete module");
+
+        // Types may include inferred types from functions
+        assert!(parsed.types.len() >= 2, "Expected at least 2 types");
+        assert_eq!(parsed.imports.len(), 1);
+        assert_eq!(parsed.functions.len(), 1); // Only local functions
+        assert_eq!(parsed.globals.len(), 1);
+        assert!(parsed.table.is_some());
+        assert_eq!(parsed.exports.len(), 1);
+    }
 }
