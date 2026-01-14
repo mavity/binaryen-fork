@@ -3155,4 +3155,957 @@ mod tests {
         assert!(parsed.table.is_some());
         assert_eq!(parsed.exports.len(), 1);
     }
+
+    // ========== Import Section Tests ==========
+
+    #[test]
+    fn test_import_function() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind};
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "log".to_string(),
+            kind: ImportKind::Function(Type::I32, Type::NONE),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.imports.len(), 1);
+        assert_eq!(parsed.imports[0].module, "env");
+        assert_eq!(parsed.imports[0].name, "log");
+    }
+
+    #[test]
+    fn test_import_memory() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind, MemoryLimits};
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.add_import(Import {
+            module: "js".to_string(),
+            name: "mem".to_string(),
+            kind: ImportKind::Memory(MemoryLimits {
+                initial: 1,
+                maximum: Some(10),
+            }),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.imports.len(), 1);
+    }
+
+    #[test]
+    fn test_import_global() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind};
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "global_val".to_string(),
+            kind: ImportKind::Global(Type::I32, false),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.imports.len(), 1);
+    }
+
+    #[test]
+    fn test_multiple_imports_mixed() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind, MemoryLimits};
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        // Function import
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "func1".to_string(),
+            kind: ImportKind::Function(Type::I32, Type::I64),
+        });
+
+        // Another function import
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "func2".to_string(),
+            kind: ImportKind::Function(Type::NONE, Type::NONE),
+        });
+
+        // Global import
+        module.add_import(Import {
+            module: "js".to_string(),
+            name: "g".to_string(),
+            kind: ImportKind::Global(Type::F32, true),
+        });
+
+        // Memory import
+        module.add_import(Import {
+            module: "js".to_string(),
+            name: "memory".to_string(),
+            kind: ImportKind::Memory(MemoryLimits {
+                initial: 2,
+                maximum: None,
+            }),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.imports.len(), 4);
+    }
+
+    #[test]
+    fn test_import_many_functions() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind};
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        for i in 0..50 {
+            module.add_import(Import {
+                module: "env".to_string(),
+                name: format!("func_{}", i),
+                kind: ImportKind::Function(Type::I32, Type::I64),
+            });
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.imports.len(), 50);
+    }
+
+    // ========== Export Section Tests ==========
+
+    #[test]
+    fn test_export_function() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::ExportKind;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        // Add a function
+        module.add_function(Function::new(
+            "my_func".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            None,
+        ));
+
+        // Export it
+        module.add_export("exported".to_string(), ExportKind::Function, 0);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.exports.len(), 1);
+        assert_eq!(parsed.exports[0].name, "exported");
+    }
+
+    #[test]
+    fn test_export_multiple_functions() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::ExportKind;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        for i in 0..10 {
+            module.add_function(Function::new(
+                format!("func_{}", i),
+                Type::NONE,
+                Type::I32,
+                vec![],
+                None,
+            ));
+            module.add_export(format!("export_{}", i), ExportKind::Function, i);
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.exports.len(), 10);
+        assert_eq!(parsed.functions.len(), 10);
+    }
+
+    #[test]
+    fn test_export_memory() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::ExportKind;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.set_memory(1, Some(100));
+        module.add_export("memory".to_string(), ExportKind::Memory, 0);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.exports.len(), 1);
+        assert!(parsed.memory.is_some());
+    }
+
+    #[test]
+    fn test_export_global() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{ExportKind, Global};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        let init = builder.const_(Literal::I32(42));
+        module.add_global(Global {
+            name: "g0".to_string(),
+            type_: Type::I32,
+            mutable: false,
+            init,
+        });
+
+        module.add_export("my_global".to_string(), ExportKind::Global, 0);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.exports.len(), 1);
+        assert_eq!(parsed.globals.len(), 1);
+    }
+
+    #[test]
+    fn test_export_table() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{ExportKind, TableLimits};
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 10,
+            maximum: Some(100),
+        });
+
+        module.add_export("my_table".to_string(), ExportKind::Table, 0);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.exports.len(), 1);
+        assert!(parsed.table.is_some());
+    }
+
+    // ========== Memory Section Tests ==========
+
+    #[test]
+    fn test_memory_basic() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.set_memory(1, Some(10));
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert!(parsed.memory.is_some());
+        let mem = parsed.memory.unwrap();
+        assert_eq!(mem.initial, 1);
+        assert_eq!(mem.maximum, Some(10));
+    }
+
+    #[test]
+    fn test_memory_no_maximum() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.set_memory(5, None);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert!(parsed.memory.is_some());
+        let mem = parsed.memory.unwrap();
+        assert_eq!(mem.initial, 5);
+        assert_eq!(mem.maximum, None);
+    }
+
+    #[test]
+    fn test_memory_large_limits() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.set_memory(100, Some(1000));
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert!(parsed.memory.is_some());
+        let mem = parsed.memory.unwrap();
+        assert_eq!(mem.initial, 100);
+        assert_eq!(mem.maximum, Some(1000));
+    }
+
+    // ========== Global Section Tests ==========
+
+    #[test]
+    fn test_global_immutable_i32() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::Global;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        let init = builder.const_(Literal::I32(123));
+        module.add_global(Global {
+            name: "g0".to_string(),
+            type_: Type::I32,
+            mutable: false,
+            init,
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.globals.len(), 1);
+        assert_eq!(parsed.globals[0].type_, Type::I32);
+        assert!(!parsed.globals[0].mutable);
+    }
+
+    #[test]
+    fn test_global_mutable_i64() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::Global;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        let init = builder.const_(Literal::I64(999));
+        module.add_global(Global {
+            name: "g0".to_string(),
+            type_: Type::I64,
+            mutable: true,
+            init,
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.globals.len(), 1);
+        assert_eq!(parsed.globals[0].type_, Type::I64);
+        assert!(parsed.globals[0].mutable);
+    }
+
+    #[test]
+    fn test_global_all_types() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::Global;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // i32 global
+        let init1 = builder.const_(Literal::I32(1));
+        module.add_global(Global {
+            name: "g1".to_string(),
+            type_: Type::I32,
+            mutable: false,
+            init: init1,
+        });
+
+        // i64 global
+        let init2 = builder.const_(Literal::I64(2));
+        module.add_global(Global {
+            name: "g2".to_string(),
+            type_: Type::I64,
+            mutable: true,
+            init: init2,
+        });
+
+        // f32 global
+        let init3 = builder.const_(Literal::F32(3.14));
+        module.add_global(Global {
+            name: "g3".to_string(),
+            type_: Type::F32,
+            mutable: false,
+            init: init3,
+        });
+
+        // f64 global
+        let init4 = builder.const_(Literal::F64(2.718));
+        module.add_global(Global {
+            name: "g4".to_string(),
+            type_: Type::F64,
+            mutable: true,
+            init: init4,
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.globals.len(), 4);
+    }
+
+    #[test]
+    fn test_global_many() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::Global;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        for i in 0..100 {
+            let init = builder.const_(Literal::I32(i));
+            module.add_global(Global {
+                name: format!("g{}", i),
+                type_: Type::I32,
+                mutable: i % 2 == 0,
+                init,
+            });
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.globals.len(), 100);
+    }
+
+    // ========== Element Section Tests ==========
+
+    #[test]
+    fn test_element_basic() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{ElementSegment, TableLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Need a table
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 10,
+            maximum: None,
+        });
+
+        // Need functions to reference
+        module.add_function(Function::new(
+            "f0".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            None,
+        ));
+        module.add_function(Function::new(
+            "f1".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            None,
+        ));
+
+        // Element segment
+        let offset = builder.const_(Literal::I32(0));
+        module.elements.push(ElementSegment {
+            table_index: 0,
+            offset,
+            func_indices: vec![0, 1],
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.elements.len(), 1);
+        assert_eq!(parsed.elements[0].func_indices.len(), 2);
+    }
+
+    #[test]
+    fn test_element_multiple_segments() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{ElementSegment, TableLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 20,
+            maximum: None,
+        });
+
+        for _ in 0..5 {
+            module.add_function(Function::new(
+                "f".to_string(),
+                Type::NONE,
+                Type::I32,
+                vec![],
+                None,
+            ));
+        }
+
+        // Multiple segments at different offsets
+        for i in 0..3 {
+            let offset = builder.const_(Literal::I32(i * 5));
+            module.elements.push(ElementSegment {
+                table_index: 0,
+                offset,
+                func_indices: vec![0, 1],
+            });
+        }
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.elements.len(), 3);
+    }
+
+    #[test]
+    fn test_element_many_functions() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{ElementSegment, TableLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 100,
+            maximum: None,
+        });
+
+        for _ in 0..50 {
+            module.add_function(Function::new(
+                "f".to_string(),
+                Type::NONE,
+                Type::I32,
+                vec![],
+                None,
+            ));
+        }
+
+        let offset = builder.const_(Literal::I32(0));
+        let indices: Vec<u32> = (0..50).collect();
+        module.elements.push(ElementSegment {
+            table_index: 0,
+            offset,
+            func_indices: indices,
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.elements.len(), 1);
+        assert_eq!(parsed.elements[0].func_indices.len(), 50);
+    }
+
+    // ========== Data Section Tests ==========
+
+    #[test]
+    fn test_data_basic() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::DataSegment;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        module.set_memory(1, None);
+
+        let offset = builder.const_(Literal::I32(0));
+        module.data.push(DataSegment {
+            memory_index: 0,
+            offset,
+            data: vec![1, 2, 3, 4, 5],
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.data.len(), 1);
+        assert_eq!(parsed.data[0].data, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_data_multiple_segments() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::DataSegment;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        module.set_memory(1, None);
+
+        // Segment 1 at offset 0
+        let offset1 = builder.const_(Literal::I32(0));
+        module.data.push(DataSegment {
+            memory_index: 0,
+            offset: offset1,
+            data: vec![1, 2, 3],
+        });
+
+        // Segment 2 at offset 100
+        let offset2 = builder.const_(Literal::I32(100));
+        module.data.push(DataSegment {
+            memory_index: 0,
+            offset: offset2,
+            data: vec![4, 5, 6],
+        });
+
+        // Segment 3 at offset 200
+        let offset3 = builder.const_(Literal::I32(200));
+        module.data.push(DataSegment {
+            memory_index: 0,
+            offset: offset3,
+            data: vec![7, 8, 9],
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.data.len(), 3);
+    }
+
+    #[test]
+    fn test_data_large() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::DataSegment;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        module.set_memory(10, None);
+
+        let offset = builder.const_(Literal::I32(0));
+        let large_data: Vec<u8> = (0..10000).map(|i| (i % 256) as u8).collect();
+        module.data.push(DataSegment {
+            memory_index: 0,
+            offset,
+            data: large_data.clone(),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.data.len(), 1);
+        assert_eq!(parsed.data[0].data.len(), 10000);
+        assert_eq!(parsed.data[0].data, large_data);
+    }
+
+    #[test]
+    fn test_data_empty() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::DataSegment;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        module.set_memory(1, None);
+
+        let offset = builder.const_(Literal::I32(0));
+        module.data.push(DataSegment {
+            memory_index: 0,
+            offset,
+            data: vec![],
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.data.len(), 1);
+        assert_eq!(parsed.data[0].data.len(), 0);
+    }
+
+    // ========== Start Section Tests ==========
+
+    #[test]
+    fn test_start_function() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.add_function(Function::new(
+            "start".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            None,
+        ));
+        module.start = Some(0);
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.start, Some(0));
+    }
+
+    #[test]
+    fn test_start_with_multiple_functions() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        for i in 0..10 {
+            module.add_function(Function::new(
+                format!("func_{}", i),
+                Type::NONE,
+                Type::NONE,
+                vec![],
+                None,
+            ));
+        }
+
+        module.start = Some(5); // Start at function 5
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.start, Some(5));
+        assert_eq!(parsed.functions.len(), 10);
+    }
+
+    #[test]
+    fn test_no_start_function() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.add_function(Function::new(
+            "f".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            None,
+        ));
+        // No start set
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(parsed.start, None);
+    }
+
+    // ========== Table Section Tests ==========
+
+    #[test]
+    fn test_table_basic() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::TableLimits;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 5,
+            maximum: Some(50),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert!(parsed.table.is_some());
+        let table = parsed.table.unwrap();
+        assert_eq!(table.initial, 5);
+        assert_eq!(table.maximum, Some(50));
+    }
+
+    #[test]
+    fn test_table_no_maximum() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::TableLimits;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 10,
+            maximum: None,
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert!(parsed.table.is_some());
+        let table = parsed.table.unwrap();
+        assert_eq!(table.initial, 10);
+        assert_eq!(table.maximum, None);
+    }
+
+    #[test]
+    fn test_table_large_limits() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::TableLimits;
+
+        let bump = Bump::new();
+        let mut module = Module::new();
+
+        module.table = Some(TableLimits {
+            element_type: Type::FUNCREF,
+            initial: 1000,
+            maximum: Some(10000),
+        });
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let mut reader = BinaryReader::new(&bump, bytes);
+        let parsed = reader.parse_module().expect("Failed to parse");
+
+        assert!(parsed.table.is_some());
+        let table = parsed.table.unwrap();
+        assert_eq!(table.initial, 1000);
+        assert_eq!(table.maximum, Some(10000));
+    }
 }
