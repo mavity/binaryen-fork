@@ -8,3 +8,4 @@ name = "binaryen_core"
 path = "src/lib.rs"
 
 [dependencies]
+once_cell = "1.19"

@@ -2,4 +2,4 @@ language = "C"
 
 [parse]
 parse_deps = true
-include = ["binaryen-ffi"]
+include = ["binaryen-ffi", "binaryen-core"]

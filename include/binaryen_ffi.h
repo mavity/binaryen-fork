@@ -30,14 +30,14 @@ typedef struct BinaryenFastHashMap {
   uint8_t _private[0];
 } BinaryenFastHashMap;
 
-uint32_t binaryen_ffi_version(void);
-
-uint32_t binaryen_ffi_abi_version(void);
-
 // `extern "C"` guard for C++ consumers to ensure C linkage when included from C++
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+uint32_t binaryen_ffi_version(void);
+
+uint32_t binaryen_ffi_abi_version(void);
 
 const char *binaryen_ffi_echo(const char *s);
 
@@ -75,6 +75,28 @@ bool BinaryenFastHashMapInsert(struct BinaryenFastHashMap *p, const char *key, u
 bool BinaryenFastHashMapGet(struct BinaryenFastHashMap *p, const char *key, uint64_t *out_value);
 
 uintptr_t BinaryenFastHashMapLen(struct BinaryenFastHashMap *p);
+
+// Type system helpers (added by Rust port)
+typedef uint64_t BinaryenType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BinaryenType BinaryenTypeCreateSignature(BinaryenType params, BinaryenType results);
+BinaryenType BinaryenTypeGetParams(BinaryenType ty);
+BinaryenType BinaryenTypeGetResults(BinaryenType ty);
+
+BinaryenType BinaryenTypeInt32(void);
+BinaryenType BinaryenTypeInt64(void);
+BinaryenType BinaryenTypeFloat32(void);
+BinaryenType BinaryenTypeFloat64(void);
+BinaryenType BinaryenTypeVec128(void);
+BinaryenType BinaryenTypeNone(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef __cplusplus
 }

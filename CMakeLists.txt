@@ -475,8 +475,11 @@ else()
   message(STATUS "Building libbinaryen as shared library.")
   add_library(binaryen SHARED)
   if(LINUX)
-    # Disable interposition and resolve Binaryen symbols locally.
-    add_link_flag("-Bsymbolic")
+    # Disable interposition and resolve Binaryen symbols locally for the shared
+    # `binaryen` target only. Don't propagate `-Bsymbolic` to executables (it
+    # breaks linking of static Rust archives); use `target_link_options` so the
+    # flag applies only to the shared library.
+    target_link_options(binaryen PRIVATE "-Wl,-Bsymbolic")
   endif()
 endif()
 target_link_libraries(binaryen Threads::Threads)
@@ -544,6 +547,13 @@ endif()
 if(BUILD_RUST_COMPONENTS)
   # When Rust components are enabled, link the generated Rust static library
   # into libbinaryen so C++ consumer shims can call into Rust directly.
+  # If a path is supplied via RUST_LIBS, create an imported target for it so
+  # it can be linked consistently across all consumers.
+  if(RUST_LIBS AND NOT TARGET binaryen_ffi_static)
+    add_library(binaryen_ffi_static STATIC IMPORTED)
+    set_target_properties(binaryen_ffi_static PROPERTIES IMPORTED_LOCATION ${RUST_LIBS})
+  endif()
+
   if(TARGET binaryen_ffi_static)
     target_link_libraries(binaryen binaryen_ffi_static)
   elseif(RUST_LIBS)

@@ -44,18 +44,25 @@ Exit criteria:
 Primary goal: Implement core `Type` enum, `Signature`, `HeapType`, and initial IR expr nodes used across the codebase.
 
 Key tasks:
-- [x] Implement `rust/binaryen-core` with a basic `Type` enum (initial `Type` implemented; `Signature` and `HeapType` pending) (see [Plan Phase 2](../vision/RUST_CONVERSION_PLAN.md#phase-2-type-system)).
-- [ ] Implement Type printing & ordering utilities
-- [ ] Build minimal IR `Expression` enum and small set of nodes (`Const`, `LocalGet`, `Block`) (see [Phase 3 IR core](../vision/RUST_CONVERSION_PLAN.md#phase-3-ir-core)).
+- [x] Implement `rust/binaryen-core` with a `Type` enum (basic and common reference types implemented).
+- [x] Implement `Signature` and `HeapType` (basic implementations present).
+- [ ] Implement `TypeStore` (interning) and API for interned `Signature` and `HeapType` (`rust/binaryen-core/src/type_store.rs`).
+- [ ] Add constructors that intern types (e.g., `Signature::intern(params, results) -> Type`).
+- [ ] Implement Type printing & ordering utilities (`Display`/`Debug`, canonicalization helpers).
+- [ ] Add `#[repr(C)]`-safe FFI wrappers for Types in `binaryen-ffi` and update `cbindgen` config (`rust/binaryen-ffi/src/type_ffi.rs`).
+- [ ] Add unit tests & `proptest` for Type interning, serialization, and ordering.
+- [ ] Add a C++ round-trip smoke test in `test/rust_consumer/test_ffi_type_roundtrip.cpp` that creates types in Rust and verifies them in C++.
+- [ ] Build minimal IR `Expression` enum and small set of nodes (`Const`, `LocalGet`, `Block`) only after TypeStore is stabilized (see [Phase 3 IR core](../vision/RUST_CONVERSION_PLAN.md#phase-3-ir-core)).
 - [ ] Stabilize Arena API with Team Libs — freeze memory layout and ownership policies ([Technical Specs](../vision/rust-conversion-technical-specs.md#memory-management)).
-- [ ] Add `#[repr(C)]` for any types used across FFI and update `cbindgen` config.
 
 Dependencies:
 - Team Infra and Team Libs for FFI and arena
 
 Exit criteria:
-- Tests for type equality & serialization pass
-- `Arena` is agreed/locked and used by IR nodes
+- `TypeStore` implemented and tested (interning works and is deterministic)
+- FFI wrappers for types are present and included in the `cbindgen` golden header
+- Cross-language tests pass validating type creation and round-trip
+- `Arena` and lifetime model agreed for IR nodes and used by initial IR tests
 
 ---
 

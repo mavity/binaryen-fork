@@ -1,0 +1,8 @@
+[package]
+name = "binaryen-ir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+binaryen-core = { path = "../binaryen-core" }
+bumpalo = { version = "3.19.1", features = ["collections"] }

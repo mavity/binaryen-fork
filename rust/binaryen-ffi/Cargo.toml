@@ -8,5 +8,6 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 binaryen-support = { path = "../binaryen-support" }
+binaryen-core = { path = "../binaryen-core" }
 libc = "0.2"
 once_cell = "1.20"

@@ -66,3 +66,4 @@ CMakeUserPresets.json
 
 # files related to clangd cache
 .cache/*
+/binaryen_ffi.binaryen_ffi.4c2c2c3550c4277-cgu.2.rcgu.o

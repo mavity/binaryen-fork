@@ -1,6 +1,11 @@
 mod r#type;
 pub use r#type::*;
 
+mod literal;
+pub use literal::*;
+
+pub mod type_store;
+
 #[cfg(test)]
 mod tests {
     use super::*;

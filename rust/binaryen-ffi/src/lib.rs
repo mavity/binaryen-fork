@@ -6,6 +6,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
+pub mod type_ffi;
+pub use type_ffi::*;
+
 #[no_mangle]
 pub extern "C" fn binaryen_ffi_version() -> u32 {
     // Return a simple version identifier for smoke tests
