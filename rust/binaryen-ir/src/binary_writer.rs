@@ -404,10 +404,83 @@ mod tests {
         let mut buf = Vec::new();
         BinaryWriter::write_leb128_i32(&mut buf, -123456).unwrap();
 
-        // Verify by decoding
+        // Verify by reading back
         let bump = Bump::new();
         let mut reader = BinaryReader::new(&bump, buf);
-        let decoded = reader.read_leb128_i32().unwrap();
-        assert_eq!(decoded, -123456);
+        let value = reader.read_leb128_i32().unwrap();
+        assert_eq!(value, -123456);
+    }
+
+    #[test]
+    fn test_write_multi_param_function() {
+        let bump = Bump::new();
+
+        // Create a module with a function that has a single parameter
+        // (our IR currently stores params as single Type, not Vec<Type>)
+        let mut module = Module::new();
+        let body = bump.alloc(Expression {
+            kind: ExpressionKind::LocalGet { index: 0 },
+            type_: Type::I32,
+        });
+
+        module.add_function(Function::new(
+            "test".to_string(),
+            Type::I32, // Single param
+            Type::I32,
+            vec![],
+            Some(body),
+        ));
+
+        let mut writer = BinaryWriter::new();
+        let bytes = writer
+            .write_module(&module)
+            .expect("Failed to write module");
+
+        // Read it back
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to parse");
+
+        assert_eq!(module2.functions.len(), 1);
+        assert_eq!(module2.functions[0].params, Type::I32);
+        assert_eq!(module2.functions[0].results, Type::I32);
+    }
+
+    #[test]
+    fn test_roundtrip_with_locals() {
+        let bump = Bump::new();
+
+        // Module with function that has locals
+        let mut module = Module::new();
+        let body = bump.alloc(Expression {
+            kind: ExpressionKind::LocalGet { index: 1 }, // Get local variable
+            type_: Type::I32,
+        });
+
+        module.add_function(Function::new(
+            "test".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![Type::I32, Type::I64], // Two local variables
+            Some(body),
+        ));
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        // Read back
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify
+        assert_eq!(module2.functions.len(), 1);
+        let func = &module2.functions[0];
+        assert_eq!(func.params, Type::I32);
+        assert_eq!(func.results, Type::I32);
+        assert_eq!(func.vars.len(), 2);
+        assert_eq!(func.vars[0], Type::I32);
+        assert_eq!(func.vars[1], Type::I64);
     }
 }

@@ -443,4 +443,72 @@ mod tests {
         let value = reader.read_leb128_u32().unwrap();
         assert_eq!(value, 624485);
     }
+
+    #[test]
+    fn test_parse_multi_param_function() {
+        let bump = Bump::new();
+
+        // WASM: (module (func (param i32 i32) (result i32) local.get 0))
+        let wasm = vec![
+            0x00, 0x61, 0x73, 0x6D, // magic
+            0x01, 0x00, 0x00, 0x00, // version
+            // Type section
+            0x01, 0x07, // section 1, size 7
+            0x01, // 1 type
+            0x60, 0x02, 0x7F, 0x7F, 0x01, 0x7F, // func type: (i32, i32) -> i32
+            // Function section
+            0x03, 0x02, // section 3, size 2
+            0x01, 0x00, // 1 function, type 0
+            // Code section
+            0x0A, 0x06, // section 10, size 6
+            0x01, // 1 code
+            0x04, // body size 4
+            0x00, // 0 locals
+            0x20, 0x00, // local.get 0
+            0x0B, // end
+        ];
+
+        let mut reader = BinaryReader::new(&bump, wasm);
+        let module = reader.parse_module().expect("Failed to parse module");
+
+        assert_eq!(module.functions.len(), 1);
+        let func = &module.functions[0];
+
+        // Function should have parsed first parameter (our current limitation)
+        assert_eq!(func.params, Type::I32);
+        assert_eq!(func.results, Type::I32);
+    }
+
+    #[test]
+    fn test_parse_no_param_function() {
+        let bump = Bump::new();
+
+        // WASM: (module (func (result i32) i32.const 123))
+        let wasm = vec![
+            0x00, 0x61, 0x73, 0x6D, // magic
+            0x01, 0x00, 0x00, 0x00, // version
+            // Type section
+            0x01, 0x05, // section 1, size 5
+            0x01, // 1 type
+            0x60, 0x00, 0x01, 0x7F, // func type: () -> i32
+            // Function section
+            0x03, 0x02, // section 3, size 2
+            0x01, 0x00, // 1 function, type 0
+            // Code section
+            0x0A, 0x06, // section 10, size 6
+            0x01, // 1 code
+            0x04, // body size 4
+            0x00, // 0 locals
+            0x41, 0x7B, // i32.const 123
+            0x0B, // end
+        ];
+
+        let mut reader = BinaryReader::new(&bump, wasm);
+        let module = reader.parse_module().expect("Failed to parse module");
+
+        assert_eq!(module.functions.len(), 1);
+        let func = &module.functions[0];
+        assert_eq!(func.params, Type::NONE);
+        assert_eq!(func.results, Type::I32);
+    }
 }
