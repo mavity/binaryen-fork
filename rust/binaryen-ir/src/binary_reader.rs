@@ -211,10 +211,17 @@ impl<'a> BinaryReader<'a> {
                 .unwrap_or((vec![], vec![]));
 
             // For now, use first param/result as Type (simplified for single params)
-            let params = func_type.0.first().copied().unwrap_or(Type::NONE);
-            let results = func_type.1.first().copied().unwrap_or(Type::NONE);
+            let params = Self::types_to_type(&func_type.0);
+            let results = Self::types_to_type(&func_type.1);
 
-            let func = Function::new(format!("func_{}", i), params, results, locals, body);
+            let func = Function::with_type_idx(
+                format!("func_{}", i),
+                type_idx,
+                params,
+                results,
+                locals,
+                body,
+            );
             module.add_function(func);
         }
 

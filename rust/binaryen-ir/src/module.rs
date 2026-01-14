@@ -4,6 +4,7 @@ use binaryen_core::Type;
 #[derive(Debug)]
 pub struct Function<'a> {
     pub name: String,
+    pub type_idx: Option<u32>, // Index into module.types (None means infer from params/results)
     pub params: Type,
     pub results: Type,
     pub vars: Vec<Type>,
@@ -20,6 +21,25 @@ impl<'a> Function<'a> {
     ) -> Self {
         Self {
             name,
+            type_idx: None,
+            params,
+            results,
+            vars,
+            body,
+        }
+    }
+
+    pub fn with_type_idx(
+        name: String,
+        type_idx: u32,
+        params: Type,
+        results: Type,
+        vars: Vec<Type>,
+        body: Option<ExprRef<'a>>,
+    ) -> Self {
+        Self {
+            name,
+            type_idx: Some(type_idx),
             params,
             results,
             vars,

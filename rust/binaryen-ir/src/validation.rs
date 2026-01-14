@@ -43,9 +43,30 @@ impl<'a, 'm> Validator<'a, 'm> {
 
     pub fn validate(mut self) -> (bool, Vec<String>) {
         // Validate each function
-        for func in &self.module.functions {
+        for (func_idx, func) in self.module.functions.iter().enumerate() {
             self.current_function = Some(func);
-            let context = format!("Function '{}': ", func.name);
+            let context = format!("Function '{}' (index {}): ", func.name, func_idx);
+
+            // Validate type_idx if present
+            if let Some(type_idx) = func.type_idx {
+                if (type_idx as usize) >= self.module.types.len() {
+                    self.fail(&format!(
+                        "{}Type index {} out of bounds (module has {} types)",
+                        context,
+                        type_idx,
+                        self.module.types.len()
+                    ));
+                } else {
+                    // Verify that the function signature matches the type
+                    let func_type = &self.module.types[type_idx as usize];
+                    if func_type.params != func.params || func_type.results != func.results {
+                        self.fail(&format!(
+                            "{}Signature mismatch with type {}. Expected ({:?} -> {:?}), got ({:?} -> {:?})",
+                            context, type_idx, func_type.params, func_type.results, func.params, func.results
+                        ));
+                    }
+                }
+            }
 
             // Check body if present
             if let Some(body) = &func.body {

@@ -87,25 +87,30 @@ impl BinaryWriter {
         let mut func_type_indices: Vec<usize> = Vec::new();
 
         for func in &module.functions {
-            // Convert single Type to Vec<Type> for type section
-            let params_vec = if func.params == Type::NONE {
-                vec![]
+            // Use explicit type_idx if available, otherwise infer from signature
+            let idx = if let Some(type_idx) = func.type_idx {
+                type_idx as usize
             } else {
-                vec![func.params]
-            };
-            let results_vec = if func.results == Type::NONE {
-                vec![]
-            } else {
-                vec![func.results]
-            };
+                // Infer type index from function signature
+                let params_vec = if func.params == Type::NONE {
+                    vec![]
+                } else {
+                    vec![func.params]
+                };
+                let results_vec = if func.results == Type::NONE {
+                    vec![]
+                } else {
+                    vec![func.results]
+                };
 
-            let sig = (params_vec, results_vec);
-            let idx = if let Some(pos) = type_map.iter().position(|t| *t == sig) {
-                pos
-            } else {
-                let idx = type_map.len();
-                type_map.push(sig);
-                idx
+                let sig = (params_vec, results_vec);
+                if let Some(pos) = type_map.iter().position(|t| *t == sig) {
+                    pos
+                } else {
+                    let idx = type_map.len();
+                    type_map.push(sig);
+                    idx
+                }
             };
             func_type_indices.push(idx);
         }
