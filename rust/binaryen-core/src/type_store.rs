@@ -39,23 +39,23 @@ impl TypeStore {
     /// Otherwise, allocates a new ID and stores the mapping.
     fn intern_signature_impl(&mut self, params: Type, results: Type) -> Type {
         let key = (params, results);
-        
+
         if let Some(&id) = self.signatures.get(&key) {
             // Already interned - return existing handle
             return Type::from_signature_id(id);
         }
-        
+
         // Allocate new ID
         let id = self.next_sig_id;
         self.next_sig_id += 1;
-        
+
         let sig = Signature::new(params, results);
         self.signatures.insert(key, id);
         self.rev_signatures.insert(id, sig);
-        
+
         Type::from_signature_id(id)
     }
-    
+
     /// Lookup a signature by Type handle.
     ///
     /// Returns `None` if the Type is not an interned signature.
@@ -103,21 +103,21 @@ pub fn try_lookup_signature(ty: Type) -> Option<Signature> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_intern_same_signature_twice() {
         let ty1 = intern_signature(Type::I32, Type::I64);
         let ty2 = intern_signature(Type::I32, Type::I64);
         assert_eq!(ty1, ty2, "Same signature should intern to same ID");
     }
-    
+
     #[test]
     fn test_intern_different_signatures() {
         let ty1 = intern_signature(Type::I32, Type::I64);
         let ty2 = intern_signature(Type::F32, Type::F64);
         assert_ne!(ty1, ty2, "Different signatures should have different IDs");
     }
-    
+
     #[test]
     fn test_lookup_interned_signature() {
         let ty = intern_signature(Type::I32, Type::F64);
@@ -125,7 +125,7 @@ mod tests {
         assert_eq!(sig.params, Type::I32);
         assert_eq!(sig.results, Type::F64);
     }
-    
+
     #[test]
     fn test_lookup_basic_type_returns_none() {
         let sig = lookup_signature(Type::I32);

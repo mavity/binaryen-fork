@@ -94,6 +94,22 @@ BinaryenType BinaryenTypeFloat64(void);
 BinaryenType BinaryenTypeVec128(void);
 BinaryenType BinaryenTypeNone(void);
 
+// IR and Module interface (added by Rust port)
+typedef struct BinaryenRustModule *BinaryenRustModuleRef;
+typedef struct BinaryenRustExpression *BinaryenRustExpressionRef;
+
+BinaryenRustModuleRef BinaryenRustModuleCreate(void);
+void BinaryenRustModuleDispose(BinaryenRustModuleRef module);
+
+BinaryenRustExpressionRef BinaryenRustConst(BinaryenRustModuleRef module, int32_t value);
+BinaryenRustExpressionRef BinaryenRustBlock(BinaryenRustModuleRef module, const char *name, BinaryenRustExpressionRef *children, uintptr_t num_children, BinaryenType type);
+BinaryenRustExpressionRef BinaryenRustUnary(BinaryenRustModuleRef module, uint32_t op, BinaryenRustExpressionRef value, BinaryenType type);
+BinaryenRustExpressionRef BinaryenRustBinary(BinaryenRustModuleRef module, uint32_t op, BinaryenRustExpressionRef left, BinaryenRustExpressionRef right, BinaryenType type);
+BinaryenRustExpressionRef BinaryenRustLocalGet(BinaryenRustModuleRef module, uint32_t index, BinaryenType type);
+BinaryenRustExpressionRef BinaryenRustLocalSet(BinaryenRustModuleRef module, uint32_t index, BinaryenRustExpressionRef value);
+
+void BinaryenRustAddFunction(BinaryenRustModuleRef module, const char *name, BinaryenType params, BinaryenType results, BinaryenRustExpressionRef body);
+
 #ifdef __cplusplus
 }
 #endif

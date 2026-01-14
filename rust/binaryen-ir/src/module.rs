@@ -11,7 +11,13 @@ pub struct Function<'a> {
 }
 
 impl<'a> Function<'a> {
-    pub fn new(name: String, params: Type, results: Type, vars: Vec<Type>, body: Option<ExprRef<'a>>) -> Self {
+    pub fn new(
+        name: String,
+        params: Type,
+        results: Type,
+        vars: Vec<Type>,
+        body: Option<ExprRef<'a>>,
+    ) -> Self {
         Self {
             name,
             params,
@@ -37,7 +43,7 @@ impl<'a> Module<'a> {
     pub fn add_function(&mut self, func: Function<'a>) {
         self.functions.push(func);
     }
-    
+
     pub fn get_function(&self, name: &str) -> Option<&Function<'a>> {
         self.functions.iter().find(|f| f.name == name)
     }

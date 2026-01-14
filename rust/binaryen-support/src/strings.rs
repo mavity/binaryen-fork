@@ -39,9 +39,9 @@ impl StringInterner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use std::sync::Arc;
     use std::thread;
-    use proptest::prelude::*;
 
     #[test]
     fn test_intern_same_string() {

@@ -1,4 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
 pub enum UnaryOp {
     ClzInt32,
     CtzInt32,
@@ -26,6 +27,7 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
 pub enum BinaryOp {
     AddInt32,
     SubInt32,

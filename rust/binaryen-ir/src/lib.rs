@@ -99,27 +99,27 @@ mod tests {
         let local_get = builder.local_get(0, Type::I32);
         let const_1 = builder.const_(Literal::I32(1));
         let add = builder.binary(BinaryOp::AddInt32, local_get, const_1, Type::I32);
-        
+
         let func = Function::new(
             "add_one".to_string(),
             Type::I32,
             Type::I32,
             vec![],
-            Some(add)
+            Some(add),
         );
-        
+
         let mut module = Module::new();
         module.add_function(func);
-        
+
         assert!(module.get_function("add_one").is_some());
-        
+
         let f = module.get_function("add_one").unwrap();
         if let Some(body) = &f.body {
-             if let ExpressionKind::Binary { op, .. } = body.kind {
-                 assert_eq!(op, BinaryOp::AddInt32);
-             } else {
-                 panic!("Expected Binary");
-             }
+            if let ExpressionKind::Binary { op, .. } = body.kind {
+                assert_eq!(op, BinaryOp::AddInt32);
+            } else {
+                panic!("Expected Binary");
+            }
         }
     }
 }

@@ -129,3 +129,70 @@ pub unsafe extern "C" fn BinaryenRustAddFunction(
 
     module_wrapper.module.add_function(func_static);
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustUnary(
+    module: BinaryenRustModuleRef,
+    op: u32,
+    value: BinaryenRustExpressionRef,
+    type_: u64,
+) -> BinaryenRustExpressionRef {
+    let module = &mut *module;
+    let builder = IrBuilder::new(&module.bump);
+
+    // Safety: we assume op index is valid. A real implementation would validate.
+    let op: UnaryOp = std::mem::transmute(op);
+    let value_ref = &mut *(value as *mut Expression);
+    let type_ = std::mem::transmute::<u64, Type>(type_);
+
+    let expr = builder.unary(op, value_ref, type_);
+    expr as *mut Expression as *mut c_void
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustBinary(
+    module: BinaryenRustModuleRef,
+    op: u32,
+    left: BinaryenRustExpressionRef,
+    right: BinaryenRustExpressionRef,
+    type_: u64,
+) -> BinaryenRustExpressionRef {
+    let module = &mut *module;
+    let builder = IrBuilder::new(&module.bump);
+
+    let op: BinaryOp = std::mem::transmute(op);
+    let left_ref = &mut *(left as *mut Expression);
+    let right_ref = &mut *(right as *mut Expression);
+    let type_ = std::mem::transmute::<u64, Type>(type_);
+
+    let expr = builder.binary(op, left_ref, right_ref, type_);
+    expr as *mut Expression as *mut c_void
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustLocalGet(
+    module: BinaryenRustModuleRef,
+    index: u32,
+    type_: u64,
+) -> BinaryenRustExpressionRef {
+    let module = &mut *module;
+    let builder = IrBuilder::new(&module.bump);
+    let type_ = std::mem::transmute::<u64, Type>(type_);
+
+    let expr = builder.local_get(index, type_);
+    expr as *mut Expression as *mut c_void
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustLocalSet(
+    module: BinaryenRustModuleRef,
+    index: u32,
+    value: BinaryenRustExpressionRef,
+) -> BinaryenRustExpressionRef {
+    let module = &mut *module;
+    let builder = IrBuilder::new(&module.bump);
+    let value_ref = &mut *(value as *mut Expression);
+
+    let expr = builder.local_set(index, value_ref);
+    expr as *mut Expression as *mut c_void
+}

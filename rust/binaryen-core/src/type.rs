@@ -21,7 +21,7 @@ impl Type {
     const TUPLE_MASK: u64 = 1 << 0;
     const NULL_MASK: u64 = 1 << 1;
     const EXACT_MASK: u64 = 1 << 2;
-    
+
     // Interned signature flag (bit 32 set indicates this is an interned signature ID)
     const SIGNATURE_FLAG: u64 = 1 << 32;
     const SIGNATURE_ID_MASK: u64 = 0xFFFF_FFFF; // Lower 32 bits for ID
@@ -41,7 +41,7 @@ impl Type {
     pub const STRUCTREF: Type = Type((7 << 3) | Self::NULL_MASK);
     // arrayref = nullable array
     pub const ARRAYREF: Type = Type((8 << 3) | Self::NULL_MASK);
-    
+
     pub fn new(heap_type: HeapType, nullable: bool) -> Self {
         let null_bit = if nullable { Self::NULL_MASK } else { 0 };
         // Note: Exactness logic omitted for basic constructor for now
@@ -51,7 +51,7 @@ impl Type {
     pub fn is_basic(self) -> bool {
         self.0 <= 6
     }
-    
+
     pub fn is_nullable(self) -> bool {
         !self.is_basic() && (self.0 & Self::NULL_MASK != 0)
     }
@@ -59,7 +59,7 @@ impl Type {
     pub fn is_ref(self) -> bool {
         !self.is_basic() && (self.0 & Self::TUPLE_MASK == 0)
     }
-    
+
     pub fn get_heap_type(self) -> Option<HeapType> {
         if self.is_ref() {
             // Simplified extraction for basic types
@@ -68,12 +68,12 @@ impl Type {
             None
         }
     }
-    
+
     /// Check if this Type represents an interned signature.
     pub fn is_signature(self) -> bool {
         (self.0 & Self::SIGNATURE_FLAG) != 0
     }
-    
+
     /// Extract signature ID if this is an interned signature.
     pub(crate) fn signature_id(self) -> Option<u32> {
         if self.is_signature() {
@@ -82,7 +82,7 @@ impl Type {
             None
         }
     }
-    
+
     /// Create a Type handle from an interned signature ID.
     pub(crate) fn from_signature_id(id: u32) -> Self {
         Type(Self::SIGNATURE_FLAG | (id as u64))
@@ -109,11 +109,11 @@ impl fmt::Debug for Type {
             _ => {
                 if self.is_signature() {
                     if let Some(sig) = crate::type_store::try_lookup_signature(*self) {
-                         return write!(f, "Signature({:?} -> {:?})", sig.params, sig.results);
+                        return write!(f, "Signature({:?} -> {:?})", sig.params, sig.results);
                     }
                 }
                 write!(f, "Type({:#x})", self.0)
-            },
+            }
         }
     }
 }
@@ -130,7 +130,7 @@ pub struct HeapType(u64);
 
 impl HeapType {
     const USED_BITS: u64 = 3;
-    
+
     pub const EXT: HeapType = HeapType(1 << 3);
     pub const FUNC: HeapType = HeapType(2 << 3);
     pub const CONT: HeapType = HeapType(3 << 3);
@@ -149,7 +149,7 @@ impl HeapType {
 
     pub fn is_basic(self) -> bool {
         // This is a simplification, assuming we only have basic types for now
-        true 
+        true
     }
 }
 

@@ -26,7 +26,9 @@ pub struct Arena {
 impl Arena {
     /// Create a new Arena instance.
     pub fn new() -> Self {
-        Arena { bump: Mutex::new(Bump::new()) }
+        Arena {
+            bump: Mutex::new(Bump::new()),
+        }
     }
 
     /// Allocate a string in the arena and return a pointer valid for the arena lifetime.
@@ -95,9 +97,13 @@ mod tests {
                 let s = format!("concurrent-{}", i);
                 let p = arena.alloc_str(&s);
                 assert!(!p.is_null());
-                unsafe { assert_eq!(std::ffi::CStr::from_ptr(p).to_str().unwrap(), s); }
+                unsafe {
+                    assert_eq!(std::ffi::CStr::from_ptr(p).to_str().unwrap(), s);
+                }
             }));
         }
-        for h in handles { h.join().unwrap(); }
+        for h in handles {
+            h.join().unwrap();
+        }
     }
 }

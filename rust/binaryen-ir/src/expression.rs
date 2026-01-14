@@ -140,11 +140,7 @@ impl<'a> IrBuilder<'a> {
     }
 
     pub fn local_tee(&self, index: u32, value: ExprRef<'a>, type_: Type) -> ExprRef<'a> {
-        Expression::new(
-            self.bump,
-            ExpressionKind::LocalTee { index, value },
-            type_,
-        )
+        Expression::new(self.bump, ExpressionKind::LocalTee { index, value }, type_)
     }
 
     pub fn if_(

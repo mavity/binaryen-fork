@@ -1,7 +1,7 @@
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
-use binaryen_support::StringInterner;
-use binaryen_support::Arena;
 use binaryen_support::hash::ahash_bytes;
+use binaryen_support::Arena;
+use binaryen_support::StringInterner;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn bench_intern(c: &mut Criterion) {
     let interner = StringInterner::new();

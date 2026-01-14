@@ -28,7 +28,7 @@ mod tests {
         assert!(Type::FUNCREF.is_nullable());
         assert!(!Type::I32.is_ref());
         assert!(!Type::I32.is_nullable());
-        
+
         let func_heap_type = Type::FUNCREF.get_heap_type().unwrap();
         assert_eq!(func_heap_type, HeapType::FUNC);
     }

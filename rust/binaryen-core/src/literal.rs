@@ -34,7 +34,7 @@ impl fmt::Debug for Literal {
 
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-         match self {
+        match self {
             Literal::I32(v) => write!(f, "{}", v),
             Literal::I64(v) => write!(f, "{}", v),
             Literal::F32(v) => write!(f, "{}", v),

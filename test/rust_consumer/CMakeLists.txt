@@ -45,6 +45,10 @@ if(BUILD_RUST_COMPONENTS)
     test_ffi_type_roundtrip.c
   )
 
+  add_executable(test_rust_consumer_ir
+    test_ffi_ir.cpp
+  )
+
   # Some build environments treat the global warning flags as C++-only
   # and will error when compiling .c files. Build this test as C++ to avoid
   # those flags and allow linking against the Rust cdylib. The header is
@@ -82,6 +86,7 @@ if(BUILD_RUST_COMPONENTS)
     target_link_libraries(test_rust_consumer_arena_many_threads PRIVATE ${RUST_LIBS})
     target_link_libraries(test_rust_consumer_extra PRIVATE ${RUST_LIBS})
     target_link_libraries(test_rust_consumer_type_roundtrip PRIVATE ${RUST_LIBS})
+    target_link_libraries(test_rust_consumer_ir PRIVATE ${RUST_LIBS})
   endif()
 
   # Link with dl and pthread if required; add Threads dependency to be safe.
@@ -90,6 +95,7 @@ if(BUILD_RUST_COMPONENTS)
 
   target_link_libraries(test_rust_consumer_extra PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_type_roundtrip PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+  target_link_libraries(test_rust_consumer_ir PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
   target_link_libraries(test_rust_consumer_threaded PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_threads PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
@@ -113,6 +119,7 @@ if(BUILD_RUST_COMPONENTS)
   add_test(NAME rust_ffi_smoke COMMAND $<TARGET_FILE:test_rust_consumer>)
   add_test(NAME rust_ffi_smoke_extra COMMAND $<TARGET_FILE:test_rust_consumer_extra>)
   add_test(NAME rust_ffi_smoke_type_roundtrip COMMAND $<TARGET_FILE:test_rust_consumer_type_roundtrip>)
+  add_test(NAME rust_ffi_smoke_ir COMMAND $<TARGET_FILE:test_rust_consumer_ir>)
   add_test(NAME rust_ffi_smoke_threaded COMMAND $<TARGET_FILE:test_rust_consumer_threaded>)
   add_test(NAME rust_ffi_smoke_arena_threads COMMAND $<TARGET_FILE:test_rust_consumer_arena_threads>)
   add_test(NAME rust_ffi_smoke_arena_misuse COMMAND $<TARGET_FILE:test_rust_consumer_arena_misuse>)
