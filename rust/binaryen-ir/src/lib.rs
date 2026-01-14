@@ -2,6 +2,7 @@ pub mod expression;
 pub mod module;
 pub mod ops;
 pub mod pass;
+pub mod passes;
 pub mod validation;
 pub mod visitor;
 
