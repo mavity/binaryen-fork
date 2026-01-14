@@ -273,4 +273,30 @@ impl<'a> IrBuilder<'a> {
             Type::NONE,
         )
     }
+
+    pub fn return_(&self, value: Option<ExprRef<'a>>) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::Return { value }, Type::NONE)
+    }
+
+    pub fn unreachable(&self) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::Unreachable, Type::NONE)
+    }
+
+    pub fn select(
+        &self,
+        condition: ExprRef<'a>,
+        if_true: ExprRef<'a>,
+        if_false: ExprRef<'a>,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            },
+            type_,
+        )
+    }
 }
