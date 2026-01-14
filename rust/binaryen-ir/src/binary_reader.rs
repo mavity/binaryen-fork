@@ -444,6 +444,52 @@ impl<'a> BinaryReader<'a> {
                     );
                     stack.push(select_expr);
                 }
+                0x10 => {
+                    // call
+                    let func_idx = self.read_leb128_u32()?;
+
+                    // Generate function name in bump allocator
+                    let func_name =
+                        bumpalo::format!(in self.bump, "func_{}", func_idx).into_bump_str();
+
+                    // Pop operands from stack (number depends on function signature)
+                    // For now, we collect all available operands
+                    // TODO: Use function signature to determine exact operand count
+                    let operands = BumpVec::from_iter_in(stack.drain(..), self.bump);
+
+                    let call_expr = Expression::new(
+                        self.bump,
+                        ExpressionKind::Call {
+                            target: func_name,
+                            operands,
+                            is_return: false,
+                        },
+                        Type::I32, // TODO: determine actual return type from function signature
+                    );
+                    stack.push(call_expr);
+                }
+                0x12 => {
+                    // return_call (tail call)
+                    let func_idx = self.read_leb128_u32()?;
+
+                    // Generate function name in bump allocator
+                    let func_name =
+                        bumpalo::format!(in self.bump, "func_{}", func_idx).into_bump_str();
+
+                    // Pop operands from stack
+                    let operands = BumpVec::from_iter_in(stack.drain(..), self.bump);
+
+                    let call_expr = Expression::new(
+                        self.bump,
+                        ExpressionKind::Call {
+                            target: func_name,
+                            operands,
+                            is_return: true,
+                        },
+                        Type::UNREACHABLE, // tail call doesn't return to caller
+                    );
+                    stack.push(call_expr);
+                }
                 0x20 => {
                     // local.get
                     let idx = self.read_leb128_u32()?;

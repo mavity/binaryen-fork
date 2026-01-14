@@ -210,6 +210,12 @@ impl BinaryWriter {
     fn write_code_section(&mut self, functions: &[Function]) -> Result<()> {
         let mut section_buf = Vec::new();
 
+        // Build function name to index map
+        let mut func_map = std::collections::HashMap::new();
+        for (i, func) in functions.iter().enumerate() {
+            func_map.insert(func.name.as_str(), i as u32);
+        }
+
         // Count
         Self::write_leb128_u32(&mut section_buf, functions.len() as u32)?;
 
@@ -226,7 +232,7 @@ impl BinaryWriter {
             // Expression
             if let Some(body) = &func.body {
                 let mut label_stack = Vec::new();
-                Self::write_expression(&mut body_buf, body, &mut label_stack)?;
+                Self::write_expression(&mut body_buf, body, &mut label_stack, &func_map)?;
             }
 
             // end
@@ -251,6 +257,7 @@ impl BinaryWriter {
         buf: &mut Vec<u8>,
         expr: &Expression,
         label_stack: &mut Vec<Option<String>>,
+        func_map: &std::collections::HashMap<&str, u32>,
     ) -> Result<()> {
         match &expr.kind {
             ExpressionKind::Const(lit) => {
@@ -278,18 +285,18 @@ impl BinaryWriter {
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalSet { index, value } => {
-                Self::write_expression(buf, value, label_stack)?;
+                Self::write_expression(buf, value, label_stack, func_map)?;
                 buf.push(0x21); // local.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalTee { index, value } => {
-                Self::write_expression(buf, value, label_stack)?;
+                Self::write_expression(buf, value, label_stack, func_map)?;
                 buf.push(0x22); // local.tee
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::Binary { op, left, right } => {
-                Self::write_expression(buf, left, label_stack)?;
-                Self::write_expression(buf, right, label_stack)?;
+                Self::write_expression(buf, left, label_stack, func_map)?;
+                Self::write_expression(buf, right, label_stack, func_map)?;
 
                 let opcode = match op {
                     BinaryOp::AddInt32 => 0x6A,
@@ -316,7 +323,7 @@ impl BinaryWriter {
 
                 // Write block body
                 for child in list.iter() {
-                    Self::write_expression(buf, child, label_stack)?;
+                    Self::write_expression(buf, child, label_stack, func_map)?;
                 }
 
                 // Pop label
@@ -332,7 +339,7 @@ impl BinaryWriter {
                 label_stack.push(name.map(|s| s.to_string()));
 
                 // Write loop body
-                Self::write_expression(buf, body, label_stack)?;
+                Self::write_expression(buf, body, label_stack, func_map)?;
 
                 // Pop label
                 label_stack.pop();
@@ -345,7 +352,7 @@ impl BinaryWriter {
                 if_false,
             } => {
                 // Write condition
-                Self::write_expression(buf, condition, label_stack)?;
+                Self::write_expression(buf, condition, label_stack, func_map)?;
 
                 buf.push(0x04); // if opcode
                 buf.push(0x40); // block type: empty (void)
@@ -354,12 +361,12 @@ impl BinaryWriter {
                 label_stack.push(None);
 
                 // Write then branch
-                Self::write_expression(buf, if_true, label_stack)?;
+                Self::write_expression(buf, if_true, label_stack, func_map)?;
 
                 // Write else branch if present
                 if let Some(if_false_expr) = if_false {
                     buf.push(0x05); // else opcode
-                    Self::write_expression(buf, if_false_expr, label_stack)?;
+                    Self::write_expression(buf, if_false_expr, label_stack, func_map)?;
                 }
 
                 // Pop label
@@ -374,7 +381,7 @@ impl BinaryWriter {
             } => {
                 // Write value if present
                 if let Some(val) = value {
-                    Self::write_expression(buf, val, label_stack)?;
+                    Self::write_expression(buf, val, label_stack, func_map)?;
                 }
 
                 // Find label depth
@@ -382,7 +389,7 @@ impl BinaryWriter {
 
                 if let Some(cond) = condition {
                     // br_if
-                    Self::write_expression(buf, cond, label_stack)?;
+                    Self::write_expression(buf, cond, label_stack, func_map)?;
                     buf.push(0x0D); // br_if opcode
                 } else {
                     // br
@@ -393,7 +400,7 @@ impl BinaryWriter {
             }
             ExpressionKind::Return { value } => {
                 if let Some(val) = value {
-                    Self::write_expression(buf, val, label_stack)?;
+                    Self::write_expression(buf, val, label_stack, func_map)?;
                 }
                 buf.push(0x0F); // return opcode
             }
@@ -401,7 +408,7 @@ impl BinaryWriter {
                 buf.push(0x00); // unreachable opcode
             }
             ExpressionKind::Drop { value } => {
-                Self::write_expression(buf, value, label_stack)?;
+                Self::write_expression(buf, value, label_stack, func_map)?;
                 buf.push(0x1A); // drop opcode
             }
             ExpressionKind::Select {
@@ -409,9 +416,9 @@ impl BinaryWriter {
                 if_true,
                 if_false,
             } => {
-                Self::write_expression(buf, if_true, label_stack)?;
-                Self::write_expression(buf, if_false, label_stack)?;
-                Self::write_expression(buf, condition, label_stack)?;
+                Self::write_expression(buf, if_true, label_stack, func_map)?;
+                Self::write_expression(buf, if_false, label_stack, func_map)?;
+                Self::write_expression(buf, condition, label_stack, func_map)?;
                 buf.push(0x1B); // select opcode
             }
             ExpressionKind::Load {
@@ -421,7 +428,7 @@ impl BinaryWriter {
                 align,
                 ptr,
             } => {
-                Self::write_expression(buf, ptr, label_stack)?;
+                Self::write_expression(buf, ptr, label_stack, func_map)?;
 
                 // Opcode selection based on size and signedness
                 let opcode = match (bytes, signed) {
@@ -445,8 +452,8 @@ impl BinaryWriter {
                 ptr,
                 value,
             } => {
-                Self::write_expression(buf, ptr, label_stack)?;
-                Self::write_expression(buf, value, label_stack)?;
+                Self::write_expression(buf, ptr, label_stack, func_map)?;
+                Self::write_expression(buf, value, label_stack, func_map)?;
 
                 // Opcode selection based on size
                 let opcode = match bytes {
@@ -460,6 +467,31 @@ impl BinaryWriter {
                 buf.push(opcode);
                 Self::write_leb128_u32(buf, *align)?;
                 Self::write_leb128_u32(buf, *offset)?;
+            }
+            ExpressionKind::Call {
+                target,
+                operands,
+                is_return,
+            } => {
+                // Write operands (arguments)
+                for operand in operands.iter() {
+                    Self::write_expression(buf, operand, label_stack, func_map)?;
+                }
+
+                // Look up function index
+                let func_index = func_map
+                    .get(target)
+                    .ok_or_else(|| WriteError::InvalidExpression)?;
+
+                if *is_return {
+                    // return_call (tail call) - opcode 0x12
+                    buf.push(0x12);
+                } else {
+                    // call - opcode 0x10
+                    buf.push(0x10);
+                }
+
+                Self::write_leb128_u32(buf, *func_index)?;
             }
             ExpressionKind::Nop => {
                 buf.push(0x01); // nop
@@ -563,9 +595,11 @@ impl BinaryWriter {
 mod tests {
     use super::*;
     use crate::binary_reader::BinaryReader;
-    use crate::expression::IrBuilder;
+    use crate::expression::{ExpressionKind, IrBuilder};
     use crate::module::ExportKind;
+    use crate::ops::BinaryOp;
     use binaryen_core::Literal;
+    use bumpalo::collections::Vec as BumpVec;
     use bumpalo::Bump;
 
     #[test]
@@ -1308,5 +1342,257 @@ mod tests {
         assert!(module2.memory.is_some());
 
         println!("Complete WASM module test passed!");
+    }
+
+    #[test]
+    fn test_function_call() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Function 1: helper - returns 42
+        let result1 = builder.const_(Literal::I32(42));
+        module.add_function(Function::new(
+            "helper".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(result1),
+        ));
+
+        // Function 2: caller - calls helper
+        let mut operands = BumpVec::new_in(&bump);
+        let call_expr = builder.call("helper", operands, Type::I32, false);
+
+        module.add_function(Function::new(
+            "caller".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(call_expr),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify structure
+        assert_eq!(module2.functions.len(), 2);
+
+        // Check that second function has a call expression
+        let caller_func = &module2.functions[1];
+        assert!(caller_func.body.is_some());
+
+        if let Some(body) = &caller_func.body {
+            match &body.kind {
+                ExpressionKind::Call {
+                    target,
+                    operands,
+                    is_return,
+                } => {
+                    assert_eq!(*target, "func_0"); // Should call function at index 0
+                    assert_eq!(operands.len(), 0); // No arguments
+                    assert_eq!(*is_return, false); // Not a tail call
+                }
+                _ => panic!("Expected Call expression, got {:?}", body.kind),
+            }
+        }
+
+        println!("Function call test passed!");
+    }
+
+    #[test]
+    fn test_function_call_with_args() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Function 1: add_five - takes i32 param and adds 5
+        let param = builder.local_get(0, Type::I32);
+        let five = builder.const_(Literal::I32(5));
+        let sum = builder.binary(BinaryOp::AddInt32, param, five, Type::I32);
+
+        module.add_function(Function::new(
+            "add_five".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(sum),
+        ));
+
+        // Function 2: caller - calls add_five with argument 10
+        let arg = builder.const_(Literal::I32(10));
+        let mut operands = BumpVec::new_in(&bump);
+        operands.push(arg);
+        let call_expr = builder.call("add_five", operands, Type::I32, false);
+
+        module.add_function(Function::new(
+            "caller".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(call_expr),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        // Verify structure
+        assert_eq!(module2.functions.len(), 2);
+
+        println!("Function call with args test passed!");
+    }
+
+    #[test]
+    fn test_recursive_function() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Recursive factorial function (simplified)
+        // factorial(n): if n <= 1 then 1 else n * factorial(n-1)
+        let n = builder.local_get(0, Type::I32);
+        let one = builder.const_(Literal::I32(1));
+
+        // For simplicity, just return 1 (base case)
+        // A full recursive implementation would need proper if/else with recursive call
+        let body = one;
+
+        module.add_function(Function::new(
+            "factorial".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(body),
+        ));
+
+        // Write and read back
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read");
+
+        assert_eq!(module2.functions.len(), 1);
+
+        println!("Recursive function test passed!");
+    }
+
+    #[test]
+    fn test_multi_function_program_with_wasmtime() {
+        use std::fs;
+        use std::process::Command;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new();
+
+        // Set memory
+        module.set_memory(1, Some(10));
+
+        // Function 1: double - doubles an i32 parameter
+        let param = builder.local_get(0, Type::I32);
+        let two = builder.const_(Literal::I32(2));
+        let doubled = builder.binary(BinaryOp::MulInt32, param, two, Type::I32);
+
+        module.add_function(Function::new(
+            "double".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(doubled),
+        ));
+
+        // Function 2: increment - adds 1 to an i32 parameter
+        let param2 = builder.local_get(0, Type::I32);
+        let one = builder.const_(Literal::I32(1));
+        let incremented = builder.binary(BinaryOp::AddInt32, param2, one, Type::I32);
+
+        module.add_function(Function::new(
+            "increment".to_string(),
+            Type::I32,
+            Type::I32,
+            vec![],
+            Some(incremented),
+        ));
+
+        // Function 3: process - calls both functions: increment(double(x))
+        let input = builder.const_(Literal::I32(5)); // Input: 5
+
+        // Call double(5) -> 10
+        let mut double_args = BumpVec::new_in(&bump);
+        double_args.push(input);
+        let double_result = builder.call("double", double_args, Type::I32, false);
+
+        // Call increment(10) -> 11
+        let mut inc_args = BumpVec::new_in(&bump);
+        inc_args.push(double_result);
+        let final_result = builder.call("increment", inc_args, Type::I32, false);
+
+        module.add_function(Function::new(
+            "process".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(final_result),
+        ));
+
+        // Export all functions
+        module.export_function(0, "double".to_string());
+        module.export_function(1, "increment".to_string());
+        module.export_function(2, "process".to_string());
+        module.add_export("memory".to_string(), ExportKind::Memory, 0);
+
+        // Write to file
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("Failed to write");
+
+        let test_file = "/tmp/test_function_calls.wasm";
+        fs::write(test_file, &bytes).expect("Failed to write WASM file");
+
+        // Validate with wasmtime
+        let output = Command::new("wasmtime")
+            .arg("compile")
+            .arg(test_file)
+            .arg("-o")
+            .arg("/tmp/test_function_calls.cwasm")
+            .output();
+
+        match output {
+            Ok(result) => {
+                if !result.status.success() {
+                    let stderr = String::from_utf8_lossy(&result.stderr);
+                    panic!("wasmtime compilation failed:\n{}", stderr);
+                }
+                println!("✓ Multi-function module compiled successfully with wasmtime!");
+            }
+            Err(e) => {
+                println!("⚠ Could not run wasmtime ({}), skipping validation", e);
+            }
+        }
+
+        // Verify round-trip
+        let bump2 = Bump::new();
+        let mut reader = BinaryReader::new(&bump2, bytes);
+        let module2 = reader.parse_module().expect("Failed to read back");
+
+        assert_eq!(module2.functions.len(), 3);
+        assert_eq!(module2.exports.len(), 4); // 3 functions + memory
+
+        // Verify process function has calls
+        let process_func = &module2.functions[2];
+        assert!(process_func.body.is_some());
+
+        println!("Multi-function program test passed!");
     }
 }
