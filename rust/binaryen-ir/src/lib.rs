@@ -1,12 +1,14 @@
 pub mod expression;
 pub mod module;
 pub mod ops;
+pub mod pass;
 pub mod validation;
 pub mod visitor;
 
 pub use expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
 pub use module::{Function, Module};
 pub use ops::{BinaryOp, UnaryOp};
+pub use pass::{Pass, PassRunner};
 pub use validation::Validator;
 pub use visitor::{ReadOnlyVisitor, Visitor};
 
