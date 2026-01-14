@@ -53,6 +53,10 @@ if(BUILD_RUST_COMPONENTS)
     test_rust_binary_io.cpp
   )
 
+  add_executable(pipeline_demo
+    pipeline_demo.cpp
+  )
+
   # Some build environments treat the global warning flags as C++-only
   # and will error when compiling .c files. Build this test as C++ to avoid
   # those flags and allow linking against the Rust cdylib. The header is
@@ -80,6 +84,7 @@ if(BUILD_RUST_COMPONENTS)
     target_link_libraries(test_rust_consumer_type_roundtrip PRIVATE binaryen_ffi_static)
     target_link_libraries(test_rust_consumer_ir PRIVATE binaryen_ffi_static)
     target_link_libraries(test_rust_binary_io PRIVATE binaryen_ffi_static)
+    target_link_libraries(pipeline_demo PRIVATE binaryen_ffi_static)
   elseif(RUST_LIBS)
     target_link_libraries(test_rust_consumer PRIVATE ${RUST_LIBS})
     target_link_libraries(test_rust_consumer_threaded PRIVATE ${RUST_LIBS})
@@ -94,6 +99,7 @@ if(BUILD_RUST_COMPONENTS)
     target_link_libraries(test_rust_consumer_type_roundtrip PRIVATE ${RUST_LIBS})
     target_link_libraries(test_rust_consumer_ir PRIVATE ${RUST_LIBS})
     target_link_libraries(test_rust_binary_io PRIVATE ${RUST_LIBS})
+    target_link_libraries(pipeline_demo PRIVATE ${RUST_LIBS})
   endif()
 
   # Link with dl and pthread if required; add Threads dependency to be safe.
@@ -104,6 +110,7 @@ if(BUILD_RUST_COMPONENTS)
   target_link_libraries(test_rust_consumer_type_roundtrip PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_ir PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_binary_io PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+  target_link_libraries(pipeline_demo PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
   target_link_libraries(test_rust_consumer_threaded PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
   target_link_libraries(test_rust_consumer_arena_threads PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
@@ -129,6 +136,7 @@ if(BUILD_RUST_COMPONENTS)
   add_test(NAME rust_ffi_smoke_type_roundtrip COMMAND $<TARGET_FILE:test_rust_consumer_type_roundtrip>)
   add_test(NAME rust_ffi_smoke_ir COMMAND $<TARGET_FILE:test_rust_consumer_ir>)
   add_test(NAME rust_binary_io COMMAND $<TARGET_FILE:test_rust_binary_io>)
+  add_test(NAME rust_pipeline_demo COMMAND $<TARGET_FILE:pipeline_demo>)
   add_test(NAME rust_ffi_smoke_threaded COMMAND $<TARGET_FILE:test_rust_consumer_threaded>)
   add_test(NAME rust_ffi_smoke_arena_threads COMMAND $<TARGET_FILE:test_rust_consumer_arena_threads>)
   add_test(NAME rust_ffi_smoke_arena_misuse COMMAND $<TARGET_FILE:test_rust_consumer_arena_misuse>)

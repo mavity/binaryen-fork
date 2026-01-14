@@ -120,22 +120,20 @@ impl<'a> BinaryReader<'a> {
             let func_type = type_section
                 .get(type_idx as usize)
                 .cloned()
-                .unwrap_or((Type::NONE, Type::NONE));
+                .unwrap_or((vec![], vec![]));
 
-            let func = Function::new(
-                format!("func_{}", i),
-                func_type.0,
-                func_type.1,
-                locals,
-                body,
-            );
+            // For now, use first param/result as Type (simplified for single params)
+            let params = func_type.0.first().copied().unwrap_or(Type::NONE);
+            let results = func_type.1.first().copied().unwrap_or(Type::NONE);
+
+            let func = Function::new(format!("func_{}", i), params, results, locals, body);
             module.add_function(func);
         }
 
         Ok(module)
     }
 
-    fn parse_type_section(&mut self) -> Result<Vec<(Type, Type)>> {
+    fn parse_type_section(&mut self) -> Result<Vec<(Vec<Type>, Vec<Type>)>> {
         let count = self.read_leb128_u32()?;
         let mut types = Vec::new();
 
@@ -147,31 +145,16 @@ impl<'a> BinaryReader<'a> {
             }
 
             let param_count = self.read_leb128_u32()?;
-            let params = if param_count == 0 {
-                Type::NONE
-            } else if param_count == 1 {
-                self.read_value_type()?
-            } else {
-                // Multi-value params - for now just read and use first
-                let first = self.read_value_type()?;
-                for _ in 1..param_count {
-                    self.read_value_type()?;
-                }
-                first
-            };
+            let mut params = Vec::new();
+            for _ in 0..param_count {
+                params.push(self.read_value_type()?);
+            }
 
             let result_count = self.read_leb128_u32()?;
-            let results = if result_count == 0 {
-                Type::NONE
-            } else if result_count == 1 {
-                self.read_value_type()?
-            } else {
-                let first = self.read_value_type()?;
-                for _ in 1..result_count {
-                    self.read_value_type()?;
-                }
-                first
-            };
+            let mut results = Vec::new();
+            for _ in 0..result_count {
+                results.push(self.read_value_type()?);
+            }
 
             types.push((params, results));
         }

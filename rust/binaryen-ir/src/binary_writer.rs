@@ -35,11 +35,23 @@ impl BinaryWriter {
         self.write_u32(1)?;
 
         // Collect function types
-        let mut type_map: Vec<(Type, Type)> = Vec::new();
+        let mut type_map: Vec<(Vec<Type>, Vec<Type>)> = Vec::new();
         let mut func_type_indices: Vec<usize> = Vec::new();
 
         for func in &module.functions {
-            let sig = (func.params, func.results);
+            // Convert single Type to Vec<Type> for type section
+            let params_vec = if func.params == Type::NONE {
+                vec![]
+            } else {
+                vec![func.params]
+            };
+            let results_vec = if func.results == Type::NONE {
+                vec![]
+            } else {
+                vec![func.results]
+            };
+
+            let sig = (params_vec, results_vec);
             let idx = if let Some(pos) = type_map.iter().position(|t| *t == sig) {
                 pos
             } else {
@@ -68,7 +80,7 @@ impl BinaryWriter {
         Ok(self.buffer.clone())
     }
 
-    fn write_type_section(&mut self, types: &[(Type, Type)]) -> Result<()> {
+    fn write_type_section(&mut self, types: &[(Vec<Type>, Vec<Type>)]) -> Result<()> {
         let mut section_buf = Vec::new();
 
         // Count
@@ -79,19 +91,15 @@ impl BinaryWriter {
             section_buf.push(0x60);
 
             // params
-            if *params == Type::NONE {
-                Self::write_leb128_u32(&mut section_buf, 0)?;
-            } else {
-                Self::write_leb128_u32(&mut section_buf, 1)?;
-                Self::write_value_type(&mut section_buf, *params)?;
+            Self::write_leb128_u32(&mut section_buf, params.len() as u32)?;
+            for param_type in params {
+                Self::write_value_type(&mut section_buf, *param_type)?;
             }
 
             // results
-            if *results == Type::NONE {
-                Self::write_leb128_u32(&mut section_buf, 0)?;
-            } else {
-                Self::write_leb128_u32(&mut section_buf, 1)?;
-                Self::write_value_type(&mut section_buf, *results)?;
+            Self::write_leb128_u32(&mut section_buf, results.len() as u32)?;
+            for result_type in results {
+                Self::write_value_type(&mut section_buf, *result_type)?;
             }
         }
 
