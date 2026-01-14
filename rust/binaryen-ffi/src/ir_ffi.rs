@@ -1,5 +1,8 @@
 use binaryen_core::{Literal, Type};
-use binaryen_ir::{BinaryOp, Expression, ExpressionKind, Function, IrBuilder, Module, UnaryOp};
+use binaryen_ir::{
+    BinaryOp, BinaryReader, BinaryWriter, Expression, ExpressionKind, Function, IrBuilder, Module,
+    Pass, PassRunner, UnaryOp,
+};
 use bumpalo::Bump;
 use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
@@ -195,4 +198,99 @@ pub unsafe extern "C" fn BinaryenRustLocalSet(
 
     let expr = builder.local_set(index, value_ref);
     expr as *mut Expression as *mut c_void
+}
+
+// Binary I/O functions
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleReadBinary(
+    bytes: *const u8,
+    len: usize,
+) -> BinaryenRustModuleRef {
+    let data = slice::from_raw_parts(bytes, len).to_vec();
+    let bump = Box::new(Bump::new());
+
+    // Parse the module
+    let bump_ref: &'static Bump = std::mem::transmute(bump.as_ref());
+    let mut reader = BinaryReader::new(bump_ref, data);
+
+    match reader.parse_module() {
+        Ok(module) => {
+            let module: Module<'static> = std::mem::transmute(module);
+            let wrapper = Box::new(WrappedModule { bump, module });
+            Box::into_raw(wrapper)
+        }
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleWriteBinary(
+    module: BinaryenRustModuleRef,
+    out_ptr: *mut *mut u8,
+    out_len: *mut usize,
+) -> i32 {
+    if module.is_null() || out_ptr.is_null() || out_len.is_null() {
+        return -1;
+    }
+
+    let module_ref = &(*module).module;
+    let mut writer = BinaryWriter::new();
+
+    match writer.write_module(module_ref) {
+        Ok(bytes) => {
+            let len = bytes.len();
+            let ptr = Box::into_raw(bytes.into_boxed_slice()) as *mut u8;
+            *out_ptr = ptr;
+            *out_len = len;
+            0 // Success
+        }
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleFreeBinary(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() && len > 0 {
+        let _ = Box::from_raw(slice::from_raw_parts_mut(ptr, len));
+    }
+}
+
+// Pass management
+
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleRunPasses(
+    module: BinaryenRustModuleRef,
+    pass_names: *const *const c_char,
+    num_passes: usize,
+) -> i32 {
+    if module.is_null() {
+        return -1;
+    }
+
+    let module_ref = &mut (*module).module;
+    let mut runner = PassRunner::new();
+
+    // Parse pass names
+    for i in 0..num_passes {
+        let name_ptr = *pass_names.add(i);
+        if name_ptr.is_null() {
+            continue;
+        }
+
+        let name = CStr::from_ptr(name_ptr).to_str().unwrap_or("");
+
+        match name {
+            "simplify-identity" => {
+                runner.add(binaryen_ir::passes::simplify_identity::SimplifyIdentity);
+            }
+            "dce" => {
+                runner.add(binaryen_ir::passes::dce::DCE);
+            }
+            _ => {} // Unknown pass, skip
+        }
+    }
+
+    runner.run(module_ref);
+    0 // Success
 }
