@@ -282,4 +282,228 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_export_validation() {
+        use crate::module::{Export, ExportKind, Global, MemoryLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Setup a basic valid module components
+        let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+
+        let global_init = builder.const_(Literal::I32(0));
+        let global = Global {
+            name: "g0".to_string(),
+            type_: Type::I32,
+            mutable: false,
+            init: global_init,
+        };
+
+        let memory = MemoryLimits {
+            initial: 1,
+            maximum: None,
+        };
+
+        // 1. Valid exports
+        {
+            // func needs to be cloned or recreated because Function doesn't implement Clone
+            let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+
+            let module = Module {
+                functions: vec![func_valid],  // f0 is index 0
+                globals: vec![global],        // g0 is index 0
+                memory: Some(memory.clone()), // memory is index 0
+                exports: vec![
+                    Export {
+                        name: "exp_func".to_string(),
+                        kind: ExportKind::Function,
+                        index: 0,
+                    },
+                    Export {
+                        name: "exp_glob".to_string(),
+                        kind: ExportKind::Global,
+                        index: 0,
+                    },
+                    Export {
+                        name: "exp_mem".to_string(),
+                        kind: ExportKind::Memory,
+                        index: 0,
+                    },
+                ],
+            };
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(valid, "Valid exports failed: {:?}", errors);
+        }
+
+        // 2. Duplicate export name
+        {
+            let module = Module {
+                functions: vec![],
+                globals: vec![],
+                memory: None,
+                exports: vec![
+                    Export {
+                        name: "same".to_string(),
+                        kind: ExportKind::Function,
+                        index: 0,
+                    },
+                    Export {
+                        name: "same".to_string(),
+                        kind: ExportKind::Function,
+                        index: 0,
+                    },
+                ],
+            };
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid);
+            assert!(errors.iter().any(|e| e.contains("Duplicate export name")));
+        }
+
+        // 3. Function OOB
+        {
+            let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+            let module = Module {
+                functions: vec![func_valid],
+                globals: vec![],
+                memory: None,
+                exports: vec![Export {
+                    name: "f1".to_string(),
+                    kind: ExportKind::Function,
+                    index: 1,
+                }],
+            };
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid);
+            assert!(errors
+                .iter()
+                .any(|e| e.contains("Exported function index 1 out of bounds")));
+        }
+
+        // 4. Global OOB
+        {
+            let module = Module {
+                functions: vec![],
+                globals: vec![],
+                memory: None,
+                exports: vec![Export {
+                    name: "g0".to_string(),
+                    kind: ExportKind::Global,
+                    index: 0,
+                }],
+            };
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid);
+            assert!(errors
+                .iter()
+                .any(|e| e.contains("Exported global index 0 out of bounds")));
+        }
+
+        // 5. Memory OOB / No Memory
+        {
+            let module = Module {
+                functions: vec![],
+                globals: vec![],
+                memory: None,
+                exports: vec![Export {
+                    name: "m0".to_string(),
+                    kind: ExportKind::Memory,
+                    index: 0,
+                }],
+            };
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid);
+            assert!(errors
+                .iter()
+                .any(|e| e.contains("Exported memory but no memory exists")));
+        }
+    }
+
+    #[test]
+    fn test_exports_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Export, ExportKind, Global, MemoryLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+        let global = Global {
+            name: "g0".to_string(),
+            type_: Type::I32,
+            mutable: false,
+            init: builder.const_(Literal::I32(123)),
+        };
+        let memory = MemoryLimits {
+            initial: 1,
+            maximum: None,
+        };
+
+        let module = Module {
+            functions: vec![func],
+            globals: vec![global],
+            memory: Some(memory),
+            exports: vec![
+                Export {
+                    name: "test_func".to_string(),
+                    kind: ExportKind::Function,
+                    index: 0,
+                },
+                Export {
+                    name: "test_glob".to_string(),
+                    kind: ExportKind::Global,
+                    index: 0,
+                },
+                Export {
+                    name: "test_mem".to_string(),
+                    kind: ExportKind::Memory,
+                    index: 0,
+                },
+            ],
+        };
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("write failed");
+
+        // Read
+        let read_bump = Bump::new();
+        let mut reader = BinaryReader::new(&read_bump, bytes);
+        let read_module = reader.parse_module().expect("parse failed");
+
+        // Verify
+        assert_eq!(read_module.exports.len(), 3);
+
+        let func_exp = read_module
+            .exports
+            .iter()
+            .find(|e| e.name == "test_func")
+            .unwrap();
+        assert_eq!(func_exp.kind, ExportKind::Function);
+        assert_eq!(func_exp.index, 0);
+
+        let glob_exp = read_module
+            .exports
+            .iter()
+            .find(|e| e.name == "test_glob")
+            .unwrap();
+        assert_eq!(glob_exp.kind, ExportKind::Global);
+        assert_eq!(glob_exp.index, 0);
+
+        let mem_exp = read_module
+            .exports
+            .iter()
+            .find(|e| e.name == "test_mem")
+            .unwrap();
+        assert_eq!(mem_exp.kind, ExportKind::Memory);
+        assert_eq!(mem_exp.index, 0);
+    }
 }

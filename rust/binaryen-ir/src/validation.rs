@@ -1,7 +1,8 @@
 use crate::expression::{Expression, ExpressionKind};
-use crate::module::{Function, Module};
+use crate::module::{ExportKind, Function, Module};
 use crate::visitor::ReadOnlyVisitor;
 use binaryen_core::Type;
+use std::collections::HashSet;
 
 pub struct Validator<'a, 'm> {
     module: &'m Module<'a>,
@@ -42,6 +43,47 @@ impl<'a, 'm> Validator<'a, 'm> {
                 }
             }
         }
+
+        // Validate exports
+        let mut export_names = HashSet::new();
+        for export in &self.module.exports {
+            if !export_names.insert(&export.name) {
+                self.fail(&format!("Duplicate export name: {}", export.name));
+            }
+
+            match export.kind {
+                ExportKind::Function => {
+                    if export.index as usize >= self.module.functions.len() {
+                        self.fail(&format!(
+                            "Exported function index {} out of bounds",
+                            export.index
+                        ));
+                    }
+                }
+                ExportKind::Global => {
+                    if export.index as usize >= self.module.globals.len() {
+                        self.fail(&format!(
+                            "Exported global index {} out of bounds",
+                            export.index
+                        ));
+                    }
+                }
+                ExportKind::Memory => {
+                    if self.module.memory.is_none() {
+                        self.fail("Exported memory but no memory exists");
+                    } else if export.index != 0 {
+                        self.fail(&format!(
+                            "Exported memory index {} out of bounds (only 0 allowed)",
+                            export.index
+                        ));
+                    }
+                }
+                ExportKind::Table => {
+                    self.fail("Tables not supported yet");
+                }
+            }
+        }
+
         (self.valid, self.errors)
     }
 
