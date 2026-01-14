@@ -376,7 +376,11 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             | ExpressionKind::If { .. }
             | ExpressionKind::Loop { .. }
             | ExpressionKind::Break { .. }
-            | ExpressionKind::Nop => {
+            | ExpressionKind::Nop
+            | ExpressionKind::Switch { .. }
+            | ExpressionKind::CallIndirect { .. }
+            | ExpressionKind::MemoryGrow { .. }
+            | ExpressionKind::MemorySize => {
                 // These expression kinds don't require special validation yet
             }
         }

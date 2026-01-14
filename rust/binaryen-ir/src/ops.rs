@@ -23,7 +23,41 @@ pub enum UnaryOp {
     TruncFloat64,
     NearestFloat64,
     SqrtFloat64,
-    // Extensions omitted
+    // Conversions (Integer <-> Float)
+    ConvertSInt32ToFloat32,
+    ConvertUInt32ToFloat32,
+    ConvertSInt64ToFloat32,
+    ConvertUInt64ToFloat32,
+    ConvertSInt32ToFloat64,
+    ConvertUInt32ToFloat64,
+    ConvertSInt64ToFloat64,
+    ConvertUInt64ToFloat64,
+    TruncSFloat32ToInt32,
+    TruncUFloat32ToInt32,
+    TruncSFloat64ToInt32,
+    TruncUFloat64ToInt32,
+    TruncSFloat32ToInt64,
+    TruncUFloat32ToInt64,
+    TruncSFloat64ToInt64,
+    TruncUFloat64ToInt64,
+    // Conversions (Integer <-> Integer)
+    WrapInt64,
+    ExtendSInt32,
+    ExtendUInt32,
+    // Conversions (Float <-> Float)
+    PromoteFloat32,
+    DemoteFloat64,
+    // Reinterprets
+    ReinterpretFloat32,
+    ReinterpretFloat64,
+    ReinterpretInt32,
+    ReinterpretInt64,
+    // Sign Extensions (Post-MVP but standard)
+    ExtendS8Int32,
+    ExtendS16Int32,
+    ExtendS8Int64,
+    ExtendS16Int64,
+    ExtendS32Int64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

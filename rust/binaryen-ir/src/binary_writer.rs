@@ -1,6 +1,6 @@
 use crate::expression::{Expression, ExpressionKind};
 use crate::module::{Function, Module};
-use crate::ops::BinaryOp;
+use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
 use std::io;
 
@@ -519,18 +519,154 @@ impl BinaryWriter {
                 Self::write_expression(buf, right, label_stack, func_map)?;
 
                 let opcode = match op {
+                    // i32 operations
                     BinaryOp::AddInt32 => 0x6A,
                     BinaryOp::SubInt32 => 0x6B,
                     BinaryOp::MulInt32 => 0x6C,
+                    BinaryOp::DivSInt32 => 0x6D,
+                    BinaryOp::DivUInt32 => 0x6E,
+                    BinaryOp::RemSInt32 => 0x6F,
+                    BinaryOp::RemUInt32 => 0x70,
+                    BinaryOp::AndInt32 => 0x71,
+                    BinaryOp::OrInt32 => 0x72,
+                    BinaryOp::XorInt32 => 0x73,
+                    BinaryOp::ShlInt32 => 0x74,
+                    BinaryOp::ShrSInt32 => 0x75,
+                    BinaryOp::ShrUInt32 => 0x76,
+                    BinaryOp::RotLInt32 => 0x77,
+                    BinaryOp::RotRInt32 => 0x78,
+                    BinaryOp::EqInt32 => 0x46,
+                    BinaryOp::NeInt32 => 0x47,
+                    BinaryOp::LtSInt32 => 0x48,
+                    BinaryOp::LtUInt32 => 0x49,
+                    BinaryOp::GtSInt32 => 0x4A,
+                    BinaryOp::GtUInt32 => 0x4B,
+                    BinaryOp::LeSInt32 => 0x4C,
+                    BinaryOp::LeUInt32 => 0x4D,
+                    BinaryOp::GeSInt32 => 0x4E,
+                    BinaryOp::GeUInt32 => 0x4F,
+                    // i64 operations
                     BinaryOp::AddInt64 => 0x7C,
                     BinaryOp::SubInt64 => 0x7D,
                     BinaryOp::MulInt64 => 0x7E,
-                    _ => {
-                        return Err(WriteError::UnsupportedFeature(format!(
-                            "Binary op: {:?}",
-                            op
-                        )))
-                    }
+                    BinaryOp::DivSInt64 => 0x7F,
+                    BinaryOp::DivUInt64 => 0x80,
+                    BinaryOp::RemSInt64 => 0x81,
+                    BinaryOp::RemUInt64 => 0x82,
+                    BinaryOp::AndInt64 => 0x83,
+                    BinaryOp::OrInt64 => 0x84,
+                    BinaryOp::XorInt64 => 0x85,
+                    BinaryOp::ShlInt64 => 0x86,
+                    BinaryOp::ShrSInt64 => 0x87,
+                    BinaryOp::ShrUInt64 => 0x88,
+                    BinaryOp::RotLInt64 => 0x89,
+                    BinaryOp::RotRInt64 => 0x8A,
+                    BinaryOp::EqInt64 => 0x51,
+                    BinaryOp::NeInt64 => 0x52,
+                    BinaryOp::LtSInt64 => 0x53,
+                    BinaryOp::LtUInt64 => 0x54,
+                    BinaryOp::GtSInt64 => 0x55,
+                    BinaryOp::GtUInt64 => 0x56,
+                    BinaryOp::LeSInt64 => 0x57,
+                    BinaryOp::LeUInt64 => 0x58,
+                    BinaryOp::GeSInt64 => 0x59,
+                    BinaryOp::GeUInt64 => 0x5A,
+                    // f32 operations
+                    BinaryOp::AddFloat32 => 0x92,
+                    BinaryOp::SubFloat32 => 0x93,
+                    BinaryOp::MulFloat32 => 0x94,
+                    BinaryOp::DivFloat32 => 0x95,
+                    BinaryOp::MinFloat32 => 0x96,
+                    BinaryOp::MaxFloat32 => 0x97,
+                    BinaryOp::CopySignFloat32 => 0x98,
+                    BinaryOp::EqFloat32 => 0x5B,
+                    BinaryOp::NeFloat32 => 0x5C,
+                    BinaryOp::LtFloat32 => 0x5D,
+                    BinaryOp::GtFloat32 => 0x5E,
+                    BinaryOp::LeFloat32 => 0x5F,
+                    BinaryOp::GeFloat32 => 0x60,
+                    // f64 operations
+                    BinaryOp::AddFloat64 => 0xA0,
+                    BinaryOp::SubFloat64 => 0xA1,
+                    BinaryOp::MulFloat64 => 0xA2,
+                    BinaryOp::DivFloat64 => 0xA3,
+                    BinaryOp::MinFloat64 => 0xA4,
+                    BinaryOp::MaxFloat64 => 0xA5,
+                    BinaryOp::CopySignFloat64 => 0xA6,
+                    BinaryOp::EqFloat64 => 0x61,
+                    BinaryOp::NeFloat64 => 0x62,
+                    BinaryOp::LtFloat64 => 0x63,
+                    BinaryOp::GtFloat64 => 0x64,
+                    BinaryOp::LeFloat64 => 0x65,
+                    BinaryOp::GeFloat64 => 0x66,
+                };
+                buf.push(opcode);
+            }
+            ExpressionKind::Unary { op, value } => {
+                Self::write_expression(buf, value, label_stack, func_map)?;
+
+                let opcode = match op {
+                    // i32 unary operations
+                    UnaryOp::ClzInt32 => 0x67,
+                    UnaryOp::CtzInt32 => 0x68,
+                    UnaryOp::PopcntInt32 => 0x69,
+                    UnaryOp::EqZInt32 => 0x45,
+                    // i64 unary operations
+                    UnaryOp::ClzInt64 => 0x79,
+                    UnaryOp::CtzInt64 => 0x7A,
+                    UnaryOp::PopcntInt64 => 0x7B,
+                    UnaryOp::EqZInt64 => 0x50,
+                    // f32 unary operations
+                    UnaryOp::AbsFloat32 => 0x8B,
+                    UnaryOp::NegFloat32 => 0x8C,
+                    UnaryOp::CeilFloat32 => 0x8D,
+                    UnaryOp::FloorFloat32 => 0x8E,
+                    UnaryOp::TruncFloat32 => 0x8F,
+                    UnaryOp::NearestFloat32 => 0x90,
+                    UnaryOp::SqrtFloat32 => 0x91,
+                    // f64 unary operations
+                    UnaryOp::AbsFloat64 => 0x99,
+                    UnaryOp::NegFloat64 => 0x9A,
+                    UnaryOp::CeilFloat64 => 0x9B,
+                    UnaryOp::FloorFloat64 => 0x9C,
+                    UnaryOp::TruncFloat64 => 0x9D,
+                    UnaryOp::NearestFloat64 => 0x9E,
+                    UnaryOp::SqrtFloat64 => 0x9F,
+                    // Conversions (Integer <-> Float)
+                    UnaryOp::ConvertSInt32ToFloat32 => 0xB2,
+                    UnaryOp::ConvertUInt32ToFloat32 => 0xB3,
+                    UnaryOp::ConvertSInt64ToFloat32 => 0xB4,
+                    UnaryOp::ConvertUInt64ToFloat32 => 0xB5,
+                    UnaryOp::ConvertSInt32ToFloat64 => 0xB7,
+                    UnaryOp::ConvertUInt32ToFloat64 => 0xB8,
+                    UnaryOp::ConvertSInt64ToFloat64 => 0xB9,
+                    UnaryOp::ConvertUInt64ToFloat64 => 0xBA,
+                    UnaryOp::TruncSFloat32ToInt32 => 0xA8,
+                    UnaryOp::TruncUFloat32ToInt32 => 0xA9,
+                    UnaryOp::TruncSFloat64ToInt32 => 0xAA,
+                    UnaryOp::TruncUFloat64ToInt32 => 0xAB,
+                    UnaryOp::TruncSFloat32ToInt64 => 0xAE,
+                    UnaryOp::TruncUFloat32ToInt64 => 0xAF,
+                    UnaryOp::TruncSFloat64ToInt64 => 0xB0,
+                    UnaryOp::TruncUFloat64ToInt64 => 0xB1,
+                    // Conversions (Integer <-> Integer)
+                    UnaryOp::WrapInt64 => 0xA7,
+                    UnaryOp::ExtendSInt32 => 0xAC,
+                    UnaryOp::ExtendUInt32 => 0xAD,
+                    // Conversions (Float <-> Float)
+                    UnaryOp::PromoteFloat32 => 0xBB,
+                    UnaryOp::DemoteFloat64 => 0xB6,
+                    // Reinterprets
+                    UnaryOp::ReinterpretFloat32 => 0xBC,
+                    UnaryOp::ReinterpretFloat64 => 0xBD,
+                    UnaryOp::ReinterpretInt32 => 0xBE,
+                    UnaryOp::ReinterpretInt64 => 0xBF,
+                    // Sign Extensions (Post-MVP but standard)
+                    UnaryOp::ExtendS8Int32 => 0xC0,
+                    UnaryOp::ExtendS16Int32 => 0xC1,
+                    UnaryOp::ExtendS8Int64 => 0xC2,
+                    UnaryOp::ExtendS16Int64 => 0xC3,
+                    UnaryOp::ExtendS32Int64 => 0xC4,
                 };
                 buf.push(opcode);
             }
@@ -650,14 +786,25 @@ impl BinaryWriter {
             } => {
                 Self::write_expression(buf, ptr, label_stack, func_map)?;
 
-                // Opcode selection based on size and signedness
-                let opcode = match (bytes, signed) {
-                    (4, _) => 0x28,     // i32.load
-                    (8, _) => 0x29,     // i64.load
-                    (1, false) => 0x2D, // i32.load8_u
-                    (1, true) => 0x2C,  // i32.load8_s
-                    (2, false) => 0x2F, // i32.load16_u
-                    (2, true) => 0x2E,  // i32.load16_s
+                // Opcode selection based on type, size and signedness
+                let opcode = match (expr.type_, *bytes, *signed) {
+                    // Float loads
+                    (Type::F32, 4, _) => 0x2A, // f32.load
+                    (Type::F64, 8, _) => 0x2B, // f64.load
+                    // i32 loads
+                    (Type::I32, 4, _) => 0x28,     // i32.load
+                    (Type::I32, 1, false) => 0x2D, // i32.load8_u
+                    (Type::I32, 1, true) => 0x2C,  // i32.load8_s
+                    (Type::I32, 2, false) => 0x2F, // i32.load16_u
+                    (Type::I32, 2, true) => 0x2E,  // i32.load16_s
+                    // i64 loads
+                    (Type::I64, 8, _) => 0x29,     // i64.load
+                    (Type::I64, 1, false) => 0x31, // i64.load8_u
+                    (Type::I64, 1, true) => 0x30,  // i64.load8_s
+                    (Type::I64, 2, false) => 0x33, // i64.load16_u
+                    (Type::I64, 2, true) => 0x32,  // i64.load16_s
+                    (Type::I64, 4, false) => 0x35, // i64.load32_u
+                    (Type::I64, 4, true) => 0x34,  // i64.load32_s
                     _ => return Err(WriteError::InvalidExpression),
                 };
 
@@ -675,12 +822,20 @@ impl BinaryWriter {
                 Self::write_expression(buf, ptr, label_stack, func_map)?;
                 Self::write_expression(buf, value, label_stack, func_map)?;
 
-                // Opcode selection based on size
-                let opcode = match bytes {
-                    4 => 0x36, // i32.store
-                    8 => 0x37, // i64.store
-                    1 => 0x3A, // i32.store8
-                    2 => 0x3B, // i32.store16
+                // Opcode selection based on value type and size
+                let opcode = match (value.type_, *bytes) {
+                    // Float stores
+                    (Type::F32, 4) => 0x38, // f32.store
+                    (Type::F64, 8) => 0x39, // f64.store
+                    // i32 stores
+                    (Type::I32, 4) => 0x36, // i32.store
+                    (Type::I32, 1) => 0x3A, // i32.store8
+                    (Type::I32, 2) => 0x3B, // i32.store16
+                    // i64 stores
+                    (Type::I64, 8) => 0x37, // i64.store
+                    (Type::I64, 1) => 0x3C, // i64.store8
+                    (Type::I64, 2) => 0x3D, // i64.store16
+                    (Type::I64, 4) => 0x3E, // i64.store32
                     _ => return Err(WriteError::InvalidExpression),
                 };
 
@@ -714,11 +869,77 @@ impl BinaryWriter {
             ExpressionKind::Nop => {
                 buf.push(0x01); // nop
             }
-            _ => {
-                return Err(WriteError::UnsupportedFeature(format!(
-                    "Expression: {:?}",
-                    expr.kind
-                )));
+            ExpressionKind::Switch {
+                names,
+                default,
+                condition,
+                value,
+            } => {
+                // Write value if present
+                if let Some(val) = value {
+                    Self::write_expression(buf, val, label_stack, func_map)?;
+                }
+
+                // Write condition (index)
+                Self::write_expression(buf, condition, label_stack, func_map)?;
+
+                // br_table opcode
+                buf.push(0x0E);
+
+                // Write target count (excluding default)
+                Self::write_leb128_u32(buf, names.len() as u32)?;
+
+                // Write label indices for each target
+                for name in names.iter() {
+                    let depth = Self::find_label_depth(label_stack, name)?;
+                    Self::write_leb128_u32(buf, depth)?;
+                }
+
+                // Write default label index
+                let default_depth = Self::find_label_depth(label_stack, default)?;
+                Self::write_leb128_u32(buf, default_depth)?;
+            }
+            ExpressionKind::CallIndirect {
+                target,
+                operands,
+                type_: _signature_type,
+                ..
+            } => {
+                // Write operands (arguments)
+                for operand in operands.iter() {
+                    Self::write_expression(buf, operand, label_stack, func_map)?;
+                }
+
+                // Write target (function index on stack)
+                Self::write_expression(buf, target, label_stack, func_map)?;
+
+                // call_indirect opcode
+                buf.push(0x11);
+
+                // Type index - LIMITATION: Hardcoded to 0 as placeholder
+                // TODO: Proper type index management requires:
+                // 1. Registering signature_type in the module's type section
+                // 2. Looking up or creating a type index for signature_type
+                // 3. Using that index here instead of 0
+                // See 1.3.1-opcode-debt.md "Edge Cases to Watch" section
+                Self::write_leb128_u32(buf, 0)?;
+
+                // Table index (always 0 in MVP)
+                Self::write_leb128_u32(buf, 0)?;
+            }
+            ExpressionKind::MemorySize => {
+                // memory.size opcode
+                buf.push(0x3F);
+                // Memory index (always 0 in MVP)
+                buf.push(0x00);
+            }
+            ExpressionKind::MemoryGrow { delta } => {
+                Self::write_expression(buf, delta, label_stack, func_map)?;
+
+                // memory.grow opcode
+                buf.push(0x40);
+                // Memory index (always 0 in MVP)
+                buf.push(0x00);
             }
         }
         Ok(())

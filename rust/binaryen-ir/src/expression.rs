@@ -91,6 +91,22 @@ pub enum ExpressionKind<'a> {
         value: ExprRef<'a>, // Value to store
     },
     Nop,
+    Switch {
+        names: BumpVec<'a, &'a str>, // List of target labels
+        default: &'a str,            // Default label
+        condition: ExprRef<'a>,      // Index
+        value: Option<ExprRef<'a>>,  // Value passing (nullable)
+    },
+    CallIndirect {
+        table: &'a str,
+        target: ExprRef<'a>, // Function index
+        operands: BumpVec<'a, ExprRef<'a>>,
+        type_: Type, // Signature
+    },
+    MemoryGrow {
+        delta: ExprRef<'a>,
+    },
+    MemorySize,
 }
 
 impl<'a> Expression<'a> {

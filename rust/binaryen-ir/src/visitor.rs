@@ -81,11 +81,31 @@ pub trait Visitor<'a> {
                 self.visit(ptr);
                 self.visit(value);
             }
+            ExpressionKind::Switch {
+                condition, value, ..
+            } => {
+                self.visit(condition);
+                if let Some(val) = value {
+                    self.visit(val);
+                }
+            }
+            ExpressionKind::CallIndirect {
+                target, operands, ..
+            } => {
+                self.visit(target);
+                for operand in operands.iter_mut() {
+                    self.visit(operand);
+                }
+            }
+            ExpressionKind::MemoryGrow { delta } => {
+                self.visit(delta);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
             | ExpressionKind::LocalGet { .. }
-            | ExpressionKind::GlobalGet { .. } => {}
+            | ExpressionKind::GlobalGet { .. }
+            | ExpressionKind::MemorySize => {}
         }
     }
 }
@@ -171,11 +191,31 @@ pub trait ReadOnlyVisitor<'a> {
                 self.visit(ptr);
                 self.visit(value);
             }
+            ExpressionKind::Switch {
+                condition, value, ..
+            } => {
+                self.visit(condition);
+                if let Some(val) = value {
+                    self.visit(val);
+                }
+            }
+            ExpressionKind::CallIndirect {
+                target, operands, ..
+            } => {
+                self.visit(target);
+                for operand in operands.iter() {
+                    self.visit(operand);
+                }
+            }
+            ExpressionKind::MemoryGrow { delta } => {
+                self.visit(delta);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
             | ExpressionKind::LocalGet { .. }
-            | ExpressionKind::GlobalGet { .. } => {}
+            | ExpressionKind::GlobalGet { .. }
+            | ExpressionKind::MemorySize => {}
         }
     }
 }

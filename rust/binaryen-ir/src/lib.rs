@@ -5033,7 +5033,7 @@ mod tests {
 
         // Sum 10 locals
         let mut list = BumpVec::new_in(&bump);
-        
+
         // Initialize locals
         for i in 0..10 {
             let set = builder.local_set(i, builder.const_(Literal::I32(i as i32)));
@@ -5084,13 +5084,13 @@ mod tests {
         let a = builder.const_(Literal::I32(10));
         let b = builder.const_(Literal::I32(20));
         let add = builder.binary(BinaryOp::AddInt32, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I32(3));
         let mul = builder.binary(BinaryOp::MulInt32, add, c, Type::I32);
-        
+
         let d = builder.const_(Literal::I32(2));
         let div = builder.binary(BinaryOp::DivSInt32, mul, d, Type::I32);
-        
+
         let e = builder.const_(Literal::I32(1));
         let body = builder.binary(BinaryOp::SubInt32, div, e, Type::I32);
 
@@ -5123,11 +5123,11 @@ mod tests {
         let a = builder.const_(Literal::I32(100));
         let b = builder.const_(Literal::I32(3));
         let div_s = builder.binary(BinaryOp::DivSInt32, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I32(100));
         let d = builder.const_(Literal::I32(3));
         let div_u = builder.binary(BinaryOp::DivUInt32, c, d, Type::I32);
-        
+
         let body = builder.binary(BinaryOp::AddInt32, div_s, div_u, Type::I32);
 
         module.add_function(Function::new(
@@ -5159,11 +5159,11 @@ mod tests {
         let a = builder.const_(Literal::I32(17));
         let b = builder.const_(Literal::I32(5));
         let rem_s = builder.binary(BinaryOp::RemSInt32, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I32(17));
         let d = builder.const_(Literal::I32(5));
         let rem_u = builder.binary(BinaryOp::RemUInt32, c, d, Type::I32);
-        
+
         let body = builder.binary(BinaryOp::MulInt32, rem_s, rem_u, Type::I32);
 
         module.add_function(Function::new(
@@ -5195,11 +5195,11 @@ mod tests {
         let a = builder.const_(Literal::I32(0xFF00));
         let b = builder.const_(Literal::I32(0x0FF0));
         let and = builder.binary(BinaryOp::AndInt32, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I32(0xFF00));
         let d = builder.const_(Literal::I32(0x0FF0));
         let or = builder.binary(BinaryOp::OrInt32, c, d, Type::I32);
-        
+
         let e = builder.const_(Literal::I32(0xFF00));
         let f = builder.const_(Literal::I32(0x0FF0));
         let xor = builder.binary(BinaryOp::XorInt32, e, f, Type::I32);
@@ -5236,11 +5236,11 @@ mod tests {
         let value = builder.const_(Literal::I32(0x12345678));
         let amt = builder.const_(Literal::I32(4));
         let shl = builder.binary(BinaryOp::ShlInt32, value, amt, Type::I32);
-        
+
         let value2 = builder.const_(Literal::I32(0x12345678));
         let amt2 = builder.const_(Literal::I32(4));
         let shr_s = builder.binary(BinaryOp::ShrSInt32, value2, amt2, Type::I32);
-        
+
         let value3 = builder.const_(Literal::I32(0x12345678));
         let amt3 = builder.const_(Literal::I32(4));
         let shr_u = builder.binary(BinaryOp::ShrUInt32, value3, amt3, Type::I32);
@@ -5277,7 +5277,7 @@ mod tests {
         let value = builder.const_(Literal::I32(0xABCD1234u32 as i32));
         let amt = builder.const_(Literal::I32(8));
         let rotl = builder.binary(BinaryOp::RotLInt32, value, amt, Type::I32);
-        
+
         let value2 = builder.const_(Literal::I32(0xABCD1234u32 as i32));
         let amt2 = builder.const_(Literal::I32(8));
         let rotr = builder.binary(BinaryOp::RotRInt32, value2, amt2, Type::I32);
@@ -5313,15 +5313,15 @@ mod tests {
         let a = builder.const_(Literal::I32(10));
         let b = builder.const_(Literal::I32(20));
         let eq = builder.binary(BinaryOp::EqInt32, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I32(10));
         let d = builder.const_(Literal::I32(20));
         let ne = builder.binary(BinaryOp::NeInt32, c, d, Type::I32);
-        
+
         let e = builder.const_(Literal::I32(10));
         let f = builder.const_(Literal::I32(20));
         let lt_s = builder.binary(BinaryOp::LtSInt32, e, f, Type::I32);
-        
+
         let g = builder.const_(Literal::I32(10));
         let h = builder.const_(Literal::I32(20));
         let le_u = builder.binary(BinaryOp::LeUInt32, g, h, Type::I32);
@@ -5359,15 +5359,15 @@ mod tests {
         let a = builder.const_(Literal::I32(10));
         let b = builder.const_(Literal::I32(20));
         let gt_s = builder.binary(BinaryOp::GtSInt32, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I32(10));
         let d = builder.const_(Literal::I32(20));
         let gt_u = builder.binary(BinaryOp::GtUInt32, c, d, Type::I32);
-        
+
         let e = builder.const_(Literal::I32(10));
         let f = builder.const_(Literal::I32(20));
         let ge_s = builder.binary(BinaryOp::GeSInt32, e, f, Type::I32);
-        
+
         let g = builder.const_(Literal::I32(10));
         let h = builder.const_(Literal::I32(20));
         let ge_u = builder.binary(BinaryOp::GeUInt32, g, h, Type::I32);
@@ -5447,13 +5447,13 @@ mod tests {
         let a = builder.const_(Literal::I64(1000));
         let b = builder.const_(Literal::I64(300));
         let add = builder.binary(BinaryOp::AddInt64, a, b, Type::I64);
-        
+
         let c = builder.const_(Literal::I64(2000));
         let d = builder.const_(Literal::I64(500));
         let sub = builder.binary(BinaryOp::SubInt64, c, d, Type::I64);
-        
+
         let mul = builder.binary(BinaryOp::MulInt64, add, sub, Type::I64);
-        
+
         let e = builder.const_(Literal::I64(10));
         let body = builder.binary(BinaryOp::DivSInt64, mul, e, Type::I64);
 
@@ -5486,11 +5486,11 @@ mod tests {
         let a = builder.const_(Literal::I64(0xFFFF0000FFFF0000u64 as i64));
         let b = builder.const_(Literal::I64(0x0000FFFF0000FFFFu64 as i64));
         let and = builder.binary(BinaryOp::AndInt64, a, b, Type::I64);
-        
+
         let c = builder.const_(Literal::I64(0xFFFF0000FFFF0000u64 as i64));
         let d = builder.const_(Literal::I64(0x0000FFFF0000FFFFu64 as i64));
         let or = builder.binary(BinaryOp::OrInt64, c, d, Type::I64);
-        
+
         let e = builder.const_(Literal::I64(0xFFFF0000FFFF0000u64 as i64));
         let f = builder.const_(Literal::I64(0x0000FFFF0000FFFFu64 as i64));
         let xor = builder.binary(BinaryOp::XorInt64, e, f, Type::I64);
@@ -5527,11 +5527,11 @@ mod tests {
         let value = builder.const_(Literal::I64(0x123456789ABCDEF0u64 as i64));
         let amt = builder.const_(Literal::I64(8));
         let shl = builder.binary(BinaryOp::ShlInt64, value, amt, Type::I64);
-        
+
         let value2 = builder.const_(Literal::I64(0x123456789ABCDEF0u64 as i64));
         let amt2 = builder.const_(Literal::I64(8));
         let shr_s = builder.binary(BinaryOp::ShrSInt64, value2, amt2, Type::I64);
-        
+
         let value3 = builder.const_(Literal::I64(0x123456789ABCDEF0u64 as i64));
         let amt3 = builder.const_(Literal::I64(8));
         let shr_u = builder.binary(BinaryOp::ShrUInt64, value3, amt3, Type::I64);
@@ -5568,7 +5568,7 @@ mod tests {
         let value = builder.const_(Literal::I64(0xFEDCBA9876543210u64 as i64));
         let amt = builder.const_(Literal::I64(16));
         let rotl = builder.binary(BinaryOp::RotLInt64, value, amt, Type::I64);
-        
+
         let value2 = builder.const_(Literal::I64(0xFEDCBA9876543210u64 as i64));
         let amt2 = builder.const_(Literal::I64(16));
         let rotr = builder.binary(BinaryOp::RotRInt64, value2, amt2, Type::I64);
@@ -5604,15 +5604,15 @@ mod tests {
         let a = builder.const_(Literal::I64(1000));
         let b = builder.const_(Literal::I64(2000));
         let eq = builder.binary(BinaryOp::EqInt64, a, b, Type::I32);
-        
+
         let c = builder.const_(Literal::I64(1000));
         let d = builder.const_(Literal::I64(2000));
         let ne = builder.binary(BinaryOp::NeInt64, c, d, Type::I32);
-        
+
         let e = builder.const_(Literal::I64(1000));
         let f = builder.const_(Literal::I64(2000));
         let lt_s = builder.binary(BinaryOp::LtSInt64, e, f, Type::I32);
-        
+
         let g = builder.const_(Literal::I64(1000));
         let h = builder.const_(Literal::I64(2000));
         let ge_u = builder.binary(BinaryOp::GeUInt64, g, h, Type::I32);
