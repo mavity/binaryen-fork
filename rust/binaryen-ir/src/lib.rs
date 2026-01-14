@@ -1,12 +1,14 @@
 pub mod expression;
 pub mod module;
 pub mod ops;
+pub mod validation;
 pub mod visitor;
 
 pub use expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
 pub use module::{Function, Module};
 pub use ops::{BinaryOp, UnaryOp};
-pub use visitor::Visitor;
+pub use validation::Validator;
+pub use visitor::{ReadOnlyVisitor, Visitor};
 
 #[cfg(test)]
 mod tests {
@@ -14,6 +16,49 @@ mod tests {
     use binaryen_core::{Literal, Type};
     use bumpalo::collections::Vec as BumpVec;
     use bumpalo::Bump;
+
+    #[test]
+    fn test_validation_failure() {
+        let bump = Bump::new();
+        let module_name = "test_module";
+
+        // Create mismatched binary op: i32 + f32
+        let left = bump.alloc(Expression {
+            kind: ExpressionKind::Const(Literal::I32(1)),
+            type_: Type::I32,
+        });
+        let right = bump.alloc(Expression {
+            kind: ExpressionKind::Const(Literal::F32(2.0)),
+            type_: Type::F32,
+        });
+
+        let binary_expr = bump.alloc(Expression {
+            kind: ExpressionKind::Binary {
+                op: BinaryOp::AddInt32, // Note: using int32 add
+                left,
+                right,
+            },
+            type_: Type::I32, // Result type claimed to be i32
+        });
+
+        let mut functions = Vec::new();
+        functions.push(Function {
+            name: "bad_func".to_string(),
+            params: Type::NONE,
+            results: Type::I32,
+            vars: Vec::new(),
+            body: Some(binary_expr),
+        });
+
+        let module = Module { functions };
+
+        let validator = Validator::new(&module);
+        let (valid, errors) = validator.validate();
+
+        assert!(!valid, "Validation should fail for mismatched types");
+        assert!(errors.len() > 0);
+        assert!(errors[0].contains("Binary op AddInt32 operands type mismatch"));
+    }
 
     #[test]
     fn test_ir_construction() {
