@@ -42,6 +42,27 @@ impl BinaryWriter {
 
         // Collect function types
         let mut type_map: Vec<(Vec<Type>, Vec<Type>)> = Vec::new();
+
+        // Collect types from imports
+        for import in &module.imports {
+            if let crate::module::ImportKind::Function(params, results) = import.kind {
+                let params_vec = if params == Type::NONE {
+                    vec![]
+                } else {
+                    vec![params]
+                };
+                let results_vec = if results == Type::NONE {
+                    vec![]
+                } else {
+                    vec![results]
+                };
+                let sig = (params_vec, results_vec);
+                if !type_map.iter().any(|t| *t == sig) {
+                    type_map.push(sig);
+                }
+            }
+        }
+
         let mut func_type_indices: Vec<usize> = Vec::new();
 
         for func in &module.functions {
@@ -71,6 +92,11 @@ impl BinaryWriter {
         // Write Type section
         if !type_map.is_empty() {
             self.write_type_section(&type_map)?;
+        }
+
+        // Write Import section
+        if !module.imports.is_empty() {
+            self.write_import_section(&module.imports, &type_map)?;
         }
 
         // Write Function section
@@ -126,6 +152,91 @@ impl BinaryWriter {
 
         // Section id (1 = Type)
         self.buffer.push(0x01);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
+        Ok(())
+    }
+
+    fn write_import_section(
+        &mut self,
+        imports: &[crate::module::Import],
+        type_map: &[(Vec<Type>, Vec<Type>)],
+    ) -> Result<()> {
+        if imports.is_empty() {
+            return Ok(());
+        }
+
+        let mut section_buf = Vec::new();
+
+        // Count
+        Self::write_leb128_u32(&mut section_buf, imports.len() as u32)?;
+
+        for import in imports {
+            // Module
+            Self::write_leb128_u32(&mut section_buf, import.module.len() as u32)?;
+            section_buf.extend_from_slice(import.module.as_bytes());
+
+            // Name
+            Self::write_leb128_u32(&mut section_buf, import.name.len() as u32)?;
+            section_buf.extend_from_slice(import.name.as_bytes());
+
+            match &import.kind {
+                crate::module::ImportKind::Function(params, results) => {
+                    section_buf.push(0x00); // Kind: Function
+
+                    let params_vec = if *params == Type::NONE {
+                        vec![]
+                    } else {
+                        vec![*params]
+                    };
+                    let results_vec = if *results == Type::NONE {
+                        vec![]
+                    } else {
+                        vec![*results]
+                    };
+                    let sig = (params_vec, results_vec);
+
+                    let idx = type_map.iter().position(|t| *t == sig).ok_or_else(|| {
+                        WriteError::UnsupportedFeature("Type not found in type map".to_string())
+                    })?;
+                    Self::write_leb128_u32(&mut section_buf, idx as u32)?;
+                }
+                crate::module::ImportKind::Table(elem_type, min, max) => {
+                    section_buf.push(0x01); // Kind: Table
+                    Self::write_value_type(&mut section_buf, *elem_type)?;
+                    if let Some(m) = max {
+                        section_buf.push(0x01);
+                        Self::write_leb128_u32(&mut section_buf, *min)?;
+                        Self::write_leb128_u32(&mut section_buf, *m)?;
+                    } else {
+                        section_buf.push(0x00);
+                        Self::write_leb128_u32(&mut section_buf, *min)?;
+                    }
+                }
+                crate::module::ImportKind::Memory(limits) => {
+                    section_buf.push(0x02); // Kind: Memory
+                    if let Some(m) = limits.maximum {
+                        section_buf.push(0x01);
+                        Self::write_leb128_u32(&mut section_buf, limits.initial)?;
+                        Self::write_leb128_u32(&mut section_buf, m)?;
+                    } else {
+                        section_buf.push(0x00);
+                        Self::write_leb128_u32(&mut section_buf, limits.initial)?;
+                    }
+                }
+                crate::module::ImportKind::Global(val_type, mutable) => {
+                    section_buf.push(0x03); // Kind: Global
+                    Self::write_value_type(&mut section_buf, *val_type)?;
+                    section_buf.push(if *mutable { 1 } else { 0 });
+                }
+            }
+        }
+
+        // Section id (2 = Import)
+        self.buffer.push(0x02);
         // Section size
         Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
         // Section content
@@ -576,6 +687,10 @@ impl BinaryWriter {
             0x7C
         } else if type_ == Type::V128 {
             0x7B
+        } else if type_ == Type::FUNCREF {
+            0x70
+        } else if type_ == Type::EXTERNREF {
+            0x6F
         } else {
             return Err(WriteError::UnsupportedFeature(format!("Type: {:?}", type_)));
         };

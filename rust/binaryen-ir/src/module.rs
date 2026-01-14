@@ -28,7 +28,7 @@ impl<'a> Function<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MemoryLimits {
     pub initial: u32,         // Initial size in 64KB pages
     pub maximum: Option<u32>, // Optional maximum size
@@ -57,8 +57,24 @@ pub enum ExportKind {
     Global = 3,
 }
 
+#[derive(Debug, Clone)]
+pub struct Import {
+    pub module: String,
+    pub name: String,
+    pub kind: ImportKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImportKind {
+    Function(Type, Type),          // params, results
+    Table(Type, u32, Option<u32>), // elem_type, min, max
+    Memory(MemoryLimits),
+    Global(Type, bool), // type, mutable
+}
+
 #[derive(Debug, Default)]
 pub struct Module<'a> {
+    pub imports: Vec<Import>,
     pub functions: Vec<Function<'a>>,
     pub globals: Vec<Global<'a>>,
     pub memory: Option<MemoryLimits>,
@@ -68,11 +84,16 @@ pub struct Module<'a> {
 impl<'a> Module<'a> {
     pub fn new() -> Self {
         Self {
+            imports: Vec::new(),
             functions: Vec::new(),
             globals: Vec::new(),
             memory: None,
             exports: Vec::new(),
         }
+    }
+
+    pub fn add_import(&mut self, import: Import) {
+        self.imports.push(import);
     }
 
     pub fn add_function(&mut self, func: Function<'a>) {

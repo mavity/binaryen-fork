@@ -9,15 +9,35 @@ pub struct Validator<'a, 'm> {
     current_function: Option<&'m Function<'a>>,
     valid: bool,
     errors: Vec<String>,
+    // Caches for index spaces
+    func_imports: Vec<&'m crate::module::Import>,
+    global_imports: Vec<&'m crate::module::Import>,
+    memory_import: Option<&'m crate::module::Import>,
 }
 
 impl<'a, 'm> Validator<'a, 'm> {
     pub fn new(module: &'m Module<'a>) -> Self {
+        let mut func_imports = Vec::new();
+        let mut global_imports = Vec::new();
+        let mut memory_import = None;
+
+        for import in &module.imports {
+            match import.kind {
+                crate::module::ImportKind::Function(..) => func_imports.push(import),
+                crate::module::ImportKind::Global(..) => global_imports.push(import),
+                crate::module::ImportKind::Memory(..) => memory_import = Some(import),
+                _ => {}
+            }
+        }
+
         Self {
             module,
             current_function: None,
             valid: true,
             errors: Vec::new(),
+            func_imports,
+            global_imports,
+            memory_import,
         }
     }
 
@@ -53,7 +73,8 @@ impl<'a, 'm> Validator<'a, 'm> {
 
             match export.kind {
                 ExportKind::Function => {
-                    if export.index as usize >= self.module.functions.len() {
+                    let total_funcs = self.func_imports.len() + self.module.functions.len();
+                    if (export.index as usize) >= total_funcs {
                         self.fail(&format!(
                             "Exported function index {} out of bounds",
                             export.index
@@ -61,7 +82,8 @@ impl<'a, 'm> Validator<'a, 'm> {
                     }
                 }
                 ExportKind::Global => {
-                    if export.index as usize >= self.module.globals.len() {
+                    let total_globals = self.global_imports.len() + self.module.globals.len();
+                    if (export.index as usize) >= total_globals {
                         self.fail(&format!(
                             "Exported global index {} out of bounds",
                             export.index
@@ -69,7 +91,8 @@ impl<'a, 'm> Validator<'a, 'm> {
                     }
                 }
                 ExportKind::Memory => {
-                    if self.module.memory.is_none() {
+                    let has_memory = self.memory_import.is_some() || self.module.memory.is_some();
+                    if !has_memory {
                         self.fail("Exported memory but no memory exists");
                     } else if export.index != 0 {
                         self.fail(&format!(
@@ -110,44 +133,91 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
                 // TODO: Validate index bounds (need Type tuple support)
             }
             ExpressionKind::GlobalGet { index } => {
-                if *index as usize >= self.module.globals.len() {
-                    self.fail(&format!("GlobalGet: Index {} out of bounds", index));
+                let idx = *index as usize;
+                let global_type = if idx < self.global_imports.len() {
+                    let import = self.global_imports[idx];
+                    if let crate::module::ImportKind::Global(ty, _) = import.kind {
+                        Some(ty)
+                    } else {
+                        None
+                    }
                 } else {
-                    let global = &self.module.globals[*index as usize];
-                    if expr.type_ != global.type_ {
+                    let local_idx = idx - self.global_imports.len();
+                    self.module.globals.get(local_idx).map(|g| g.type_)
+                };
+
+                if let Some(ty) = global_type {
+                    if expr.type_ != ty {
                         self.fail(&format!(
                             "GlobalGet: Expression type {:?} does not match global type {:?}",
-                            expr.type_, global.type_
+                            expr.type_, ty
                         ));
                     }
+                } else {
+                    self.fail(&format!("GlobalGet: Index {} out of bounds", index));
                 }
             }
             ExpressionKind::GlobalSet { index, value } => {
-                if *index as usize >= self.module.globals.len() {
-                    self.fail(&format!("GlobalSet: Index {} out of bounds", index));
+                let idx = *index as usize;
+                let global_info = if idx < self.global_imports.len() {
+                    let import = self.global_imports[idx];
+                    if let crate::module::ImportKind::Global(ty, mutable) = import.kind {
+                        Some((ty, mutable))
+                    } else {
+                        None
+                    }
                 } else {
-                    let global = &self.module.globals[*index as usize];
-                    if !global.mutable {
+                    let local_idx = idx - self.global_imports.len();
+                    self.module
+                        .globals
+                        .get(local_idx)
+                        .map(|g| (g.type_, g.mutable))
+                };
+
+                if let Some((ty, mutable)) = global_info {
+                    if !mutable {
                         self.fail(&format!("GlobalSet: Global {} is immutable", index));
                     }
-                    if value.type_ != global.type_ && value.type_ != Type::UNREACHABLE {
+                    if value.type_ != ty && value.type_ != Type::UNREACHABLE {
                         self.fail(&format!(
                             "GlobalSet: Value type {:?} does not match global type {:?}",
-                            value.type_, global.type_
+                            value.type_, ty
                         ));
                     }
+                } else {
+                    self.fail(&format!("GlobalSet: Index {} out of bounds", index));
                 }
             }
             ExpressionKind::Call {
                 target, operands, ..
             } => {
-                if let Some(func) = self.module.get_function(target) {
-                    if operands.len() != 0 && !func.params.is_basic() {
-                        // TODO: Check tuple params
-                    } else if operands.len() == 1 && func.params.is_basic() {
-                        // Check single param
+                let sig = if let Some(func) = self.module.get_function(target) {
+                    Some((func.params, func.results))
+                } else {
+                    self.func_imports
+                        .iter()
+                        .find(|import| import.name == *target) // Assuming field name == internal name
+                        .and_then(|import| {
+                            if let crate::module::ImportKind::Function(params, results) =
+                                import.kind
+                            {
+                                Some((params, results))
+                            } else {
+                                None
+                            }
+                        })
+                };
+
+                if let Some((params, results)) = sig {
+                    // Check params
+                    // Limitation: Type is single value. If mismatch, fail.
+                    // If multiple operands, we need tuple support in Type.
+                    // For now, simple check.
+                    if operands.len() != 0 {
+                        // If we have operands but params is valid (not NONE), check type.
+                        // Assuming 1 param only for now as per minimal parser type support.
                         let op_type = operands[0].type_;
-                        if op_type != func.params && op_type != Type::UNREACHABLE {
+                        if op_type != params && op_type != Type::UNREACHABLE {
                             self.fail(&format!("Call to {} param mismatch", target));
                         }
                     }

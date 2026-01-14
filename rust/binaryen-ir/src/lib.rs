@@ -58,6 +58,7 @@ mod tests {
         });
 
         let module = Module {
+            imports: vec![],
             functions,
             globals: Vec::new(),
             memory: None,
@@ -109,6 +110,7 @@ mod tests {
             );
 
             let module = Module {
+                imports: vec![],
                 functions: vec![func],
                 globals: create_globals(),
                 memory: None,
@@ -135,6 +137,7 @@ mod tests {
             );
 
             let module = Module {
+                imports: vec![],
                 functions: vec![func],
                 globals: create_globals(),
                 memory: None,
@@ -162,6 +165,7 @@ mod tests {
             );
 
             let module = Module {
+                imports: vec![],
                 functions: vec![func],
                 globals: create_globals(),
                 memory: None,
@@ -312,6 +316,7 @@ mod tests {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
 
             let module = Module {
+                imports: vec![],
                 functions: vec![func_valid],  // f0 is index 0
                 globals: vec![global],        // g0 is index 0
                 memory: Some(memory.clone()), // memory is index 0
@@ -342,6 +347,7 @@ mod tests {
         // 2. Duplicate export name
         {
             let module = Module {
+                imports: vec![],
                 functions: vec![],
                 globals: vec![],
                 memory: None,
@@ -368,6 +374,7 @@ mod tests {
         {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             let module = Module {
+                imports: vec![],
                 functions: vec![func_valid],
                 globals: vec![],
                 memory: None,
@@ -388,6 +395,7 @@ mod tests {
         // 4. Global OOB
         {
             let module = Module {
+                imports: vec![],
                 functions: vec![],
                 globals: vec![],
                 memory: None,
@@ -408,6 +416,7 @@ mod tests {
         // 5. Memory OOB / No Memory
         {
             let module = Module {
+                imports: vec![],
                 functions: vec![],
                 globals: vec![],
                 memory: None,
@@ -448,6 +457,7 @@ mod tests {
         };
 
         let module = Module {
+            imports: vec![],
             functions: vec![func],
             globals: vec![global],
             memory: Some(memory),
@@ -505,5 +515,150 @@ mod tests {
             .unwrap();
         assert_eq!(mem_exp.kind, ExportKind::Memory);
         assert_eq!(mem_exp.index, 0);
+    }
+
+    #[test]
+    fn test_imports_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{Import, ImportKind, MemoryLimits};
+
+        let _bump = Bump::new();
+
+        let mut module = Module::new();
+
+        // 1. Function Import (param: i32, result: none)
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "log".to_string(),
+            kind: ImportKind::Function(Type::I32, Type::NONE),
+        });
+
+        // 2. Global Import (i32, immutable)
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "limit".to_string(),
+            kind: ImportKind::Global(Type::I32, false),
+        });
+
+        // 3. Memory Import
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "memory".to_string(),
+            kind: ImportKind::Memory(MemoryLimits {
+                initial: 1,
+                maximum: Some(2),
+            }),
+        });
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("write failed");
+
+        // Read
+        let read_bump = Bump::new();
+        let mut reader = BinaryReader::new(&read_bump, bytes);
+        let read_module = reader.parse_module().expect("parse failed");
+
+        assert_eq!(read_module.imports.len(), 3);
+
+        let log_import = &read_module.imports[0];
+        assert_eq!(log_import.module, "env");
+        assert_eq!(log_import.name, "log");
+        if let ImportKind::Function(p, r) = log_import.kind {
+            assert_eq!(p, Type::I32);
+            assert_eq!(r, Type::NONE);
+        } else {
+            panic!("Expected function import");
+        }
+
+        let global_import = &read_module.imports[1];
+        assert_eq!(global_import.name, "limit");
+        if let ImportKind::Global(ty, mut_) = global_import.kind {
+            assert_eq!(ty, Type::I32);
+            assert_eq!(mut_, false);
+        } else {
+            panic!("Expected global import");
+        }
+    }
+
+    #[test]
+    fn test_import_validation() {
+        use crate::module::{Global, Import, ImportKind};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        let mut module = Module::new();
+
+        // Import Global 0: i32, immutable
+        module.add_import(Import {
+            module: "env".to_string(),
+            name: "g_imp".to_string(),
+            kind: ImportKind::Global(Type::I32, false),
+        });
+
+        // Define Global 1: f32, mutable
+        let init_expr = builder.const_(Literal::F32(1.0));
+        module.add_global(Global {
+            name: "g_def".to_string(),
+            type_: Type::F32,
+            mutable: true,
+            init: init_expr,
+        });
+
+        // Test 1: Get imported global (index 0) - Valid
+        {
+            let get_imp = builder.global_get(0, Type::I32);
+            let func = Function::new(
+                "test1".to_string(),
+                Type::NONE,
+                Type::I32,
+                vec![],
+                Some(get_imp),
+            );
+            module.functions.push(func);
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(valid, "Get imported global failed: {:?}", errors);
+            module.functions.pop();
+        }
+
+        // Test 2: Get defined global (index 1) - Valid
+        {
+            let get_def = builder.global_get(1, Type::F32);
+            let func = Function::new(
+                "test2".to_string(),
+                Type::NONE,
+                Type::F32,
+                vec![],
+                Some(get_def),
+            );
+            module.functions.push(func);
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(valid, "Get defined global failed: {:?}", errors);
+            module.functions.pop();
+        }
+
+        // Test 3: Get OOB global (index 2) - Invalid
+        {
+            let get_oob = builder.global_get(2, Type::I32);
+            let func = Function::new(
+                "test3".to_string(),
+                Type::NONE,
+                Type::I32,
+                vec![],
+                Some(get_oob),
+            );
+            module.functions.push(func);
+
+            let validator = Validator::new(&module);
+            let (valid, _) = validator.validate();
+            assert!(!valid, "OOB global get should fail");
+            module.functions.pop();
+        }
     }
 }

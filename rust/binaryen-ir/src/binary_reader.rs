@@ -22,6 +22,7 @@ pub enum ParseError {
     InvalidType,
     InvalidUtf8,
     InvalidExportKind,
+    InvalidImportKind,
     Io(io::Error),
 }
 
@@ -97,6 +98,13 @@ impl<'a> BinaryReader<'a> {
                 1 => {
                     // Type section
                     type_section = self.parse_type_section()?;
+                }
+                2 => {
+                    // Import section
+                    let imports = self.parse_import_section(&type_section)?;
+                    for import in imports {
+                        module.add_import(import);
+                    }
                 }
                 3 => {
                     // Function section
@@ -242,21 +250,11 @@ impl<'a> BinaryReader<'a> {
         }
 
         // Read first memory (WASM 1.0 supports only one memory)
-        let flags = self.read_u8()?;
-        let initial = self.read_leb128_u32()?;
-        let maximum = if flags & 0x01 != 0 {
-            Some(self.read_leb128_u32()?)
-        } else {
-            None
-        };
+        let (initial, maximum) = self.read_limits()?;
 
         // Skip remaining memories if any
         for _ in 1..count {
-            let flags = self.read_u8()?;
-            let _initial = self.read_leb128_u32()?;
-            if flags & 0x01 != 0 {
-                let _maximum = self.read_leb128_u32()?;
-            }
+            let _ = self.read_limits()?;
         }
 
         Ok(Some(MemoryLimits { initial, maximum }))
@@ -267,10 +265,7 @@ impl<'a> BinaryReader<'a> {
         let mut exports = Vec::new();
 
         for _ in 0..count {
-            let name_len = self.read_leb128_u32()? as usize;
-            let name_bytes = self.read_bytes(name_len)?;
-            let name =
-                String::from_utf8(name_bytes.to_vec()).map_err(|_| ParseError::InvalidUtf8)?;
+            let name = self.read_name()?;
 
             let kind_byte = self.read_u8()?;
             let kind = match kind_byte {
@@ -713,6 +708,8 @@ impl<'a> BinaryReader<'a> {
             0x7D => Ok(Type::F32),
             0x7C => Ok(Type::F64),
             0x7B => Ok(Type::V128),
+            0x70 => Ok(Type::FUNCREF),
+            0x6F => Ok(Type::EXTERNREF),
             _ => Err(ParseError::InvalidType),
         }
     }
@@ -786,6 +783,71 @@ impl<'a> BinaryReader<'a> {
         }
 
         Ok(result)
+    }
+
+    fn read_name(&mut self) -> Result<String> {
+        let len = self.read_leb128_u32()? as usize;
+        let bytes = self.read_bytes(len)?;
+        String::from_utf8(bytes.to_vec()).map_err(|_| ParseError::InvalidUtf8)
+    }
+
+    fn read_limits(&mut self) -> Result<(u32, Option<u32>)> {
+        let flags = self.read_u8()?;
+        let initial = self.read_leb128_u32()?;
+        let maximum = if flags & 0x01 != 0 {
+            Some(self.read_leb128_u32()?)
+        } else {
+            None
+        };
+        Ok((initial, maximum))
+    }
+
+    fn parse_import_section(
+        &mut self,
+        types: &[(Vec<Type>, Vec<Type>)],
+    ) -> Result<Vec<crate::module::Import>> {
+        let count = self.read_leb128_u32()?;
+        let mut imports = Vec::new();
+        for _ in 0..count {
+            let module = self.read_name()?;
+            let name = self.read_name()?;
+            let kind_id = self.read_u8()?;
+
+            let kind = match kind_id {
+                0 => {
+                    // Function
+                    let type_idx = self.read_leb128_u32()? as usize;
+                    let func_type = types.get(type_idx).ok_or(ParseError::InvalidType)?;
+                    // Simplified: just taking first param/result as Type
+                    let p = func_type.0.first().copied().unwrap_or(Type::NONE);
+                    let r = func_type.1.first().copied().unwrap_or(Type::NONE);
+                    crate::module::ImportKind::Function(p, r)
+                }
+                1 => {
+                    // Table
+                    let elem_type = self.read_value_type()?;
+                    let (min, max) = self.read_limits()?;
+                    crate::module::ImportKind::Table(elem_type, min, max)
+                }
+                2 => {
+                    // Memory
+                    let (min, max) = self.read_limits()?;
+                    crate::module::ImportKind::Memory(MemoryLimits {
+                        initial: min,
+                        maximum: max,
+                    })
+                }
+                3 => {
+                    // Global
+                    let val_type = self.read_value_type()?;
+                    let mutable = self.read_u8()? != 0;
+                    crate::module::ImportKind::Global(val_type, mutable)
+                }
+                _ => return Err(ParseError::InvalidImportKind),
+            };
+            imports.push(crate::module::Import { module, name, kind });
+        }
+        Ok(imports)
     }
 }
 
