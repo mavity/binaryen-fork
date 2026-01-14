@@ -1,10 +1,10 @@
 use binaryen_core::{Literal, Type};
 use binaryen_ir::{
-    BinaryOp, BinaryReader, BinaryWriter, Expression, ExpressionKind, Function, IrBuilder, Module,
-    Pass, PassRunner, UnaryOp,
+    BinaryOp, BinaryReader, BinaryWriter, Expression, Function, IrBuilder, Module, Pass,
+    PassRunner, UnaryOp,
 };
 use bumpalo::Bump;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
 use std::slice;
 
