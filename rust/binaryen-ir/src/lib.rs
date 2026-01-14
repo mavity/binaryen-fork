@@ -63,6 +63,7 @@ mod tests {
             globals: Vec::new(),
             memory: None,
             exports: Vec::new(),
+            data: Vec::new(),
         };
 
         let validator = Validator::new(&module);
@@ -115,6 +116,7 @@ mod tests {
                 globals: create_globals(),
                 memory: None,
                 exports: vec![],
+                data: Vec::new(),
             };
 
             let validator = Validator::new(&module);
@@ -142,6 +144,7 @@ mod tests {
                 globals: create_globals(),
                 memory: None,
                 exports: vec![],
+                data: Vec::new(),
             };
 
             let validator = Validator::new(&module);
@@ -170,6 +173,7 @@ mod tests {
                 globals: create_globals(),
                 memory: None,
                 exports: vec![],
+                data: Vec::new(),
             };
 
             let validator = Validator::new(&module);
@@ -337,6 +341,7 @@ mod tests {
                         index: 0,
                     },
                 ],
+                data: Vec::new(),
             };
 
             let validator = Validator::new(&module);
@@ -363,6 +368,7 @@ mod tests {
                         index: 0,
                     },
                 ],
+                data: Vec::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -383,6 +389,7 @@ mod tests {
                     kind: ExportKind::Function,
                     index: 1,
                 }],
+                data: Vec::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -404,6 +411,7 @@ mod tests {
                     kind: ExportKind::Global,
                     index: 0,
                 }],
+                data: Vec::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -425,6 +433,7 @@ mod tests {
                     kind: ExportKind::Memory,
                     index: 0,
                 }],
+                data: Vec::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -478,6 +487,7 @@ mod tests {
                     index: 0,
                 },
             ],
+            data: Vec::new(),
         };
 
         // Write
@@ -659,6 +669,128 @@ mod tests {
             let (valid, _) = validator.validate();
             assert!(!valid, "OOB global get should fail");
             module.functions.pop();
+        }
+    }
+
+    #[test]
+    fn test_data_section_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{DataSegment, MemoryLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        let mut module = Module::new();
+
+        // Add memory
+        module.set_memory(1, Some(10));
+
+        // Data segment 1: "Hello" at offset 0
+        let offset1 = builder.const_(Literal::I32(0));
+        module.add_data_segment(DataSegment {
+            memory_index: 0,
+            offset: offset1,
+            data: b"Hello".to_vec(),
+        });
+
+        // Data segment 2: "World" at offset 100
+        let offset2 = builder.const_(Literal::I32(100));
+        module.add_data_segment(DataSegment {
+            memory_index: 0,
+            offset: offset2,
+            data: b"World".to_vec(),
+        });
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("write failed");
+
+        // Read
+        let read_bump = Bump::new();
+        let mut reader = BinaryReader::new(&read_bump, bytes);
+        let read_module = reader.parse_module().expect("parse failed");
+
+        // Verify
+        assert_eq!(read_module.data.len(), 2);
+
+        let seg1 = &read_module.data[0];
+        assert_eq!(seg1.memory_index, 0);
+        assert_eq!(seg1.data, b"Hello");
+        if let ExpressionKind::Const(Literal::I32(val)) = seg1.offset.kind {
+            assert_eq!(val, 0);
+        } else {
+            panic!("Expected const offset");
+        }
+
+        let seg2 = &read_module.data[1];
+        assert_eq!(seg2.memory_index, 0);
+        assert_eq!(seg2.data, b"World");
+        if let ExpressionKind::Const(Literal::I32(val)) = seg2.offset.kind {
+            assert_eq!(val, 100);
+        } else {
+            panic!("Expected const offset");
+        }
+    }
+
+    #[test]
+    fn test_data_section_validation() {
+        use crate::module::{DataSegment, MemoryLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test 1: Valid data segment
+        {
+            let mut module = Module::new();
+            module.set_memory(1, None);
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_data_segment(DataSegment {
+                memory_index: 0,
+                offset,
+                data: b"test".to_vec(),
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(valid, "Valid data segment failed: {:?}", errors);
+        }
+
+        // Test 2: Data segment without memory
+        {
+            let mut module = Module::new();
+            // No memory defined
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_data_segment(DataSegment {
+                memory_index: 0,
+                offset,
+                data: b"test".to_vec(),
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Data without memory should fail");
+            assert!(errors.iter().any(|e| e.contains("no memory exists")));
+        }
+
+        // Test 3: Invalid memory index
+        {
+            let mut module = Module::new();
+            module.set_memory(1, None);
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_data_segment(DataSegment {
+                memory_index: 1, // Invalid: only 0 allowed
+                offset,
+                data: b"test".to_vec(),
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Invalid memory index should fail");
+            assert!(errors.iter().any(|e| e.contains("invalid memory index")));
         }
     }
 }

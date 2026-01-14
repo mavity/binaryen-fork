@@ -88,6 +88,7 @@ impl<'a> BinaryReader<'a> {
         let mut memory_section = None;
         let mut global_section = Vec::new();
         let mut export_section = Vec::new();
+        let mut data_section = Vec::new();
 
         while self.pos < self.data.len() {
             let section_id = self.read_u8()?;
@@ -126,6 +127,10 @@ impl<'a> BinaryReader<'a> {
                     // Code section
                     code_section = self.parse_code_section()?;
                 }
+                11 => {
+                    // Data section
+                    data_section = self.parse_data_section()?;
+                }
                 _ => {
                     // Skip unknown sections
                     self.pos = section_end;
@@ -148,6 +153,11 @@ impl<'a> BinaryReader<'a> {
         // Add exports
         for export in export_section {
             module.add_export(export.name, export.kind, export.index);
+        }
+
+        // Add data segments
+        for segment in data_section {
+            module.add_data_segment(segment);
         }
 
         // Combine function signatures with code
@@ -848,6 +858,34 @@ impl<'a> BinaryReader<'a> {
             imports.push(crate::module::Import { module, name, kind });
         }
         Ok(imports)
+    }
+
+    fn parse_data_section(&mut self) -> Result<Vec<crate::module::DataSegment<'a>>> {
+        let count = self.read_leb128_u32()?;
+        let mut segments = Vec::new();
+
+        for _ in 0..count {
+            // Memory index (u32)
+            let memory_index = self.read_leb128_u32()?;
+
+            // Offset expression
+            let mut label_stack = Vec::new();
+            let offset = self
+                .parse_expression_impl(&mut label_stack)?
+                .ok_or(ParseError::InvalidSection)?;
+
+            // Data length and bytes
+            let data_len = self.read_leb128_u32()? as usize;
+            let data_bytes = self.read_bytes(data_len)?;
+
+            segments.push(crate::module::DataSegment {
+                memory_index,
+                offset,
+                data: data_bytes.to_vec(),
+            });
+        }
+
+        Ok(segments)
     }
 }
 

@@ -72,6 +72,13 @@ pub enum ImportKind {
     Global(Type, bool), // type, mutable
 }
 
+#[derive(Debug)]
+pub struct DataSegment<'a> {
+    pub memory_index: u32,   // Memory index (usually 0 in MVP)
+    pub offset: ExprRef<'a>, // Offset expression (where in memory)
+    pub data: Vec<u8>,       // The actual data bytes
+}
+
 #[derive(Debug, Default)]
 pub struct Module<'a> {
     pub imports: Vec<Import>,
@@ -79,6 +86,7 @@ pub struct Module<'a> {
     pub globals: Vec<Global<'a>>,
     pub memory: Option<MemoryLimits>,
     pub exports: Vec<Export>,
+    pub data: Vec<DataSegment<'a>>,
 }
 
 impl<'a> Module<'a> {
@@ -89,6 +97,7 @@ impl<'a> Module<'a> {
             globals: Vec::new(),
             memory: None,
             exports: Vec::new(),
+            data: Vec::new(),
         }
     }
 
@@ -130,5 +139,9 @@ impl<'a> Module<'a> {
 
     pub fn export_global(&mut self, global_index: u32, export_name: String) {
         self.add_export(export_name, ExportKind::Global, global_index);
+    }
+
+    pub fn add_data_segment(&mut self, segment: DataSegment<'a>) {
+        self.data.push(segment);
     }
 }

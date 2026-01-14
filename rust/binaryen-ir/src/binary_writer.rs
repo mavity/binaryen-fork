@@ -124,6 +124,11 @@ impl BinaryWriter {
             self.write_code_section(&module.functions)?;
         }
 
+        // Write Data section
+        if !module.data.is_empty() {
+            self.write_data_section(&module.data)?;
+        }
+
         Ok(self.buffer.clone())
     }
 
@@ -732,6 +737,46 @@ impl BinaryWriter {
                 buf.push(byte);
             }
         }
+        Ok(())
+    }
+
+    fn write_data_section(&mut self, data_segments: &[crate::module::DataSegment]) -> Result<()> {
+        if data_segments.is_empty() {
+            return Ok(());
+        }
+
+        let mut section_buf = Vec::new();
+
+        // Count
+        Self::write_leb128_u32(&mut section_buf, data_segments.len() as u32)?;
+
+        for segment in data_segments {
+            // Memory index
+            Self::write_leb128_u32(&mut section_buf, segment.memory_index)?;
+
+            // Offset expression
+            let mut label_stack = Vec::new();
+            let func_map = std::collections::HashMap::new();
+            Self::write_expression(
+                &mut section_buf,
+                segment.offset,
+                &mut label_stack,
+                &func_map,
+            )?;
+            section_buf.push(0x0B); // end
+
+            // Data bytes (length + bytes)
+            Self::write_leb128_u32(&mut section_buf, segment.data.len() as u32)?;
+            section_buf.extend_from_slice(&segment.data);
+        }
+
+        // Section id (11 = Data)
+        self.buffer.push(0x0B);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
         Ok(())
     }
 

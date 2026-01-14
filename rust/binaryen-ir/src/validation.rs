@@ -107,6 +107,30 @@ impl<'a, 'm> Validator<'a, 'm> {
             }
         }
 
+        // Validate data segments
+        for (i, segment) in self.module.data.iter().enumerate() {
+            // Check memory exists
+            let has_memory = self.memory_import.is_some() || self.module.memory.is_some();
+            if !has_memory {
+                self.fail(&format!(
+                    "Data segment {} references memory, but no memory exists",
+                    i
+                ));
+            }
+
+            // Memory index must be 0 in MVP
+            if segment.memory_index != 0 {
+                self.fail(&format!(
+                    "Data segment {} has invalid memory index {} (only 0 allowed)",
+                    i, segment.memory_index
+                ));
+            }
+
+            // Validate offset expression (must be constant)
+            // For now, just walk the expression to trigger validation
+            self.visit(segment.offset);
+        }
+
         (self.valid, self.errors)
     }
 
