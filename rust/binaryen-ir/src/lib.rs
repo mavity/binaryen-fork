@@ -1,3 +1,5 @@
+pub mod binary_reader;
+pub mod binary_writer;
 pub mod expression;
 pub mod module;
 pub mod ops;
@@ -6,6 +8,8 @@ pub mod passes;
 pub mod validation;
 pub mod visitor;
 
+pub use binary_reader::BinaryReader;
+pub use binary_writer::BinaryWriter;
 pub use expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
 pub use module::{Function, Module};
 pub use ops::{BinaryOp, UnaryOp};
