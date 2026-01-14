@@ -102,7 +102,20 @@ impl<'a, 'm> Validator<'a, 'm> {
                     }
                 }
                 ExportKind::Table => {
-                    self.fail("Tables not supported yet");
+                    let has_table =
+                        self.module.table.is_some()
+                            || self.module.imports.iter().any(|imp| {
+                                matches!(imp.kind, crate::module::ImportKind::Table(..))
+                            });
+
+                    if !has_table {
+                        self.fail("Exported table but no table exists");
+                    } else if export.index != 0 {
+                        self.fail(&format!(
+                            "Exported table index {} out of bounds (only 0 allowed)",
+                            export.index
+                        ));
+                    }
                 }
             }
         }
@@ -167,6 +180,46 @@ impl<'a, 'm> Validator<'a, 'm> {
                     self.fail("Start function must have no results");
                 }
             }
+        }
+
+        // Validate element segments
+        for (i, segment) in self.module.elements.iter().enumerate() {
+            // Check table exists
+            let has_table = self.module.table.is_some()
+                || self
+                    .module
+                    .imports
+                    .iter()
+                    .any(|imp| matches!(imp.kind, crate::module::ImportKind::Table(..)));
+
+            if !has_table {
+                self.fail(&format!(
+                    "Element segment {} references table, but no table exists",
+                    i
+                ));
+            }
+
+            // Table index must be 0 in MVP
+            if segment.table_index != 0 {
+                self.fail(&format!(
+                    "Element segment {} has invalid table index {} (only 0 allowed)",
+                    i, segment.table_index
+                ));
+            }
+
+            // Validate function indices
+            let total_funcs = self.func_imports.len() + self.module.functions.len();
+            for &func_idx in &segment.func_indices {
+                if (func_idx as usize) >= total_funcs {
+                    self.fail(&format!(
+                        "Element segment {} has function index {} out of bounds (total: {})",
+                        i, func_idx, total_funcs
+                    ));
+                }
+            }
+
+            // Validate offset expression (must be constant)
+            self.visit(segment.offset);
         }
 
         (self.valid, self.errors)

@@ -61,9 +61,11 @@ mod tests {
             imports: vec![],
             functions,
             globals: Vec::new(),
+            table: None,
             memory: None,
             start: None,
             exports: Vec::new(),
+            elements: Vec::new(),
             data: Vec::new(),
         };
 
@@ -117,6 +119,8 @@ mod tests {
                 globals: create_globals(),
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![],
                 data: Vec::new(),
             };
@@ -146,6 +150,8 @@ mod tests {
                 globals: create_globals(),
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![],
                 data: Vec::new(),
             };
@@ -176,6 +182,8 @@ mod tests {
                 globals: create_globals(),
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![],
                 data: Vec::new(),
             };
@@ -329,6 +337,8 @@ mod tests {
                 globals: vec![global],        // g0 is index 0
                 memory: Some(memory.clone()), // memory is index 0
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![
                     Export {
                         name: "exp_func".to_string(),
@@ -362,6 +372,8 @@ mod tests {
                 globals: vec![],
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![
                     Export {
                         name: "same".to_string(),
@@ -391,6 +403,8 @@ mod tests {
                 globals: vec![],
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![Export {
                     name: "f1".to_string(),
                     kind: ExportKind::Function,
@@ -414,6 +428,8 @@ mod tests {
                 globals: vec![],
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![Export {
                     name: "g0".to_string(),
                     kind: ExportKind::Global,
@@ -437,6 +453,8 @@ mod tests {
                 globals: vec![],
                 memory: None,
                 start: None,
+                table: None,
+                elements: Vec::new(),
                 exports: vec![Export {
                     name: "m0".to_string(),
                     kind: ExportKind::Memory,
@@ -480,6 +498,8 @@ mod tests {
             globals: vec![global],
             memory: Some(memory),
             start: None,
+            table: None,
+            elements: Vec::new(),
             exports: vec![
                 Export {
                     name: "test_func".to_string(),
@@ -918,6 +938,152 @@ mod tests {
             let (valid, errors) = validator.validate();
             assert!(!valid, "Start with results should fail");
             assert!(errors.iter().any(|e| e.contains("no results")));
+        }
+    }
+
+    #[test]
+    fn test_table_and_element_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+        use crate::module::{ElementSegment, TableLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        let mut module = Module::new();
+
+        // Add functions that will be referenced in the element segment
+        let func1 = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+        let func2 = Function::new("f1".to_string(), Type::NONE, Type::NONE, vec![], None);
+        module.add_function(func1);
+        module.add_function(func2);
+
+        // Add table
+        module.set_table(Type::FUNCREF, 10, Some(20));
+
+        // Add element segment: initialize table[0..2] with functions [0, 1]
+        let offset = builder.const_(Literal::I32(0));
+        module.add_element_segment(ElementSegment {
+            table_index: 0,
+            offset,
+            func_indices: vec![0, 1],
+        });
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("write failed");
+
+        // Read
+        let read_bump = Bump::new();
+        let mut reader = BinaryReader::new(&read_bump, bytes);
+        let read_module = reader.parse_module().expect("parse failed");
+
+        // Verify table
+        assert!(read_module.table.is_some());
+        let table = read_module.table.as_ref().unwrap();
+        assert_eq!(table.element_type, Type::FUNCREF);
+        assert_eq!(table.initial, 10);
+        assert_eq!(table.maximum, Some(20));
+
+        // Verify element segments
+        assert_eq!(read_module.elements.len(), 1);
+        let elem = &read_module.elements[0];
+        assert_eq!(elem.table_index, 0);
+        assert_eq!(elem.func_indices, vec![0, 1]);
+        if let ExpressionKind::Const(Literal::I32(val)) = elem.offset.kind {
+            assert_eq!(val, 0);
+        } else {
+            panic!("Expected const offset");
+        }
+    }
+
+    #[test]
+    fn test_table_and_element_validation() {
+        use crate::module::{ElementSegment, TableLimits};
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test 1: Valid table and element segment
+        {
+            let mut module = Module::new();
+
+            let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+            module.add_function(func);
+
+            module.set_table(Type::FUNCREF, 5, None);
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_element_segment(ElementSegment {
+                table_index: 0,
+                offset,
+                func_indices: vec![0],
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(valid, "Valid table/element failed: {:?}", errors);
+        }
+
+        // Test 2: Element segment without table
+        {
+            let mut module = Module::new();
+
+            let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+            module.add_function(func);
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_element_segment(ElementSegment {
+                table_index: 0,
+                offset,
+                func_indices: vec![0],
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Element without table should fail");
+            assert!(errors.iter().any(|e| e.contains("no table exists")));
+        }
+
+        // Test 3: Element with invalid function index
+        {
+            let mut module = Module::new();
+
+            module.set_table(Type::FUNCREF, 5, None);
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_element_segment(ElementSegment {
+                table_index: 0,
+                offset,
+                func_indices: vec![99], // Out of bounds
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Element with OOB function should fail");
+            assert!(errors.iter().any(|e| e.contains("out of bounds")));
+        }
+
+        // Test 4: Invalid table index in element segment
+        {
+            let mut module = Module::new();
+
+            let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+            module.add_function(func);
+
+            module.set_table(Type::FUNCREF, 5, None);
+
+            let offset = builder.const_(Literal::I32(0));
+            module.add_element_segment(ElementSegment {
+                table_index: 1, // Invalid: only 0 allowed
+                offset,
+                func_indices: vec![0],
+            });
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Invalid table index should fail");
+            assert!(errors.iter().any(|e| e.contains("invalid table index")));
         }
     }
 }

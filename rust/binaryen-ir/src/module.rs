@@ -79,14 +79,30 @@ pub struct DataSegment<'a> {
     pub data: Vec<u8>,       // The actual data bytes
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableLimits {
+    pub element_type: Type,   // Element type (funcref in MVP)
+    pub initial: u32,         // Initial size
+    pub maximum: Option<u32>, // Optional maximum size
+}
+
+#[derive(Debug)]
+pub struct ElementSegment<'a> {
+    pub table_index: u32,       // Table index (usually 0 in MVP)
+    pub offset: ExprRef<'a>,    // Offset expression (where in table)
+    pub func_indices: Vec<u32>, // Function indices to initialize
+}
+
 #[derive(Debug, Default)]
 pub struct Module<'a> {
     pub imports: Vec<Import>,
     pub functions: Vec<Function<'a>>,
+    pub table: Option<TableLimits>, // Table section (MVP: single table)
     pub globals: Vec<Global<'a>>,
     pub memory: Option<MemoryLimits>,
     pub start: Option<u32>, // Start function index
     pub exports: Vec<Export>,
+    pub elements: Vec<ElementSegment<'a>>, // Element section
     pub data: Vec<DataSegment<'a>>,
 }
 
@@ -95,10 +111,12 @@ impl<'a> Module<'a> {
         Self {
             imports: Vec::new(),
             functions: Vec::new(),
+            table: None,
             globals: Vec::new(),
             memory: None,
             start: None,
             exports: Vec::new(),
+            elements: Vec::new(),
             data: Vec::new(),
         }
     }
@@ -149,5 +167,17 @@ impl<'a> Module<'a> {
 
     pub fn set_start(&mut self, func_index: u32) {
         self.start = Some(func_index);
+    }
+
+    pub fn set_table(&mut self, element_type: Type, initial: u32, maximum: Option<u32>) {
+        self.table = Some(TableLimits {
+            element_type,
+            initial,
+            maximum,
+        });
+    }
+
+    pub fn add_element_segment(&mut self, segment: ElementSegment<'a>) {
+        self.elements.push(segment);
     }
 }

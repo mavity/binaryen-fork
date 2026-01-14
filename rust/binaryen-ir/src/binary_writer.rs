@@ -104,6 +104,11 @@ impl BinaryWriter {
             self.write_function_section(&func_type_indices)?;
         }
 
+        // Write Table section
+        if let Some(ref table) = module.table {
+            self.write_table_section(table)?;
+        }
+
         // Write Memory section
         if let Some(ref memory) = module.memory {
             self.write_memory_section(memory)?;
@@ -122,6 +127,11 @@ impl BinaryWriter {
         // Write Start section
         if let Some(start_idx) = module.start {
             self.write_start_section(start_idx)?;
+        }
+
+        // Write Element section
+        if !module.elements.is_empty() {
+            self.write_element_section(&module.elements)?;
         }
 
         // Write Code section
@@ -758,6 +768,77 @@ impl BinaryWriter {
                 buf.push(byte);
             }
         }
+        Ok(())
+    }
+
+    fn write_table_section(&mut self, table: &crate::module::TableLimits) -> Result<()> {
+        let mut section_buf = Vec::new();
+
+        // Count (always 1 for now - WASM MVP supports only one table)
+        Self::write_leb128_u32(&mut section_buf, 1)?;
+
+        // Element type
+        Self::write_value_type(&mut section_buf, table.element_type)?;
+
+        // Limits
+        if let Some(max) = table.maximum {
+            section_buf.push(0x01); // flag: has maximum
+            Self::write_leb128_u32(&mut section_buf, table.initial)?;
+            Self::write_leb128_u32(&mut section_buf, max)?;
+        } else {
+            section_buf.push(0x00); // flag: no maximum
+            Self::write_leb128_u32(&mut section_buf, table.initial)?;
+        }
+
+        // Section id (4 = Table)
+        self.buffer.push(0x04);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
+        Ok(())
+    }
+
+    fn write_element_section(&mut self, elements: &[crate::module::ElementSegment]) -> Result<()> {
+        if elements.is_empty() {
+            return Ok(());
+        }
+
+        let mut section_buf = Vec::new();
+
+        // Count
+        Self::write_leb128_u32(&mut section_buf, elements.len() as u32)?;
+
+        for segment in elements {
+            // Table index
+            Self::write_leb128_u32(&mut section_buf, segment.table_index)?;
+
+            // Offset expression
+            let mut label_stack = Vec::new();
+            let func_map = std::collections::HashMap::new();
+            Self::write_expression(
+                &mut section_buf,
+                segment.offset,
+                &mut label_stack,
+                &func_map,
+            )?;
+            section_buf.push(0x0B); // end
+
+            // Function indices (count + indices)
+            Self::write_leb128_u32(&mut section_buf, segment.func_indices.len() as u32)?;
+            for &func_idx in &segment.func_indices {
+                Self::write_leb128_u32(&mut section_buf, func_idx)?;
+            }
+        }
+
+        // Section id (9 = Element)
+        self.buffer.push(0x09);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
         Ok(())
     }
 

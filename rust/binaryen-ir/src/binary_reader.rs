@@ -86,8 +86,10 @@ impl<'a> BinaryReader<'a> {
 
         // Parse sections
         let mut memory_section = None;
+        let mut table_section = None;
         let mut global_section = Vec::new();
         let mut export_section = Vec::new();
+        let mut element_section = Vec::new();
         let mut data_section = Vec::new();
         let mut start_section = None;
 
@@ -112,6 +114,10 @@ impl<'a> BinaryReader<'a> {
                     // Function section
                     function_section = self.parse_function_section()?;
                 }
+                4 => {
+                    // Table section
+                    table_section = self.parse_table_section()?;
+                }
                 5 => {
                     // Memory section
                     memory_section = self.parse_memory_section()?;
@@ -127,6 +133,10 @@ impl<'a> BinaryReader<'a> {
                 8 => {
                     // Start section
                     start_section = self.parse_start_section()?;
+                }
+                9 => {
+                    // Element section
+                    element_section = self.parse_element_section()?;
                 }
                 10 => {
                     // Code section
@@ -150,6 +160,11 @@ impl<'a> BinaryReader<'a> {
             module.set_memory(limits.initial, limits.maximum);
         }
 
+        // Set table limits
+        if let Some(table) = table_section {
+            module.set_table(table.element_type, table.initial, table.maximum);
+        }
+
         // Add globals
         for global in global_section {
             module.add_global(global);
@@ -163,6 +178,11 @@ impl<'a> BinaryReader<'a> {
         // Add data segments
         for segment in data_section {
             module.add_data_segment(segment);
+        }
+
+        // Add element segments
+        for segment in element_section {
+            module.add_element_segment(segment);
         }
 
         // Set start function
@@ -901,6 +921,60 @@ impl<'a> BinaryReader<'a> {
     fn parse_start_section(&mut self) -> Result<Option<u32>> {
         let func_index = self.read_leb128_u32()?;
         Ok(Some(func_index))
+    }
+
+    fn parse_table_section(&mut self) -> Result<Option<crate::module::TableLimits>> {
+        let count = self.read_leb128_u32()?;
+        if count == 0 {
+            return Ok(None);
+        }
+
+        // Read first table (WASM MVP supports only one table)
+        let elem_type = self.read_value_type()?;
+        let (initial, maximum) = self.read_limits()?;
+
+        // Skip remaining tables if any
+        for _ in 1..count {
+            let _ = self.read_value_type()?;
+            let _ = self.read_limits()?;
+        }
+
+        Ok(Some(crate::module::TableLimits {
+            element_type: elem_type,
+            initial,
+            maximum,
+        }))
+    }
+
+    fn parse_element_section(&mut self) -> Result<Vec<crate::module::ElementSegment<'a>>> {
+        let count = self.read_leb128_u32()?;
+        let mut segments = Vec::new();
+
+        for _ in 0..count {
+            // Table index (u32)
+            let table_index = self.read_leb128_u32()?;
+
+            // Offset expression
+            let mut label_stack = Vec::new();
+            let offset = self
+                .parse_expression_impl(&mut label_stack)?
+                .ok_or(ParseError::InvalidSection)?;
+
+            // Function indices count and vector
+            let func_count = self.read_leb128_u32()?;
+            let mut func_indices = Vec::new();
+            for _ in 0..func_count {
+                func_indices.push(self.read_leb128_u32()?);
+            }
+
+            segments.push(crate::module::ElementSegment {
+                table_index,
+                offset,
+                func_indices,
+            });
+        }
+
+        Ok(segments)
     }
 }
 
