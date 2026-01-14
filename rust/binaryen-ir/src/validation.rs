@@ -3,15 +3,15 @@ use crate::module::{Function, Module};
 use crate::visitor::ReadOnlyVisitor;
 use binaryen_core::Type;
 
-pub struct Validator<'a> {
-    module: &'a Module<'a>,
-    current_function: Option<&'a Function<'a>>,
+pub struct Validator<'a, 'm> {
+    module: &'m Module<'a>,
+    current_function: Option<&'m Function<'a>>,
     valid: bool,
     errors: Vec<String>,
 }
 
-impl<'a> Validator<'a> {
-    pub fn new(module: &'a Module<'a>) -> Self {
+impl<'a, 'm> Validator<'a, 'm> {
+    pub fn new(module: &'m Module<'a>) -> Self {
         Self {
             module,
             current_function: None,
@@ -51,7 +51,7 @@ impl<'a> Validator<'a> {
     }
 }
 
-impl<'a> ReadOnlyVisitor<'a> for Validator<'a> {
+impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
     fn visit_expression(&mut self, expr: &Expression<'a>) {
         match &expr.kind {
             ExpressionKind::Binary { op, left, right } => {
