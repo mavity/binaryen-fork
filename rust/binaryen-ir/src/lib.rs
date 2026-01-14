@@ -62,6 +62,7 @@ mod tests {
             functions,
             globals: Vec::new(),
             memory: None,
+            start: None,
             exports: Vec::new(),
             data: Vec::new(),
         };
@@ -115,6 +116,7 @@ mod tests {
                 functions: vec![func],
                 globals: create_globals(),
                 memory: None,
+                start: None,
                 exports: vec![],
                 data: Vec::new(),
             };
@@ -143,6 +145,7 @@ mod tests {
                 functions: vec![func],
                 globals: create_globals(),
                 memory: None,
+                start: None,
                 exports: vec![],
                 data: Vec::new(),
             };
@@ -172,6 +175,7 @@ mod tests {
                 functions: vec![func],
                 globals: create_globals(),
                 memory: None,
+                start: None,
                 exports: vec![],
                 data: Vec::new(),
             };
@@ -324,6 +328,7 @@ mod tests {
                 functions: vec![func_valid],  // f0 is index 0
                 globals: vec![global],        // g0 is index 0
                 memory: Some(memory.clone()), // memory is index 0
+                start: None,
                 exports: vec![
                     Export {
                         name: "exp_func".to_string(),
@@ -356,6 +361,7 @@ mod tests {
                 functions: vec![],
                 globals: vec![],
                 memory: None,
+                start: None,
                 exports: vec![
                     Export {
                         name: "same".to_string(),
@@ -384,6 +390,7 @@ mod tests {
                 functions: vec![func_valid],
                 globals: vec![],
                 memory: None,
+                start: None,
                 exports: vec![Export {
                     name: "f1".to_string(),
                     kind: ExportKind::Function,
@@ -406,6 +413,7 @@ mod tests {
                 functions: vec![],
                 globals: vec![],
                 memory: None,
+                start: None,
                 exports: vec![Export {
                     name: "g0".to_string(),
                     kind: ExportKind::Global,
@@ -428,6 +436,7 @@ mod tests {
                 functions: vec![],
                 globals: vec![],
                 memory: None,
+                start: None,
                 exports: vec![Export {
                     name: "m0".to_string(),
                     kind: ExportKind::Memory,
@@ -470,6 +479,7 @@ mod tests {
             functions: vec![func],
             globals: vec![global],
             memory: Some(memory),
+            start: None,
             exports: vec![
                 Export {
                     name: "test_func".to_string(),
@@ -791,6 +801,123 @@ mod tests {
             let (valid, errors) = validator.validate();
             assert!(!valid, "Invalid memory index should fail");
             assert!(errors.iter().any(|e| e.contains("invalid memory index")));
+        }
+    }
+
+    #[test]
+    fn test_start_section_roundtrip() {
+        use crate::binary_reader::BinaryReader;
+        use crate::binary_writer::BinaryWriter;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        let mut module = Module::new();
+
+        // Add a function to be the start function
+        let body = builder.const_(Literal::I32(42));
+        let func = Function::new(
+            "init".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            Some(body),
+        );
+        module.add_function(func);
+
+        // Set as start function (index 0)
+        module.set_start(0);
+
+        // Write
+        let mut writer = BinaryWriter::new();
+        let bytes = writer.write_module(&module).expect("write failed");
+
+        // Read
+        let read_bump = Bump::new();
+        let mut reader = BinaryReader::new(&read_bump, bytes);
+        let read_module = reader.parse_module().expect("parse failed");
+
+        // Verify
+        assert_eq!(read_module.start, Some(0));
+    }
+
+    #[test]
+    fn test_start_section_validation() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Test 1: Valid start function (no params, no results)
+        {
+            let mut module = Module::new();
+
+            let const_expr = builder.const_(Literal::I32(0));
+            let body = builder.drop(const_expr); // Drop the i32 to get Type::NONE
+            let func = Function::new(
+                "start".to_string(),
+                Type::NONE,
+                Type::NONE,
+                vec![],
+                Some(body),
+            );
+            module.add_function(func);
+            module.set_start(0);
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(valid, "Valid start function failed: {:?}", errors);
+        }
+
+        // Test 2: Start function out of bounds
+        {
+            let mut module = Module::new();
+            module.set_start(99); // No functions exist
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "OOB start function should fail");
+            assert!(errors.iter().any(|e| e.contains("out of bounds")));
+        }
+
+        // Test 3: Start function with parameters (invalid)
+        {
+            let mut module = Module::new();
+
+            let body = builder.local_get(0, Type::I32);
+            let func = Function::new(
+                "bad_start".to_string(),
+                Type::I32, // Has parameter
+                Type::NONE,
+                vec![],
+                Some(body),
+            );
+            module.add_function(func);
+            module.set_start(0);
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Start with params should fail");
+            assert!(errors.iter().any(|e| e.contains("no parameters")));
+        }
+
+        // Test 4: Start function with results (invalid)
+        {
+            let mut module = Module::new();
+
+            let body = builder.const_(Literal::I32(42));
+            let func = Function::new(
+                "bad_start".to_string(),
+                Type::NONE,
+                Type::I32, // Has result
+                vec![],
+                Some(body),
+            );
+            module.add_function(func);
+            module.set_start(0);
+
+            let validator = Validator::new(&module);
+            let (valid, errors) = validator.validate();
+            assert!(!valid, "Start with results should fail");
+            assert!(errors.iter().any(|e| e.contains("no results")));
         }
     }
 }

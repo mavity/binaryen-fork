@@ -89,6 +89,7 @@ impl<'a> BinaryReader<'a> {
         let mut global_section = Vec::new();
         let mut export_section = Vec::new();
         let mut data_section = Vec::new();
+        let mut start_section = None;
 
         while self.pos < self.data.len() {
             let section_id = self.read_u8()?;
@@ -122,6 +123,10 @@ impl<'a> BinaryReader<'a> {
                 7 => {
                     // Export section
                     export_section = self.parse_export_section()?;
+                }
+                8 => {
+                    // Start section
+                    start_section = self.parse_start_section()?;
                 }
                 10 => {
                     // Code section
@@ -158,6 +163,11 @@ impl<'a> BinaryReader<'a> {
         // Add data segments
         for segment in data_section {
             module.add_data_segment(segment);
+        }
+
+        // Set start function
+        if let Some(start_idx) = start_section {
+            module.set_start(start_idx);
         }
 
         // Combine function signatures with code
@@ -886,6 +896,11 @@ impl<'a> BinaryReader<'a> {
         }
 
         Ok(segments)
+    }
+
+    fn parse_start_section(&mut self) -> Result<Option<u32>> {
+        let func_index = self.read_leb128_u32()?;
+        Ok(Some(func_index))
     }
 }
 

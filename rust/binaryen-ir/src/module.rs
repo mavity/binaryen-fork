@@ -85,6 +85,7 @@ pub struct Module<'a> {
     pub functions: Vec<Function<'a>>,
     pub globals: Vec<Global<'a>>,
     pub memory: Option<MemoryLimits>,
+    pub start: Option<u32>, // Start function index
     pub exports: Vec<Export>,
     pub data: Vec<DataSegment<'a>>,
 }
@@ -96,6 +97,7 @@ impl<'a> Module<'a> {
             functions: Vec::new(),
             globals: Vec::new(),
             memory: None,
+            start: None,
             exports: Vec::new(),
             data: Vec::new(),
         }
@@ -143,5 +145,9 @@ impl<'a> Module<'a> {
 
     pub fn add_data_segment(&mut self, segment: DataSegment<'a>) {
         self.data.push(segment);
+    }
+
+    pub fn set_start(&mut self, func_index: u32) {
+        self.start = Some(func_index);
     }
 }

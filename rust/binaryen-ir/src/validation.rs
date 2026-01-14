@@ -131,6 +131,44 @@ impl<'a, 'm> Validator<'a, 'm> {
             self.visit(segment.offset);
         }
 
+        // Validate start function
+        if let Some(start_idx) = self.module.start {
+            let total_funcs = self.func_imports.len() + self.module.functions.len();
+            if (start_idx as usize) >= total_funcs {
+                self.fail(&format!(
+                    "Start function index {} out of bounds (total functions: {})",
+                    start_idx, total_funcs
+                ));
+            }
+
+            // Check that start function has no parameters and no results
+            let func_sig = if (start_idx as usize) < self.func_imports.len() {
+                // It's an imported function
+                let import = self.func_imports[start_idx as usize];
+                if let crate::module::ImportKind::Function(params, results) = import.kind {
+                    Some((params, results))
+                } else {
+                    None
+                }
+            } else {
+                // It's a defined function
+                let local_idx = (start_idx as usize) - self.func_imports.len();
+                self.module
+                    .functions
+                    .get(local_idx)
+                    .map(|f| (f.params, f.results))
+            };
+
+            if let Some((params, results)) = func_sig {
+                if params != Type::NONE {
+                    self.fail("Start function must have no parameters");
+                }
+                if results != Type::NONE {
+                    self.fail("Start function must have no results");
+                }
+            }
+        }
+
         (self.valid, self.errors)
     }
 

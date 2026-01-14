@@ -119,6 +119,11 @@ impl BinaryWriter {
             self.write_export_section(&module.exports)?;
         }
 
+        // Write Start section
+        if let Some(start_idx) = module.start {
+            self.write_start_section(start_idx)?;
+        }
+
         // Write Code section
         if !module.functions.is_empty() {
             self.write_code_section(&module.functions)?;
@@ -353,6 +358,22 @@ impl BinaryWriter {
 
         // Section id (7 = Export)
         self.buffer.push(0x07);
+        // Section size
+        Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
+        // Section content
+        self.buffer.extend_from_slice(&section_buf);
+
+        Ok(())
+    }
+
+    fn write_start_section(&mut self, start_idx: u32) -> Result<()> {
+        let mut section_buf = Vec::new();
+
+        // Function index
+        Self::write_leb128_u32(&mut section_buf, start_idx)?;
+
+        // Section id (8 = Start)
+        self.buffer.push(0x08);
         // Section size
         Self::write_leb128_u32(&mut self.buffer, section_buf.len() as u32)?;
         // Section content
