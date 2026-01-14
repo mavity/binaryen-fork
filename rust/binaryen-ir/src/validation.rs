@@ -84,7 +84,21 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
                     self.fail(&format!("Call target not found: {}", target));
                 }
             }
-            _ => {}
+            ExpressionKind::Return { .. }
+            | ExpressionKind::Unreachable
+            | ExpressionKind::Drop { .. }
+            | ExpressionKind::Select { .. }
+            | ExpressionKind::Const(_)
+            | ExpressionKind::LocalSet { .. }
+            | ExpressionKind::LocalTee { .. }
+            | ExpressionKind::Unary { .. }
+            | ExpressionKind::Block { .. }
+            | ExpressionKind::If { .. }
+            | ExpressionKind::Loop { .. }
+            | ExpressionKind::Break { .. }
+            | ExpressionKind::Nop => {
+                // These expression kinds don't require special validation yet
+            }
         }
     }
 }

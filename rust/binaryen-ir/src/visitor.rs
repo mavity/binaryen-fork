@@ -54,7 +54,27 @@ pub trait Visitor<'a> {
                     self.visit(val);
                 }
             }
-            ExpressionKind::Const(_) | ExpressionKind::Nop | ExpressionKind::LocalGet { .. } => {}
+            ExpressionKind::Return { value } => {
+                if let Some(val) = value {
+                    self.visit(val);
+                }
+            }
+            ExpressionKind::Drop { value } => {
+                self.visit(value);
+            }
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.visit(condition);
+                self.visit(if_true);
+                self.visit(if_false);
+            }
+            ExpressionKind::Unreachable
+            | ExpressionKind::Const(_)
+            | ExpressionKind::Nop
+            | ExpressionKind::LocalGet { .. } => {}
         }
     }
 }
@@ -113,7 +133,27 @@ pub trait ReadOnlyVisitor<'a> {
                     self.visit(val);
                 }
             }
-            ExpressionKind::Const(_) | ExpressionKind::Nop | ExpressionKind::LocalGet { .. } => {}
+            ExpressionKind::Return { value } => {
+                if let Some(val) = value {
+                    self.visit(val);
+                }
+            }
+            ExpressionKind::Drop { value } => {
+                self.visit(value);
+            }
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.visit(condition);
+                self.visit(if_true);
+                self.visit(if_false);
+            }
+            ExpressionKind::Unreachable
+            | ExpressionKind::Const(_)
+            | ExpressionKind::Nop
+            | ExpressionKind::LocalGet { .. } => {}
         }
     }
 }

@@ -58,6 +58,18 @@ pub enum ExpressionKind<'a> {
         condition: Option<ExprRef<'a>>,
         value: Option<ExprRef<'a>>,
     },
+    Return {
+        value: Option<ExprRef<'a>>,
+    },
+    Unreachable,
+    Drop {
+        value: ExprRef<'a>,
+    },
+    Select {
+        condition: ExprRef<'a>,
+        if_true: ExprRef<'a>,
+        if_false: ExprRef<'a>,
+    },
     Nop,
 }
 

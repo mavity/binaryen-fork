@@ -6,12 +6,14 @@ use std::io::{self, Write};
 
 pub struct BinaryWriter {
     buffer: Vec<u8>,
+    label_stack: Vec<Option<String>>, // Stack of label names for depth calculation
 }
 
 #[derive(Debug)]
 pub enum WriteError {
     Io(io::Error),
     UnsupportedFeature(String),
+    LabelNotFound(String),
 }
 
 impl From<io::Error> for WriteError {
@@ -24,7 +26,10 @@ type Result<T> = std::result::Result<T, WriteError>;
 
 impl BinaryWriter {
     pub fn new() -> Self {
-        Self { buffer: Vec::new() }
+        Self {
+            buffer: Vec::new(),
+            label_stack: Vec::new(),
+        }
     }
 
     pub fn write_module(&mut self, module: &Module) -> Result<Vec<u8>> {
@@ -151,7 +156,8 @@ impl BinaryWriter {
 
             // Expression
             if let Some(body) = &func.body {
-                Self::write_expression(&mut body_buf, body)?;
+                let mut label_stack = Vec::new();
+                Self::write_expression(&mut body_buf, body, &mut label_stack)?;
             }
 
             // end
@@ -172,7 +178,11 @@ impl BinaryWriter {
         Ok(())
     }
 
-    fn write_expression(buf: &mut Vec<u8>, expr: &Expression) -> Result<()> {
+    fn write_expression(
+        buf: &mut Vec<u8>,
+        expr: &Expression,
+        label_stack: &mut Vec<Option<String>>,
+    ) -> Result<()> {
         match &expr.kind {
             ExpressionKind::Const(lit) => {
                 match lit {
@@ -199,18 +209,18 @@ impl BinaryWriter {
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalSet { index, value } => {
-                Self::write_expression(buf, value)?;
+                Self::write_expression(buf, value, label_stack)?;
                 buf.push(0x21); // local.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalTee { index, value } => {
-                Self::write_expression(buf, value)?;
+                Self::write_expression(buf, value, label_stack)?;
                 buf.push(0x22); // local.tee
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::Binary { op, left, right } => {
-                Self::write_expression(buf, left)?;
-                Self::write_expression(buf, right)?;
+                Self::write_expression(buf, left, label_stack)?;
+                Self::write_expression(buf, right, label_stack)?;
 
                 let opcode = match op {
                     BinaryOp::AddInt32 => 0x6A,
@@ -228,10 +238,112 @@ impl BinaryWriter {
                 };
                 buf.push(opcode);
             }
-            ExpressionKind::Block { list, .. } => {
+            ExpressionKind::Block { name, list } => {
+                buf.push(0x02); // block opcode
+                buf.push(0x40); // block type: empty (void)
+
+                // Push label onto stack
+                label_stack.push(name.map(|s| s.to_string()));
+
+                // Write block body
                 for child in list.iter() {
-                    Self::write_expression(buf, child)?;
+                    Self::write_expression(buf, child, label_stack)?;
                 }
+
+                // Pop label
+                label_stack.pop();
+
+                buf.push(0x0B); // end opcode
+            }
+            ExpressionKind::Loop { name, body } => {
+                buf.push(0x03); // loop opcode
+                buf.push(0x40); // block type: empty (void)
+
+                // Push label onto stack
+                label_stack.push(name.map(|s| s.to_string()));
+
+                // Write loop body
+                Self::write_expression(buf, body, label_stack)?;
+
+                // Pop label
+                label_stack.pop();
+
+                buf.push(0x0B); // end opcode
+            }
+            ExpressionKind::If {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                // Write condition
+                Self::write_expression(buf, condition, label_stack)?;
+
+                buf.push(0x04); // if opcode
+                buf.push(0x40); // block type: empty (void)
+
+                // Push unnamed label for if block
+                label_stack.push(None);
+
+                // Write then branch
+                Self::write_expression(buf, if_true, label_stack)?;
+
+                // Write else branch if present
+                if let Some(if_false_expr) = if_false {
+                    buf.push(0x05); // else opcode
+                    Self::write_expression(buf, if_false_expr, label_stack)?;
+                }
+
+                // Pop label
+                label_stack.pop();
+
+                buf.push(0x0B); // end opcode
+            }
+            ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            } => {
+                // Write value if present
+                if let Some(val) = value {
+                    Self::write_expression(buf, val, label_stack)?;
+                }
+
+                // Find label depth
+                let depth = Self::find_label_depth(label_stack, name)?;
+
+                if let Some(cond) = condition {
+                    // br_if
+                    Self::write_expression(buf, cond, label_stack)?;
+                    buf.push(0x0D); // br_if opcode
+                } else {
+                    // br
+                    buf.push(0x0C); // br opcode
+                }
+
+                Self::write_leb128_u32(buf, depth)?;
+            }
+            ExpressionKind::Return { value } => {
+                if let Some(val) = value {
+                    Self::write_expression(buf, val, label_stack)?;
+                }
+                buf.push(0x0F); // return opcode
+            }
+            ExpressionKind::Unreachable => {
+                buf.push(0x00); // unreachable opcode
+            }
+            ExpressionKind::Drop { value } => {
+                Self::write_expression(buf, value, label_stack)?;
+                buf.push(0x1A); // drop opcode
+            }
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                Self::write_expression(buf, if_true, label_stack)?;
+                Self::write_expression(buf, if_false, label_stack)?;
+                Self::write_expression(buf, condition, label_stack)?;
+                buf.push(0x1B); // select opcode
             }
             ExpressionKind::Nop => {
                 buf.push(0x01); // nop
@@ -244,6 +356,18 @@ impl BinaryWriter {
             }
         }
         Ok(())
+    }
+
+    fn find_label_depth(label_stack: &[Option<String>], target: &str) -> Result<u32> {
+        // Search from the end (most recent) to the beginning
+        for (i, label) in label_stack.iter().rev().enumerate() {
+            if let Some(name) = label {
+                if name == target {
+                    return Ok(i as u32);
+                }
+            }
+        }
+        Err(WriteError::LabelNotFound(target.to_string()))
     }
 
     fn write_value_type(buf: &mut Vec<u8>, type_: Type) -> Result<()> {
