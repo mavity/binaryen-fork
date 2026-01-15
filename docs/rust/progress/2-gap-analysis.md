@@ -312,6 +312,13 @@ This transforms a "multi-month monolithic effort" into **manageable multi-day ch
 
 ### Complete Pass Inventory by Tier
 
+Implementation rules **CRITICALLY IMPORTANT!!**
+
+* Implement 1 pass at a time, or a very small set when they are too similar to break, STRICTLY SEQUENTIALLY: no half-implemented passes.
+* When a pass is implemented, the build MUST succeed fully, no exceptions, no excuses. If the build breaks in any way, fix it first.
+* When a pass is implemented, ALL tests must fully pass, no exceptions either! "The test was failing before" is NOT an accepted excuse. ALL tests must fully pass. Fix any breaks when implementing a pass. 
+
+
 **Tier 1: Foundational & Cleanup** (19 passes, 2-3 weeks)
 - **Group 1A (7)**: vacuum, remove-unused-module-elements, remove-unused-brs, remove-unused-names, remove-unused-types, remove-imports, remove-memory-init
 - **Group 1B (5)**: reorder-types, reorder-locals, reorder-globals, reorder-functions, minify-imports
