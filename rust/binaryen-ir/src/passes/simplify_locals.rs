@@ -62,13 +62,12 @@ impl Default for SimplifyLocals {
 }
 
 /// Information about a sinkable local.set
+#[derive(Clone, PartialEq)]
 struct SinkableInfo<'a> {
-    /// Pointer to the expression (for replacement)
-    expr_idx: usize,
     /// Effect analysis of the set operation
     effects: Effect,
     /// The local.set expression itself
-    set: &'a Expression<'a>,
+    set: ExprRef<'a>,
 }
 
 /// Context for a single function optimization
@@ -159,7 +158,101 @@ impl Pass for SimplifyLocals {
 
 impl SimplifyLocals {
     fn optimize_function<'a>(&mut self, expr: &mut ExprRef<'a>, ctx: &mut FunctionContext<'a>) {
-        // Post-order traversal
+        // Handle LocalGet
+        let get_index = if let ExpressionKind::LocalGet { index } = &expr.kind {
+            Some(*index)
+        } else {
+            None
+        };
+        if let Some(index) = get_index {
+            // Sinking logic
+            if let Some(info) = ctx.sinkables.remove(&index) {
+                unsafe {
+                    let set_kind = &mut (*info.set.as_ptr()).kind;
+                    if let ExpressionKind::LocalSet { value, .. } = set_kind {
+                        *expr = *value;
+                        *set_kind = ExpressionKind::Nop;
+                        self.another_cycle = true;
+                    } else {
+                        unreachable!("Sinkable set must be a LocalSet");
+                    }
+                }
+            } else {
+                if ctx.sinkables.contains_key(&index) {
+                    let one_use =
+                        ctx.first_cycle || ctx.get_counts.get(&index).copied().unwrap_or(0) == 1;
+                    if one_use || ctx.allow_tee {
+                        self.another_cycle = true;
+                    }
+                }
+            }
+            let effects = EffectAnalyzer::analyze(*expr);
+            ctx.check_invalidations(effects);
+            return;
+        }
+
+        // Handle LocalSet
+        let set_index = if let ExpressionKind::LocalSet { index, .. } = &expr.kind {
+            Some(*index)
+        } else {
+            None
+        };
+        if let Some(index) = set_index {
+            if let ExpressionKind::LocalSet { value, .. } = &mut expr.kind {
+                self.optimize_function(value, ctx);
+            }
+
+            if ctx.sinkables.contains_key(&index) {
+                ctx.sinkables.remove(&index);
+                self.another_cycle = true;
+            }
+
+            let effects = EffectAnalyzer::analyze(*expr);
+            ctx.check_invalidations(effects);
+
+            if ctx.can_sink(&*expr) {
+                if let ExpressionKind::LocalSet { value, .. } = &expr.kind {
+                    let value_effects = EffectAnalyzer::analyze(*value);
+                    ctx.sinkables.insert(
+                        index,
+                        SinkableInfo {
+                            effects: value_effects,
+                            set: *expr,
+                        },
+                    );
+                }
+            }
+            return;
+        }
+
+        // Handle LocalTee
+        let tee_vals = if let ExpressionKind::LocalTee { index, .. } = &expr.kind {
+            Some(*index)
+        } else {
+            None
+        };
+        if let Some(_) = tee_vals {
+            if let ExpressionKind::LocalTee { value, .. } = &mut expr.kind {
+                self.optimize_function(value, ctx);
+            }
+            let effects = EffectAnalyzer::analyze(*expr);
+            ctx.check_invalidations(effects);
+            return;
+        }
+
+        // Handle Drop
+        let is_drop = matches!(expr.kind, ExpressionKind::Drop { .. });
+        if is_drop {
+            if let ExpressionKind::Drop { value } = &mut expr.kind {
+                self.optimize_function(value, ctx);
+            }
+            self.visit_drop_post(expr, ctx);
+            let effects = EffectAnalyzer::analyze(*expr);
+            ctx.check_invalidations(effects);
+            return;
+        }
+
+        // Handle Control Flow and Others
         match &mut expr.kind {
             ExpressionKind::Block { list, .. } => {
                 for child in list.iter_mut() {
@@ -173,52 +266,36 @@ impl SimplifyLocals {
                 if_false,
             } => {
                 self.optimize_function(condition, ctx);
+
+                let snapshot = ctx.sinkables.clone();
                 self.optimize_function(if_true, ctx);
+                ctx.sinkables.retain(|k, v| snapshot.get(k) == Some(v));
+
                 if let Some(false_branch) = if_false {
+                    let snapshot = ctx.sinkables.clone();
                     self.optimize_function(false_branch, ctx);
+                    ctx.sinkables.retain(|k, v| snapshot.get(k) == Some(v));
                 }
+
                 self.visit_if_post(expr, ctx);
             }
             ExpressionKind::Loop { body, .. } => {
+                let snapshot = ctx.sinkables.clone();
                 self.optimize_function(body, ctx);
+                ctx.sinkables.retain(|k, v| snapshot.get(k) == Some(v));
+
                 self.visit_loop_post(expr, ctx);
             }
-            ExpressionKind::LocalGet { index } => {
-                // For now, just mark potential optimization
-                if ctx.sinkables.contains_key(index) {
-                    let one_use =
-                        ctx.first_cycle || ctx.get_counts.get(index).copied().unwrap_or(0) == 1;
-                    if one_use || ctx.allow_tee {
-                        self.another_cycle = true;
-                    }
-                }
-            }
-            ExpressionKind::LocalSet { index, value } => {
-                self.optimize_function(value, ctx);
-
-                // If we see a set that was already potentially-sinkable,
-                // the previous store is dead
-                if ctx.sinkables.contains_key(index) {
-                    ctx.sinkables.remove(index);
-                    self.another_cycle = true;
-                }
-
-                // Check effects (we can't borrow expr here, so we'll skip for now)
-                // TODO: Need proper effect analysis here
-            }
-            ExpressionKind::LocalTee { index, value } => {
-                self.optimize_function(value, ctx);
-                // Tees cannot be sunk, just analyze for effects
-                let effects = EffectAnalyzer::analyze(*expr);
-                ctx.check_invalidations(effects);
-            }
-            ExpressionKind::Drop { value } => {
-                self.optimize_function(value, ctx);
-                self.visit_drop_post(expr, ctx);
+            ExpressionKind::LocalGet { .. }
+            | ExpressionKind::LocalSet { .. }
+            | ExpressionKind::LocalTee { .. }
+            | ExpressionKind::Drop { .. } => {
+                unreachable!("Handled above")
             }
             _ => {
-                // Visit children for other expression types
                 visit_children(expr, |child| self.optimize_function(child, ctx));
+                let effects = EffectAnalyzer::analyze(*expr);
+                ctx.check_invalidations(effects);
             }
         }
     }
