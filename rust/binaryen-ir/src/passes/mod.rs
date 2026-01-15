@@ -14,6 +14,7 @@ pub mod merge_blocks;
 pub mod merge_locals;
 pub mod optimize_added_constants;
 pub mod optimize_added_constants_propagate;
+pub mod optimize_casts;
 pub mod optimize_instructions;
 pub mod pick_load_signs;
 pub mod poppify;
