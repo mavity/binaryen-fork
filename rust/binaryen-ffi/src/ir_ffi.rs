@@ -24,7 +24,8 @@ pub struct WrappedModule {
 #[no_mangle]
 pub unsafe extern "C" fn BinaryenRustModuleCreate() -> BinaryenRustModuleRef {
     let bump = Box::new(Bump::new());
-    let module = Module::new();
+    let bump_ref: &'static Bump = std::mem::transmute(bump.as_ref());
+    let module = Module::new(bump_ref);
 
     // Safety: The module will contain references to bump.
     // We treat them as 'static internally but ensure bump lives as long as module.

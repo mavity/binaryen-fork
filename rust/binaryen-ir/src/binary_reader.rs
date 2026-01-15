@@ -79,7 +79,7 @@ impl<'a> BinaryReader<'a> {
             return Err(ParseError::InvalidVersion);
         }
 
-        let mut module = Module::new();
+        let mut module = Module::new(self.bump);
         let mut type_section = Vec::new();
         let mut function_section = Vec::new();
         let mut code_section = Vec::new();

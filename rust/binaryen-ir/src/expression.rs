@@ -232,6 +232,59 @@ impl<'a> Expression<'a> {
     pub fn new(bump: &'a Bump, kind: ExpressionKind<'a>, type_: Type) -> ExprRef<'a> {
         ExprRef::new(bump.alloc(Expression { kind, type_ }))
     }
+
+    /// Create a new nop expression
+    pub fn nop(bump: &'a Bump) -> ExprRef<'a> {
+        ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Nop,
+            type_: Type::NONE,
+        }))
+    }
+
+    /// Create a new const expression
+    pub fn const_expr(bump: &'a Bump, lit: Literal, ty: Type) -> ExprRef<'a> {
+        ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Const(lit),
+            type_: ty,
+        }))
+    }
+
+    /// Create a new block
+    pub fn block(
+        bump: &'a Bump,
+        name: Option<&'a str>,
+        list: BumpVec<'a, ExprRef<'a>>,
+        ty: Type,
+    ) -> ExprRef<'a> {
+        ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Block { name, list },
+            type_: ty,
+        }))
+    }
+
+    /// Create local.set
+    pub fn local_set(bump: &'a Bump, index: u32, value: ExprRef<'a>) -> ExprRef<'a> {
+        ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::LocalSet { index, value },
+            type_: Type::NONE,
+        }))
+    }
+
+    /// Create local.get
+    pub fn local_get(bump: &'a Bump, index: u32, ty: Type) -> ExprRef<'a> {
+        ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::LocalGet { index },
+            type_: ty,
+        }))
+    }
+
+    /// Create local.tee
+    pub fn local_tee(bump: &'a Bump, index: u32, value: ExprRef<'a>, ty: Type) -> ExprRef<'a> {
+        ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::LocalTee { index, value },
+            type_: ty,
+        }))
+    }
 }
 
 // Helpers for construction
@@ -657,5 +710,108 @@ impl<'a> IrBuilder<'a> {
             },
             Type::V128,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use binaryen_core::{Literal, Type};
+    use bumpalo::collections::Vec as BumpVec;
+    use bumpalo::Bump;
+
+    #[test]
+    fn test_expression_nop() {
+        let bump = Bump::new();
+        let nop = Expression::nop(&bump);
+        assert!(matches!(nop.kind, ExpressionKind::Nop));
+        assert_eq!(nop.type_, Type::NONE);
+    }
+
+    #[test]
+    fn test_expression_const_expr() {
+        let bump = Bump::new();
+        let const_expr = Expression::const_expr(&bump, Literal::I32(42), Type::I32);
+        assert!(matches!(
+            const_expr.kind,
+            ExpressionKind::Const(Literal::I32(42))
+        ));
+        assert_eq!(const_expr.type_, Type::I32);
+    }
+
+    #[test]
+    fn test_expression_block() {
+        let bump = Bump::new();
+        let mut list = BumpVec::new_in(&bump);
+        list.push(Expression::nop(&bump));
+        list.push(Expression::const_expr(&bump, Literal::I32(1), Type::I32));
+
+        let block = Expression::block(&bump, None, list, Type::I32);
+        assert!(matches!(block.kind, ExpressionKind::Block { .. }));
+        assert_eq!(block.type_, Type::I32);
+
+        if let ExpressionKind::Block { list, .. } = &block.kind {
+            assert_eq!(list.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_expression_local_set() {
+        let bump = Bump::new();
+        let val = Expression::const_expr(&bump, Literal::I32(10), Type::I32);
+        let set = Expression::local_set(&bump, 0, val);
+
+        assert!(matches!(
+            set.kind,
+            ExpressionKind::LocalSet { index: 0, .. }
+        ));
+        assert_eq!(set.type_, Type::NONE);
+    }
+
+    #[test]
+    fn test_expression_local_get() {
+        let bump = Bump::new();
+        let get = Expression::local_get(&bump, 0, Type::I32);
+
+        assert!(matches!(get.kind, ExpressionKind::LocalGet { index: 0 }));
+        assert_eq!(get.type_, Type::I32);
+    }
+
+    #[test]
+    fn test_expression_local_tee() {
+        let bump = Bump::new();
+        let val = Expression::const_expr(&bump, Literal::I32(5), Type::I32);
+        let tee = Expression::local_tee(&bump, 0, val, Type::I32);
+
+        assert!(matches!(
+            tee.kind,
+            ExpressionKind::LocalTee { index: 0, .. }
+        ));
+        assert_eq!(tee.type_, Type::I32);
+    }
+
+    #[test]
+    fn test_expression_helpers_integration() {
+        let bump = Bump::new();
+
+        // Build: (block (local.set $0 (i32.const 42)) (local.get $0))
+        let const_val = Expression::const_expr(&bump, Literal::I32(42), Type::I32);
+        let set = Expression::local_set(&bump, 0, const_val);
+        let get = Expression::local_get(&bump, 0, Type::I32);
+
+        let mut list = BumpVec::new_in(&bump);
+        list.push(set);
+        list.push(get);
+
+        let block = Expression::block(&bump, None, list, Type::I32);
+
+        // Verify structure
+        if let ExpressionKind::Block { list, .. } = &block.kind {
+            assert_eq!(list.len(), 2);
+            assert!(matches!(list[0].kind, ExpressionKind::LocalSet { .. }));
+            assert!(matches!(list[1].kind, ExpressionKind::LocalGet { .. }));
+        } else {
+            panic!("Expected Block");
+        }
     }
 }

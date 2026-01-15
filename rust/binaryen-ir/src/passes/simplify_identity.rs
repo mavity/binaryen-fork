@@ -107,7 +107,8 @@ mod tests {
             Some(binary),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = SimplifyIdentity;

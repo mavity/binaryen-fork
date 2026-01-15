@@ -216,7 +216,8 @@ mod tests {
             Some(xor),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Simplify;
@@ -262,7 +263,8 @@ mod tests {
 
         let func = Function::new("test".to_string(), Type::I32, Type::I32, vec![], Some(sub));
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Simplify;
@@ -318,7 +320,8 @@ mod tests {
             Some(if_expr),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Simplify;
@@ -374,7 +377,8 @@ mod tests {
             Some(if_expr),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Simplify;
@@ -430,7 +434,8 @@ mod tests {
             Some(select),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Simplify;

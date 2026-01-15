@@ -439,7 +439,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -523,7 +524,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -587,7 +589,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -674,7 +677,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -730,7 +734,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -811,7 +816,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         // Run in rigorous mode - adjacent stores should still optimize
@@ -889,7 +895,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -977,7 +984,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         // In simple mode, only adjacent pairs are checked - should not optimize
@@ -1040,7 +1048,8 @@ mod tests {
             vec![Type::I32, Type::I32],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();
@@ -1098,7 +1107,8 @@ mod tests {
             vec![],
             Some(block),
         );
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = MemoryOptimization::new();

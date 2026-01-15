@@ -75,7 +75,8 @@ mod tests {
 
     #[test]
     fn test_pass_runner() {
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(Function::new(
             "test".to_string(),
             Type::NONE,
@@ -127,7 +128,8 @@ mod tests {
             Some(ExprRef::new(body)),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut runner = PassRunner::new();

@@ -656,7 +656,8 @@ mod tests {
         assert_eq!(pass.name(), "SimplifyLocals");
 
         // Create empty module
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         pass.run(&mut module);
 
         // Pass should complete without errors

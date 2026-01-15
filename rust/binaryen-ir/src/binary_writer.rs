@@ -1181,7 +1181,8 @@ mod tests {
 
     #[test]
     fn test_write_minimal_module() {
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let bump = Bump::new();
         let body = bump.alloc(Expression {
@@ -1212,7 +1213,8 @@ mod tests {
         let bump = Bump::new();
 
         // Original module
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         let body = bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
@@ -1271,7 +1273,8 @@ mod tests {
 
         // Create a module with a function that has a single parameter
         // (our IR currently stores params as single Type, not Vec<Type>)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         let body = bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 0 },
             type_: Type::I32,
@@ -1305,7 +1308,8 @@ mod tests {
         let bump = Bump::new();
 
         // Module with function that has locals
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         let body = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 1 }, // Get local variable
             type_: Type::I32,
@@ -1346,7 +1350,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Build a function with control flow:
         // fn test(i32) -> i32 {
@@ -1445,7 +1450,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Build a function with memory operations:
         // fn test(i32) -> i32 {
@@ -1503,7 +1509,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test all load variants: i32.load8_s, i32.load8_u, i32.load16_s, i32.load16_u, i64.load
         let ptr = builder.local_get(0, Type::I32);
@@ -1557,7 +1564,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test all store variants: i32.store8, i32.store16, i64.store
         let ptr1 = builder.local_get(0, Type::I32);
@@ -1606,7 +1614,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Build: if (local.get 0) { i32.store(ptr, 100) } else { i32.store(ptr, 200) }
         //        return i32.load(ptr)
@@ -1659,7 +1668,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test various offsets and alignments
         let ptr1 = builder.local_get(0, Type::I32);
@@ -1701,7 +1711,8 @@ mod tests {
     fn test_memory_section() {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add memory with limits
         module.set_memory(1, Some(10)); // 1 initial page, 10 max pages
@@ -1741,7 +1752,8 @@ mod tests {
     fn test_export_section() {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a function
         let result = builder.const_(Literal::I32(42));
@@ -1778,7 +1790,8 @@ mod tests {
     fn test_memory_and_exports_combined() {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Set memory
         module.set_memory(2, None); // 2 pages, no max
@@ -1834,7 +1847,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Set memory (1 page = 64KB)
         module.set_memory(1, Some(10));
@@ -1925,7 +1939,8 @@ mod tests {
     fn test_function_call() {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Function 1: helper - returns 42
         let result1 = builder.const_(Literal::I32(42));
@@ -1986,7 +2001,8 @@ mod tests {
     fn test_function_call_with_args() {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Function 1: add_five - takes i32 param and adds 5
         let param = builder.local_get(0, Type::I32);
@@ -2033,7 +2049,8 @@ mod tests {
     fn test_recursive_function() {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Recursive factorial function (simplified)
         // factorial(n): if n <= 1 then 1 else n * factorial(n-1)
@@ -2072,7 +2089,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Set memory
         module.set_memory(1, Some(10));
@@ -2176,7 +2194,8 @@ mod tests {
     #[test]
     fn test_globals_roundtrip() {
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // 1. Define global: mut i32 g0 = 100
         let builder = IrBuilder::new(&bump);

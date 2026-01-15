@@ -61,6 +61,8 @@ mod tests {
         }];
 
         let module = Module {
+            allocator: &bump,
+
             types: vec![],
             imports: vec![],
             functions,
@@ -118,6 +120,8 @@ mod tests {
             );
 
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![func],
@@ -150,6 +154,8 @@ mod tests {
             );
 
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![func],
@@ -183,6 +189,8 @@ mod tests {
             );
 
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![func],
@@ -295,7 +303,8 @@ mod tests {
             Some(add),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         assert!(module.get_function("add_one").is_some());
@@ -339,6 +348,8 @@ mod tests {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
 
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![func_valid],  // f0 is index 0
@@ -375,6 +386,8 @@ mod tests {
         // 2. Duplicate export name
         {
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![],
@@ -407,6 +420,8 @@ mod tests {
         {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![func_valid],
@@ -433,6 +448,8 @@ mod tests {
         // 4. Global OOB
         {
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![],
@@ -459,6 +476,8 @@ mod tests {
         // 5. Memory OOB / No Memory
         {
             let module = Module {
+                allocator: &bump,
+
                 types: vec![],
                 imports: vec![],
                 functions: vec![],
@@ -505,6 +524,8 @@ mod tests {
         };
 
         let module = Module {
+            allocator: &bump,
+
             types: vec![],
             imports: vec![],
             functions: vec![func],
@@ -578,7 +599,8 @@ mod tests {
 
         let _bump = Bump::new();
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // 1. Function Import (param: i32, result: none)
         module.add_import(Import {
@@ -642,7 +664,8 @@ mod tests {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Import Global 0: i32, immutable
         module.add_import(Import {
@@ -724,7 +747,8 @@ mod tests {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add memory
         module.set_memory(1, Some(10));
@@ -785,7 +809,8 @@ mod tests {
 
         // Test 1: Valid data segment
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.set_memory(1, None);
 
             let offset = builder.const_(Literal::I32(0));
@@ -802,7 +827,8 @@ mod tests {
 
         // Test 2: Data segment without memory
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             // No memory defined
 
             let offset = builder.const_(Literal::I32(0));
@@ -820,7 +846,8 @@ mod tests {
 
         // Test 3: Invalid memory index
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.set_memory(1, None);
 
             let offset = builder.const_(Literal::I32(0));
@@ -845,7 +872,8 @@ mod tests {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a function to be the start function
         let body = builder.const_(Literal::I32(42));
@@ -881,7 +909,8 @@ mod tests {
 
         // Test 1: Valid start function (no params, no results)
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let const_expr = builder.const_(Literal::I32(0));
             let body = builder.drop(const_expr); // Drop the i32 to get Type::NONE
@@ -902,7 +931,8 @@ mod tests {
 
         // Test 2: Start function out of bounds
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.set_start(99); // No functions exist
 
             let validator = Validator::new(&module);
@@ -913,7 +943,8 @@ mod tests {
 
         // Test 3: Start function with parameters (invalid)
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let body = builder.local_get(0, Type::I32);
             let func = Function::new(
@@ -934,7 +965,8 @@ mod tests {
 
         // Test 4: Start function with results (invalid)
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let body = builder.const_(Literal::I32(42));
             let func = Function::new(
@@ -963,7 +995,8 @@ mod tests {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add functions that will be referenced in the element segment
         let func1 = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
@@ -1019,7 +1052,8 @@ mod tests {
 
         // Test 1: Valid table and element segment
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             module.add_function(func);
@@ -1040,7 +1074,8 @@ mod tests {
 
         // Test 2: Element segment without table
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             module.add_function(func);
@@ -1060,7 +1095,8 @@ mod tests {
 
         // Test 3: Element with invalid function index
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             module.set_table(Type::FUNCREF, 5, None);
 
@@ -1079,7 +1115,8 @@ mod tests {
 
         // Test 4: Invalid table index in element segment
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             module.add_function(func);
@@ -1109,7 +1146,8 @@ mod tests {
 
         // Test 1: Empty types
         {
-            let module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let module = Module::new(&bump);
 
             let mut writer = BinaryWriter::new();
             let bytes = writer.write_module(&module).expect("Failed to write");
@@ -1122,7 +1160,8 @@ mod tests {
 
         // Test 2: Single type (i32) -> (i32)
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::I32, Type::I32);
 
             let mut writer = BinaryWriter::new();
@@ -1138,7 +1177,8 @@ mod tests {
 
         // Test 3: Multiple types
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::I32, Type::I32);
             module.add_type(Type::I32, Type::NONE);
             module.add_type(Type::NONE, Type::F64);
@@ -1177,7 +1217,8 @@ mod tests {
 
         for (param_type, param_name) in &test_types {
             for (result_type, result_name) in &test_types {
-                let mut module = Module::new();
+                let bump = bumpalo::Bump::new();
+                let mut module = Module::new(&bump);
                 module.add_type(*param_type, *result_type);
 
                 let mut writer = BinaryWriter::new();
@@ -1220,7 +1261,8 @@ mod tests {
 
         // Test 1: () -> ()
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::NONE, Type::NONE);
 
             let mut writer = BinaryWriter::new();
@@ -1236,7 +1278,8 @@ mod tests {
 
         // Test 2: () -> (i32)
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::NONE, Type::I32);
 
             let mut writer = BinaryWriter::new();
@@ -1252,7 +1295,8 @@ mod tests {
 
         // Test 3: (f64) -> ()
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::F64, Type::NONE);
 
             let mut writer = BinaryWriter::new();
@@ -1280,7 +1324,8 @@ mod tests {
         for (ref_type, name) in &ref_types {
             // Test: (ref) -> ()
             {
-                let mut module = Module::new();
+                let bump = bumpalo::Bump::new();
+                let mut module = Module::new(&bump);
                 module.add_type(*ref_type, Type::NONE);
 
                 let mut writer = BinaryWriter::new();
@@ -1300,7 +1345,8 @@ mod tests {
 
             // Test: () -> (ref)
             {
-                let mut module = Module::new();
+                let bump = bumpalo::Bump::new();
+                let mut module = Module::new(&bump);
                 module.add_type(Type::NONE, *ref_type);
 
                 let mut writer = BinaryWriter::new();
@@ -1328,7 +1374,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test with 100 types to ensure proper LEB128 encoding and no limit issues
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         for i in 0..100 {
             let param_type = match i % 5 {
                 0 => Type::I32,
@@ -1391,7 +1438,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test that types are properly associated with functions
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add explicit types
         module.add_type(Type::I32, Type::I32); // type 0
@@ -1427,7 +1475,8 @@ mod tests {
 
         let bump = Bump::new();
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add explicit types
         module.add_type(Type::I32, Type::I32); // type 0
@@ -1468,7 +1517,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test that writer deduplicates identical type signatures
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add three functions with the same signature
         for i in 0..3 {
@@ -1505,7 +1555,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test explicit type_idx in functions
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add explicit types
         module.add_type(Type::I32, Type::I32); // type 0
@@ -1570,7 +1621,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test mixing explicit type_idx and inferred types
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_type(Type::I32, Type::I32); // type 0
 
@@ -1618,7 +1670,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test with 50 functions
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         for i in 0..50 {
             let (param_type, result_type) = match i % 4 {
@@ -1671,7 +1724,8 @@ mod tests {
 
         // Test 1: Valid type_idx
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::I32, Type::I32);
 
             let body = builder.const_(Literal::I32(42));
@@ -1692,7 +1746,8 @@ mod tests {
 
         // Test 2: Out of bounds type_idx
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::I32, Type::I32);
 
             let body = builder.const_(Literal::I32(42));
@@ -1714,7 +1769,8 @@ mod tests {
 
         // Test 3: Type signature mismatch
         {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
             module.add_type(Type::I32, Type::I32);
 
             let body = builder.const_(Literal::F64(3.14));
@@ -1744,7 +1800,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test that functions work even without explicit types in module
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.const_(Literal::I32(42));
         let func = Function::new("f".to_string(), Type::I32, Type::I32, vec![], Some(body));
@@ -1778,7 +1835,8 @@ mod tests {
 
         for (i, (param_type, _)) in value_types.iter().enumerate() {
             for (j, (result_type, lit)) in value_types.iter().enumerate() {
-                let mut module = Module::new();
+                let bump = bumpalo::Bump::new();
+                let mut module = Module::new(&bump);
 
                 let body = builder.const_(lit.clone());
                 let func = Function::new(
@@ -1815,7 +1873,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test module with types but no functions
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_type(Type::I32, Type::I32);
         module.add_type(Type::F64, Type::F64);
 
@@ -1850,7 +1909,8 @@ mod tests {
         ];
 
         for (locals, desc) in &test_cases {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let body = builder.const_(Literal::I32(42));
             let func = Function::new(
@@ -1896,7 +1956,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test multiple functions sharing the same type
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_type(Type::I32, Type::I32); // type 0
 
         // Create 5 functions all using type 0
@@ -1942,7 +2003,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test that type indices are correctly maintained in order
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add types in specific order
         module.add_type(Type::I32, Type::I32); // type 0
@@ -1989,7 +2051,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test interaction between imported and defined functions
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_type(Type::I32, Type::I32); // type 0
         module.add_type(Type::F64, Type::F64); // type 1
@@ -2050,7 +2113,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test function with no body (None)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_type(Type::I32, Type::I32);
 
         let func =
@@ -2076,7 +2140,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test functions with reference types
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // funcref parameter
         let body1 = builder.nop();
@@ -2120,7 +2185,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test that writer correctly deduplicates inferred types
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add 10 functions with same signature (no explicit type_idx)
         for i in 0..10 {
@@ -2165,7 +2231,8 @@ mod tests {
         use crate::validation::Validator;
 
         // Test validation with no functions
-        let module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let module = Module::new(&bump);
         let validator = Validator::new(&module);
         let (valid, errors) = validator.validate();
         assert!(valid, "Empty module should be valid: {:?}", errors);
@@ -2179,7 +2246,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test validation of function without explicit type_idx
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.const_(Literal::I32(42));
         let func = Function::new("f".to_string(), Type::I32, Type::I32, vec![], Some(body));
@@ -2203,7 +2271,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test with diverse function signatures
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let signatures = [
             (Type::NONE, Type::NONE, Literal::I32(0), "() -> ()"),
@@ -2243,7 +2312,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test with many types to ensure large type indices work
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add 200 types
         for i in 0..200 {
@@ -2288,7 +2358,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test function with locals of all basic types
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let locals = vec![Type::I32, Type::I64, Type::F32, Type::F64, Type::V128];
 
@@ -2327,7 +2398,8 @@ mod tests {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.const_(Literal::I32(42));
         let func = Function::new(
@@ -2366,7 +2438,8 @@ mod tests {
         ];
 
         for (lit, typ) in &test_cases {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let body = builder.const_(lit.clone());
             let func = Function::new(
@@ -2407,7 +2480,8 @@ mod tests {
         ];
 
         for (op, name) in &test_ops {
-            let mut module = Module::new();
+            let bump = bumpalo::Bump::new();
+            let mut module = Module::new(&bump);
 
             let left = builder.const_(Literal::I32(10));
             let right = builder.const_(Literal::I32(20));
@@ -2450,7 +2524,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test: (1 + 2) + (3 + 4)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let c1 = builder.const_(Literal::I32(1));
         let c2 = builder.const_(Literal::I32(2));
@@ -2490,7 +2565,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test local.get and local.set
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Function with 1 local
         let val = builder.const_(Literal::I32(42));
@@ -2529,7 +2605,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test block control flow
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let c1 = builder.const_(Literal::I32(1));
         let c2 = builder.const_(Literal::I32(2));
@@ -2576,7 +2653,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test loop control flow
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let loop_body = builder.const_(Literal::I32(1));
         let body = builder.loop_(None, loop_body, Type::I32);
@@ -2615,7 +2693,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test nop instruction
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.nop();
         let func = Function::new(
@@ -2653,7 +2732,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test multiple functions with different body types
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Function 1: constant
         let body1 = builder.const_(Literal::I32(1));
@@ -2699,7 +2779,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test deeply nested blocks (10 levels)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let mut expr = builder.const_(Literal::I32(42));
         for _ in 0..10 {
@@ -2737,7 +2818,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test global.get
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a global
         let global_init = builder.const_(Literal::I32(100));
@@ -2778,7 +2860,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test function with no body (None)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let func = Function::new("empty".to_string(), Type::NONE, Type::NONE, vec![], None);
         module.add_function(func);
@@ -2798,7 +2881,8 @@ mod tests {
     fn test_validation_type_index_out_of_bounds() {
         use crate::validation::Validator;
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a function with invalid type_idx (no types defined)
         let func = Function {
@@ -2825,7 +2909,8 @@ mod tests {
     fn test_validation_type_signature_mismatch() {
         use crate::validation::Validator;
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a type
         module.add_type(Type::I32, Type::I64);
@@ -2852,7 +2937,8 @@ mod tests {
     fn test_validation_valid_type_idx() {
         use crate::validation::Validator;
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a type
         module.add_type(Type::I32, Type::I64);
@@ -2882,7 +2968,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test with maximum reasonable number of types (1000)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         for i in 0..1000 {
             let params = if i % 2 == 0 { Type::I32 } else { Type::I64 };
             let results = if i % 3 == 0 { Type::F32 } else { Type::F64 };
@@ -2906,7 +2993,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test with many functions (500)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         for i in 0..500 {
             let func = Function::new(format!("func_{}", i), Type::NONE, Type::I32, vec![], None);
             module.add_function(func);
@@ -2929,7 +3017,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test with various single-param single-result types
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // i32 -> i64
         module.add_type(Type::I32, Type::I64);
@@ -2957,7 +3046,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test completely empty module
-        let module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let module = Module::new(&bump);
 
         let mut writer = BinaryWriter::new();
         let bytes = writer
@@ -2981,7 +3071,8 @@ mod tests {
         let bump = Bump::new();
 
         // Test functions with and without type_idx
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a type
         module.add_type(Type::I32, Type::I64);
@@ -3026,7 +3117,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test function with many local variables (100)
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.const_(Literal::I32(42));
         let mut vars = Vec::new();
@@ -3062,7 +3154,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test function with parameters and local variables
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.const_(Literal::I32(1));
         let func = Function::new(
@@ -3094,7 +3187,8 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Test module with all major sections
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Types
         module.add_type(Type::I32, Type::I64);
@@ -3168,7 +3262,8 @@ mod tests {
         use crate::module::{Import, ImportKind};
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_import(Import {
             module: "env".to_string(),
@@ -3194,7 +3289,8 @@ mod tests {
         use crate::module::{Import, ImportKind, MemoryLimits};
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_import(Import {
             module: "js".to_string(),
@@ -3221,7 +3317,8 @@ mod tests {
         use crate::module::{Import, ImportKind};
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_import(Import {
             module: "env".to_string(),
@@ -3245,7 +3342,8 @@ mod tests {
         use crate::module::{Import, ImportKind, MemoryLimits};
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Function import
         module.add_import(Import {
@@ -3294,7 +3392,8 @@ mod tests {
         use crate::module::{Import, ImportKind};
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         for i in 0..50 {
             module.add_import(Import {
@@ -3322,7 +3421,8 @@ mod tests {
         use crate::module::ExportKind;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add a function
         module.add_function(Function::new(
@@ -3353,7 +3453,8 @@ mod tests {
         use crate::module::ExportKind;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         for i in 0..10 {
             module.add_function(Function::new(
@@ -3383,7 +3484,8 @@ mod tests {
         use crate::module::ExportKind;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(1, Some(100));
         module.add_export("memory".to_string(), ExportKind::Memory, 0);
@@ -3406,7 +3508,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let init = builder.const_(Literal::I32(42));
         module.add_global(Global {
@@ -3435,7 +3538,8 @@ mod tests {
         use crate::module::{ExportKind, TableLimits};
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.table = Some(TableLimits {
             element_type: Type::FUNCREF,
@@ -3463,7 +3567,8 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(1, Some(10));
 
@@ -3485,7 +3590,8 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(5, None);
 
@@ -3507,7 +3613,8 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(100, Some(1000));
 
@@ -3533,7 +3640,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let init = builder.const_(Literal::I32(123));
         module.add_global(Global {
@@ -3562,7 +3670,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let init = builder.const_(Literal::I64(999));
         module.add_global(Global {
@@ -3591,7 +3700,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // i32 global
         let init1 = builder.const_(Literal::I32(1));
@@ -3646,7 +3756,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         for i in 0..100 {
             let init = builder.const_(Literal::I32(i));
@@ -3677,7 +3788,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Need a table
         module.table = Some(TableLimits {
@@ -3728,7 +3840,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.table = Some(TableLimits {
             element_type: Type::FUNCREF,
@@ -3773,7 +3886,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.table = Some(TableLimits {
             element_type: Type::FUNCREF,
@@ -3819,7 +3933,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(1, None);
 
@@ -3848,7 +3963,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(1, None);
 
@@ -3893,7 +4009,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(10, None);
 
@@ -3924,7 +4041,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.set_memory(1, None);
 
@@ -3953,7 +4071,8 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_function(Function::new(
             "start".to_string(),
@@ -3979,7 +4098,8 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         for i in 0..10 {
             module.add_function(Function::new(
@@ -4009,7 +4129,8 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.add_function(Function::new(
             "f".to_string(),
@@ -4038,7 +4159,8 @@ mod tests {
         use crate::module::TableLimits;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.table = Some(TableLimits {
             element_type: Type::FUNCREF,
@@ -4065,7 +4187,8 @@ mod tests {
         use crate::module::TableLimits;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.table = Some(TableLimits {
             element_type: Type::FUNCREF,
@@ -4092,7 +4215,8 @@ mod tests {
         use crate::module::TableLimits;
 
         let bump = Bump::new();
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         module.table = Some(TableLimits {
             element_type: Type::FUNCREF,
@@ -4121,7 +4245,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.unreachable();
         module.add_function(Function::new(
@@ -4149,7 +4274,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let body = builder.return_(None);
         module.add_function(Function::new(
@@ -4176,7 +4302,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I32(42));
         let body = builder.return_(Some(value));
@@ -4204,7 +4331,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // block with unconditional break
         let br = builder.break_("label", None, None, Type::NONE);
@@ -4236,7 +4364,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // block with conditional break
         let condition = builder.const_(Literal::I32(1));
@@ -4269,7 +4398,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // block that returns a value via break
         let value = builder.const_(Literal::I32(42));
@@ -4302,7 +4432,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // outer block
         let br_inner = builder.break_("inner", None, None, Type::NONE);
@@ -4340,7 +4471,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let loop_body = builder.nop();
         let body = builder.loop_(Some("loop"), loop_body, Type::NONE);
@@ -4369,7 +4501,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // break to loop label continues the loop
         let br = builder.break_("loop", None, None, Type::NONE);
@@ -4399,7 +4532,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // break to outer block exits the loop
         let br = builder.break_("exit", None, None, Type::NONE);
@@ -4432,7 +4566,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Function to be called
         module.add_function(Function::new(
@@ -4470,7 +4605,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Callee: takes two i32, returns i32
         let param1 = builder.local_get(0, Type::I32);
@@ -4513,7 +4649,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Callee
         module.add_function(Function::new(
@@ -4551,7 +4688,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // if (param0) { return 1; } else { return 0; }
         let condition = builder.local_get(0, Type::I32);
@@ -4583,7 +4721,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Nest 10 levels deep: block -> loop -> if -> block -> ...
         let mut expr = builder.const_(Literal::I32(42));
@@ -4625,7 +4764,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let condition = builder.const_(Literal::I32(1));
         let if_true = builder.const_(Literal::I32(10));
@@ -4656,7 +4796,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I32(42));
         let body = builder.drop(value);
@@ -4685,7 +4826,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // local.tee sets a local and leaves value on stack
         let value = builder.const_(Literal::I32(42));
@@ -4718,7 +4860,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // local[0] = 10; local[1] = 20; return local[0] + local[1]
         let set0 = builder.local_set(0, builder.const_(Literal::I32(10)));
@@ -4757,7 +4900,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // local.tee 0 (local.tee 1 (const 42)) - sets both locals to 42
         let const_val = builder.const_(Literal::I32(42));
@@ -4788,7 +4932,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Swap locals: temp = local[0]; local[0] = local[1]; local[1] = temp
         let get0 = builder.local_get(0, Type::I32);
@@ -4831,7 +4976,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let condition = builder.const_(Literal::I32(0));
         let if_true = builder.const_(Literal::F32(1.5));
@@ -4862,7 +5008,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let condition = builder.const_(Literal::I32(1));
         let if_true = builder.const_(Literal::I64(100));
@@ -4893,7 +5040,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // select(c1, select(c2, a, b), c)
         let c2 = builder.const_(Literal::I32(1));
@@ -4929,7 +5077,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Drop multiple computed values
         let v1 = builder.const_(Literal::I32(10));
@@ -4973,7 +5122,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Add two globals
         let init1 = builder.const_(Literal::I32(100));
@@ -5032,7 +5182,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Sum 10 locals
         let mut list = BumpVec::new_in(&bump);
@@ -5081,7 +5232,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test arithmetic chain: (10 + 20) * 3 / 2 - 1
         let a = builder.const_(Literal::I32(10));
@@ -5121,7 +5273,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I32(100));
         let b = builder.const_(Literal::I32(3));
@@ -5157,7 +5310,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I32(17));
         let b = builder.const_(Literal::I32(5));
@@ -5193,7 +5347,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I32(0xFF00));
         let b = builder.const_(Literal::I32(0x0FF0));
@@ -5234,7 +5389,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I32(0x12345678));
         let amt = builder.const_(Literal::I32(4));
@@ -5275,7 +5431,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I32(0xABCD1234u32 as i32));
         let amt = builder.const_(Literal::I32(8));
@@ -5311,7 +5468,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I32(10));
         let b = builder.const_(Literal::I32(20));
@@ -5357,7 +5515,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I32(10));
         let b = builder.const_(Literal::I32(20));
@@ -5403,7 +5562,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value1 = builder.const_(Literal::I32(0x12340000));
         let value2 = builder.const_(Literal::I32(0x12340000));
@@ -5445,7 +5605,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I64(1000));
         let b = builder.const_(Literal::I64(300));
@@ -5484,7 +5645,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I64(0xFFFF0000FFFF0000u64 as i64));
         let b = builder.const_(Literal::I64(0x0000FFFF0000FFFFu64 as i64));
@@ -5525,7 +5687,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I64(0x123456789ABCDEF0u64 as i64));
         let amt = builder.const_(Literal::I64(8));
@@ -5566,7 +5729,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I64(0xFEDCBA9876543210u64 as i64));
         let amt = builder.const_(Literal::I64(16));
@@ -5602,7 +5766,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::I64(1000));
         let b = builder.const_(Literal::I64(2000));
@@ -5648,7 +5813,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value1 = builder.const_(Literal::I64(0x1234000000000000u64 as i64));
         let value2 = builder.const_(Literal::I64(0x1234000000000000u64 as i64));
@@ -5688,7 +5854,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Use i32 for comparison, i64 for computation
         let i32_val = builder.const_(Literal::I32(100));
@@ -5726,7 +5893,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test with extreme values
         let i32_max = builder.const_(Literal::I32(i32::MAX));
@@ -5775,7 +5943,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F32(10.5));
         let b = builder.const_(Literal::F32(20.3));
@@ -5814,7 +5983,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F32(10.5));
         let b = builder.const_(Literal::F32(20.3));
@@ -5855,7 +6025,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let val1 = builder.const_(Literal::F32(-42.7));
         let abs_val = builder.unary(UnaryOp::AbsFloat32, val1, Type::F32);
@@ -5897,7 +6068,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let val1 = builder.const_(Literal::F32(4.8));
         let trunc_val = builder.unary(UnaryOp::TruncFloat32, val1, Type::F32);
@@ -5935,7 +6107,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F32(10.5));
         let b = builder.const_(Literal::F32(20.3));
@@ -5971,7 +6144,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F32(42.0));
         let b = builder.const_(Literal::F32(-1.0));
@@ -6001,7 +6175,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F64(100.5));
         let b = builder.const_(Literal::F64(200.3));
@@ -6040,7 +6215,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F64(10.5));
         let b = builder.const_(Literal::F64(20.3));
@@ -6081,7 +6257,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let val1 = builder.const_(Literal::F64(-142.7));
         let abs_val = builder.unary(UnaryOp::AbsFloat64, val1, Type::F64);
@@ -6119,7 +6296,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let val1 = builder.const_(Literal::F64(4.8));
         let ceil_val = builder.unary(UnaryOp::CeilFloat64, val1, Type::F64);
@@ -6161,7 +6339,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let a = builder.const_(Literal::F64(100.5));
         let b = builder.const_(Literal::F64(200.3));
@@ -6197,7 +6376,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let f32_a = builder.const_(Literal::F32(10.5));
         let f32_b = builder.const_(Literal::F32(5.0));
@@ -6243,7 +6423,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let signed = builder.const_(Literal::I32(-42));
         let s_to_f = builder.unary(UnaryOp::ConvertSInt32ToFloat32, signed, Type::F32);
@@ -6277,7 +6458,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let signed = builder.const_(Literal::I64(-1000));
         let s_to_f = builder.unary(UnaryOp::ConvertSInt64ToFloat32, signed, Type::F32);
@@ -6311,7 +6493,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let signed = builder.const_(Literal::I32(-42));
         let s_to_f = builder.unary(UnaryOp::ConvertSInt32ToFloat64, signed, Type::F64);
@@ -6345,7 +6528,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let signed = builder.const_(Literal::I64(-1000));
         let s_to_f = builder.unary(UnaryOp::ConvertSInt64ToFloat64, signed, Type::F64);
@@ -6379,7 +6563,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let float_val = builder.const_(Literal::F32(42.7));
         let trunc_s = builder.unary(UnaryOp::TruncSFloat32ToInt32, float_val, Type::I32);
@@ -6413,7 +6598,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let float_val = builder.const_(Literal::F64(42.7));
         let trunc_s = builder.unary(UnaryOp::TruncSFloat64ToInt32, float_val, Type::I32);
@@ -6447,7 +6633,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let float_val = builder.const_(Literal::F32(142.7));
         let trunc_s = builder.unary(UnaryOp::TruncSFloat32ToInt64, float_val, Type::I64);
@@ -6481,7 +6668,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let float_val = builder.const_(Literal::F64(142.7));
         let trunc_s = builder.unary(UnaryOp::TruncSFloat64ToInt64, float_val, Type::I64);
@@ -6519,7 +6707,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Load from address 0, add 10, store back
         let addr = builder.const_(Literal::I32(0));
@@ -6555,7 +6744,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr = builder.const_(Literal::I32(8));
         let loaded = builder.load(8, false, 0, 3, addr, Type::I64);
@@ -6590,7 +6780,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr1 = builder.const_(Literal::I32(0));
         let load_s = builder.load(1, true, 0, 0, addr1, Type::I32);
@@ -6624,7 +6815,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr1 = builder.const_(Literal::I32(0));
         let load_s = builder.load(2, true, 0, 1, addr1, Type::I32);
@@ -6658,7 +6850,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr1 = builder.const_(Literal::I32(0));
         let load_s = builder.load(1, true, 0, 0, addr1, Type::I64);
@@ -6692,7 +6885,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr1 = builder.const_(Literal::I32(0));
         let load_s = builder.load(2, true, 0, 1, addr1, Type::I64);
@@ -6726,7 +6920,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr1 = builder.const_(Literal::I32(0));
         let load_s = builder.load(4, true, 0, 2, addr1, Type::I64);
@@ -6760,7 +6955,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr = builder.const_(Literal::I32(0));
         let loaded = builder.load(4, false, 0, 2, addr, Type::F32);
@@ -6795,7 +6991,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let addr = builder.const_(Literal::I32(0));
         let loaded = builder.load(8, false, 0, 3, addr, Type::F64);
@@ -6830,7 +7027,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value8 = builder.const_(Literal::I32(255));
         let addr8 = builder.const_(Literal::I32(0));
@@ -6870,7 +7068,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value8 = builder.const_(Literal::I64(255));
         let addr8 = builder.const_(Literal::I32(0));
@@ -6914,7 +7113,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let base = builder.const_(Literal::I32(100));
         let loaded1 = builder.load(4, false, 0, 2, base, Type::I32);
@@ -6948,7 +7148,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let value = builder.const_(Literal::I32(42));
         let base = builder.const_(Literal::I32(1000));
@@ -6978,7 +7179,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let size = builder.memory_size();
         let multiplier = builder.const_(Literal::I32(65536));
@@ -7008,7 +7210,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         let pages = builder.const_(Literal::I32(1));
         let old_size = builder.memory_grow(pages);
@@ -7040,7 +7243,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Load i32, i64, f32, f64 from different addresses
         let addr1 = builder.const_(Literal::I32(0));
@@ -7088,7 +7292,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Create 20 levels of nested blocks
         let value = builder.const_(Literal::I32(42));
@@ -7129,7 +7334,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Create 15 levels of nested if statements
         let mut current = builder.const_(Literal::I32(1));
@@ -7164,7 +7370,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Integer operations
         let i32_a = builder.const_(Literal::I32(10));
@@ -7237,7 +7444,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Build a complex expression chain with 50+ operations
         let mut result = builder.const_(Literal::I32(1));
@@ -7274,7 +7482,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Mix i32 and i64 operations with proper type handling
         let i32_val = builder.const_(Literal::I32(42));
@@ -7327,7 +7536,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Mix f32 and f64 operations
         let f32_val = builder.const_(Literal::F32(3.14));
@@ -7375,7 +7585,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // i32 unary ops
         let i32_val = builder.const_(Literal::I32(0xFF00FF00u32 as i32));
@@ -7418,7 +7629,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // i32 comparisons
         let a1 = builder.const_(Literal::I32(10));
@@ -7488,7 +7700,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Complex memory operation sequence
         let addr1 = builder.const_(Literal::I32(0));
@@ -7535,7 +7748,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test all conversion paths in one function
         let i32_val = builder.const_(Literal::I32(42));
@@ -7583,7 +7797,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Create a loop with complex operations inside
         let i32_val = builder.const_(Literal::I32(10));
@@ -7626,7 +7841,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Test select with i32
         let cond1 = builder.const_(Literal::I32(1));
@@ -7683,7 +7899,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // All i32 bitwise ops
         let a1 = builder.const_(Literal::I32(0xAAAA5555u32 as i32));
@@ -7740,7 +7957,8 @@ mod tests {
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
 
         // Combine: nested blocks + loops + ifs + all operation types + memory ops + conversions
         let i32_start = builder.const_(Literal::I32(1));

@@ -119,8 +119,9 @@ pub struct ElementSegment<'a> {
     pub func_indices: Vec<u32>, // Function indices to initialize
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Module<'a> {
+    pub allocator: &'a bumpalo::Bump,
     pub types: Vec<FuncType>, // Type section
     pub imports: Vec<Import>,
     pub functions: Vec<Function<'a>>,
@@ -134,8 +135,9 @@ pub struct Module<'a> {
 }
 
 impl<'a> Module<'a> {
-    pub fn new() -> Self {
+    pub fn new(allocator: &'a bumpalo::Bump) -> Self {
         Self {
+            allocator,
             types: Vec::new(),
             imports: Vec::new(),
             functions: Vec::new(),
@@ -147,6 +149,10 @@ impl<'a> Module<'a> {
             elements: Vec::new(),
             data: Vec::new(),
         }
+    }
+
+    pub fn allocator(&self) -> &'a bumpalo::Bump {
+        self.allocator
     }
 
     pub fn add_import(&mut self, import: Import) {
