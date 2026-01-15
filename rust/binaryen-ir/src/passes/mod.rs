@@ -1,5 +1,6 @@
 pub mod coalesce_locals;
 pub mod dce;
+pub mod local_cse;
 pub mod memory_optimization;
 pub mod precompute;
 pub mod simplify;

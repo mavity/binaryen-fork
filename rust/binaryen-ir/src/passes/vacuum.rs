@@ -199,7 +199,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -253,7 +254,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -289,7 +291,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -354,7 +357,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -427,7 +431,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -507,7 +512,8 @@ mod tests {
             Some(outer_block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -577,7 +583,8 @@ mod tests {
             Some(if_expr),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -629,7 +636,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -676,7 +684,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -722,7 +731,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
@@ -787,7 +797,8 @@ mod tests {
             Some(block),
         );
 
-        let mut module = Module::new();
+        let bump = bumpalo::Bump::new();
+        let mut module = Module::new(&bump);
         module.add_function(func);
 
         let mut pass = Vacuum;
