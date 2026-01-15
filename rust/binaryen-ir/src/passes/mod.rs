@@ -6,3 +6,4 @@ pub mod simplify;
 pub mod simplify_identity;
 pub mod simplify_locals;
 pub mod untee;
+pub mod vacuum;
