@@ -274,11 +274,133 @@ Instead of exclusive references, we will use copyable handles backed by a centra
 
 ---
 
-### Missing Passes (Phase 5b onwards)
+### Pass Implementation Strategy: 5 Tiers by Implementation Affinity
 
-**Reality Check**: C++ Binaryen has **122 pass files** (not ~50). Rust has **5 passes**. This represents a **117-pass gap**.
+**Reality Check**: C++ Binaryen has **122 registered passes** (not ~50). Rust has **6 implemented**. This represents a **116-pass gap**.
 
-#### High Priority - Phase 5b (Foundation Complete, Full Implementation Next)
+Rather than porting passes alphabetically or randomly, we organize them into **5 implementation tiers** based on:
+- **Shared infrastructure requirements** (passes that use the same analyses)
+- **Implementation complexity** (simpler passes first)
+- **Dependencies** (foundational passes before dependent ones)
+- **Impact** (high-value optimizations prioritized)
+
+This transforms a "multi-month monolithic effort" into **manageable multi-day chunks** with clear milestones.
+
+**Detailed tier plans**: See companion documents:
+- `2.1-tier1-foundational.md` — Cleanup & metadata (19 passes, 2-3 weeks)
+- `2.2-tier2-local-block.md` — Local & block optimizations (24 passes, 3-4 weeks)
+- `2.3-tier3-expression.md` — Instruction optimization (18 passes, 3-5 weeks)
+- `2.4-tier4-advanced.md` — Whole-module analysis (28 passes, 4-8 weeks)
+- `2.5-tier5-specialized.md` — Ecosystem integration (28 passes, 6-12 weeks)
+
+---
+
+### Tier Overview: Expected Parity by Milestone
+
+| Tier | Category | Passes | Effort | Completion | Functional Parity | Impact |
+|------|----------|--------|--------|------------|-------------------|--------|
+| **Current** | Foundation | 6 | — | ✅ Done | ~5% | Core infrastructure |
+| **Tier 1** | Cleanup & Metadata | 19 | 2-3 weeks | Week 1-2 | ~20% | Dead code removal |
+| **Tier 2** | Local & Block | 24 | 3-4 weeks | Week 3-5 | ~40% | Single-function pipeline |
+| **Tier 3** | Expression Optimization | 18 | 3-5 weeks | Week 6-9 | ~55% | High-impact (OptimizeInstructions) |
+| **Tier 4** | Advanced Analysis | 28 | 4-8 weeks | Week 10-16 | ~75% | Whole-module, inlining |
+| **Tier 5** | Specialized | 28 | 6-12 weeks | Week 17-30 | ~100% | Ecosystem features |
+
+**Key Insight**: **Tier 3 completion delivers 55% functional parity** and most user-facing optimization value in just **12-16 weeks**, because it includes `OptimizeInstructions` (which accounts for 30-40% of C++'s optimization power alone).
+
+---
+
+### Complete Pass Inventory by Tier
+
+**Tier 1: Foundational & Cleanup** (19 passes, 2-3 weeks)
+- **Group 1A (7)**: vacuum, remove-unused-module-elements, remove-unused-brs, remove-unused-names, remove-unused-types, remove-imports, remove-memory-init
+- **Group 1B (5)**: reorder-types, reorder-locals, reorder-globals, reorder-functions, minify-imports
+- **Group 1C (7)**: name-types, nm, propagate-debug-locs, strip-debug, strip-dwarf, emit-target-features, print/print-*
+
+**Tier 2: Local & Block Optimizations** (24 passes, 3-4 weeks)
+- **Group 2A (8)**: simplify-locals, coalesce-locals✅, local-cse, local-subtyping, untee, merge-locals, dae, dae-optimizing
+- **Group 2B (8)**: merge-blocks, simplify-control-flow, rereloop, poppify, rse, flatten, code-pushing, licm
+- **Group 2C (8)**: pick-load-signs, signext-lowering, avoid-reinterprets, optimize-added-constants, ssa/ssa-nomerge, instrument-locals, trap-mode-*
+
+**Tier 3: Expression & Instruction Optimization** (18 passes, 3-5 weeks)
+- **Group 3A (6)**: precompute, precompute-propagate, const-hoisting, optimize-casts, denan, avoid-reinterprets
+- **Group 3B (7)**: **optimize-instructions**⭐ (CRITICAL, 30-40% of optimization power), code-folding, simplify-identity✅, intrinsic-lowering, licm, alignment-lowering, generate-global-effects
+- **Group 3C (5)**: local-subtyping, global-refining, type-refining, optimize-casts, pick-load-signs
+
+**Tier 4: Advanced Analysis & Transforms** (28 passes, 4-8 weeks)
+- **Group 4A (7)**: inlining, inlining-optimizing, inline-main, outlining, duplicate-function-elimination, merge-similar-functions, monomorphize/no-inline
+- **Group 4B (8)**: dfo (dataflow-opts), flatten, type-ssa, gsi, cfp/cfp-reftest, unsubtyping, local-subtyping, gufa
+- **Group 4C (8)**: global-refining, generate-global-effects, gsi, gufa, gto, remove-unused-module-elements, simplify-globals(-optimizing), propagate-globals-globally
+- **Group 4D (5)**: type-merging, minimize-rec-groups, type-generalizing, signature-pruning/refining, heap-store-optimization
+
+**Tier 5: Specialized & Backend** (28 passes, 6-12 weeks)
+- **Group 5A (4)**: post-emscripten, optimize-for-js, legalize-js-interface, generate-dyncalls
+- **Group 5B (8)**: translate-to-exnref/strip-eh, i64-to-i32-lowering, memory64/table64-lowering, multi-memory-lowering, llvm-*-lowering
+- **Group 5C (8)**: **asyncify** (complex), spill-pointers, souperify, safe-heap, stack-check, instrument-memory, heap2local, optimize-j2cl
+- **Group 5D (5)**: string-gathering/lifting/lowering, fpcast-emu, generate-dyncalls, tuple-optimization
+- **Group 5E (3)**: dwarfdump, trace-calls, log-execution
+
+**Remaining: Test, Debug & Niche Utilities** (~21 passes, as-needed implementation)
+
+**Group R1: Test-Only / Internal Passes (7)**:
+- catch-pop-fixup — Fix nested pops within catches (EH testing)
+- deinstrument-branch-hints — Remove branch hint instrumentation
+- delete-branch-hints — Delete branch hints by instrumented ID list
+- experimental-type-generalizing — Generalize types (not yet sound, testing only)
+- randomize-branch-hints — Randomize branch hints for fuzzing
+- reorder-globals-always — Force global reordering even for few globals
+- reorder-types-for-testing — Exaggerated cost function for testing
+
+**Group R2: Debugging & Extraction Utilities (4)**:
+- extract-function — Leave just one function (debugging)
+- extract-function-index — Leave just one function by index
+- roundtrip — Write to binary, read back (validation)
+- func-metrics — Report function metrics
+
+**Group R3: Specialized Alignment & Segments (3)**:
+- dealign — Force all loads/stores to alignment=1 (testing)
+- separate-data-segments — Write data segments to file, strip from module
+- limit-segments — Merge segments to fit web loader limits
+
+**Group R4: Niche Optimizations (4)**:
+- once-reduction — Reduce calls to code that only runs once
+- enclose-world — Destructive closed-world modifications (testing/specialized)
+- set-globals — Set specified globals to specified values (testing)
+- duplicate-import-elimination — Remove duplicate imports (covered by Tier 1 but standalone pass)
+
+**Group R5: Instrumentation & Branch Hints (3)**:
+- instrument-branch-hints — Instrument branch hints for correctness tracking
+- remove-non-js-ops — Remove operations incompatible with JS (specialized)
+- stub-unsupported-js — Stub out unsupported JS operations
+
+**Total**: 6 (current) + 117 (Tiers 1-5) + 21 (remaining) = **144 passes total**
+
+*Note*: The "123 passes" count in earlier analysis undercounted. C++ Binaryen has ~144 total passes when including all test/internal passes.
+
+**Implementation Strategy**: See `2.6-remaining-niche.md` for detailed implementation approach for these specialized passes.
+
+---
+
+### Delivery Milestones & Value Proposition
+
+| Milestone | Weeks | Total Passes | Functional Parity | Key Deliverable |
+|-----------|-------|--------------|-------------------|-----------------|
+| **Current State** | 0 | 6 | 5% | Foundation + infrastructure |
+| **After Tier 1** | 2-3 | 25 | 20% | Dead code removal, compression |
+| **After Tier 2** | 5-7 | 49 | 40% | Single-function optimization complete |
+| **After Tier 3** | 12-16 | 67 | **55%** | **OptimizeInstructions delivers majority of value** |
+| **After Tier 4** | 20-24 | 95 | **75%** | **Production-ready, inlining, whole-module analysis** |
+| **After Tier 5** | 30-36 | 123 | 95%+ | Full ecosystem integration |
+
+**Strategic Inflection Points**:
+1. **Week 5 (40% parity)**: Single-function pipeline complete — can optimize most code patterns
+2. **Week 14 (55% parity)**: OptimizeInstructions operational — **most user-visible optimization value delivered**
+3. **Week 22 (75% parity)**: **Production-ready** — covers all major real-world use cases
+4. **Week 34 (95% parity)**: Full feature parity with C++ for all ecosystems
+
+---
+
+### High Priority - Phase 5b (Foundation Complete, Full Implementation Next)
 
 **SimplifyLocals Advanced Features** (foundation ready, needs tree manipulation):
 - [x] **Infrastructure** — Pass framework, FunctionContext, effect tracking (✅ Done)
