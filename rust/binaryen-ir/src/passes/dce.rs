@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;

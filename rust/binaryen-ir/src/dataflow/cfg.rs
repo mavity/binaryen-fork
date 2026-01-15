@@ -360,12 +360,12 @@ impl<'a> CFGBuilder<'a> {
         if let Some(n) = name {
             for scope in self.scope_stack.iter().rev() {
                 if scope.label.as_deref() == Some(n) {
-                    return Some(scope.break_target);
+                    return scope.continue_target.or(Some(scope.break_target));
                 }
             }
         } else {
             if let Some(scope) = self.scope_stack.last() {
-                return Some(scope.break_target);
+                return scope.continue_target.or(Some(scope.break_target));
             }
         }
         None

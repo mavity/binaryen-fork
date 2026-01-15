@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::{ExportKind, Function, Module};
 use crate::visitor::ReadOnlyVisitor;
 use binaryen_core::Type;

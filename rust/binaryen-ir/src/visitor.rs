@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 
 pub trait Visitor<'a> {
     fn visit(&mut self, expr: &mut ExprRef<'a>) {

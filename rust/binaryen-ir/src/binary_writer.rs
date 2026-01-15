@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::{Function, Module};
 use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};

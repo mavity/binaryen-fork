@@ -7816,3 +7816,6 @@ mod tests {
         assert_eq!(parsed.functions.len(), 1);
     }
 }
+
+#[cfg(test)]
+mod allocator_stress_test;

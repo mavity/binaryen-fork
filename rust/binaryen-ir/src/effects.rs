@@ -21,7 +21,7 @@
 //! assert!(!effect.transfers_control());
 //! ```
 
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 use bitflags::bitflags;
 
 bitflags! {

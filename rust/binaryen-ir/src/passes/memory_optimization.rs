@@ -3,7 +3,7 @@ use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
-use binaryen_core::{Literal, Type};
+use binaryen_core::Type;
 
 /// Memory and local optimization pass.
 ///
