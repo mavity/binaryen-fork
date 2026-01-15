@@ -1,7 +1,7 @@
 use binaryen_core::{Literal, Type};
 use binaryen_ir::{
-    BinaryOp, BinaryReader, BinaryWriter, Expression, Function, IrBuilder, Module, PassRunner,
-    UnaryOp,
+    BinaryOp, BinaryReader, BinaryWriter, ExprRef, Expression, Function, IrBuilder, Module,
+    PassRunner, UnaryOp,
 };
 use bumpalo::Bump;
 use std::ffi::{c_void, CStr};
@@ -62,7 +62,7 @@ pub unsafe extern "C" fn BinaryenRustConst(
 
     // Transmute the reference to a raw pointer.
     // The reference is valid as long as `module.bump` is valid.
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 /// Creates a block expression.
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn BinaryenRustBlock(
     let children_slice = slice::from_raw_parts(children, num_children);
     let mut vec = bumpalo::collections::Vec::new_in(&module.bump);
     for &child in children_slice {
-        let child_ref = &mut *(child as *mut Expression);
+        let child_ref = ExprRef::new(&mut *(child as *mut Expression));
         vec.push(child_ref);
     }
 
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn BinaryenRustBlock(
     let type_ = std::mem::transmute::<u64, Type>(type_);
 
     let expr = builder.block(name, vec, type_);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 // Helper to allocate string in bump
@@ -138,7 +138,7 @@ pub unsafe extern "C" fn BinaryenRustAddFunction(
     let body_ref = if body.is_null() {
         None
     } else {
-        Some(&mut *(body as *mut Expression))
+        Some(ExprRef::new(&mut *(body as *mut Expression)))
     };
 
     let func = Function::new(
@@ -171,11 +171,11 @@ pub unsafe extern "C" fn BinaryenRustUnary(
 
     // Safety: we assume op index is valid. A real implementation would validate.
     let op: UnaryOp = std::mem::transmute(op);
-    let value_ref = &mut *(value as *mut Expression);
+    let value_ref = ExprRef::new(&mut *(value as *mut Expression));
     let type_ = std::mem::transmute::<u64, Type>(type_);
 
     let expr = builder.unary(op, value_ref, type_);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 /// Creates a binary expression.
@@ -194,12 +194,12 @@ pub unsafe extern "C" fn BinaryenRustBinary(
     let builder = IrBuilder::new(&module.bump);
 
     let op: BinaryOp = std::mem::transmute(op);
-    let left_ref = &mut *(left as *mut Expression);
-    let right_ref = &mut *(right as *mut Expression);
+    let left_ref = ExprRef::new(&mut *(left as *mut Expression));
+    let right_ref = ExprRef::new(&mut *(right as *mut Expression));
     let type_ = std::mem::transmute::<u64, Type>(type_);
 
     let expr = builder.binary(op, left_ref, right_ref, type_);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 /// Creates a local.get expression.
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn BinaryenRustLocalGet(
     let type_ = std::mem::transmute::<u64, Type>(type_);
 
     let expr = builder.local_get(index, type_);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 /// Creates a local.set expression.
@@ -232,10 +232,10 @@ pub unsafe extern "C" fn BinaryenRustLocalSet(
 ) -> BinaryenRustExpressionRef {
     let module = &mut *module;
     let builder = IrBuilder::new(&module.bump);
-    let value_ref = &mut *(value as *mut Expression);
+    let value_ref = ExprRef::new(&mut *(value as *mut Expression));
 
     let expr = builder.local_set(index, value_ref);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 /// Creates an atomic RMW expression.
@@ -255,12 +255,12 @@ pub unsafe extern "C" fn BinaryenRustAtomicRMW(
     let module = &mut *module;
     let builder = IrBuilder::new(&module.bump);
     let op = std::mem::transmute::<u32, binaryen_ir::ops::AtomicOp>(op);
-    let ptr_ref = &mut *(ptr as *mut Expression);
-    let value_ref = &mut *(value as *mut Expression);
+    let ptr_ref = ExprRef::new(&mut *(ptr as *mut Expression));
+    let value_ref = ExprRef::new(&mut *(value as *mut Expression));
     let type_ = std::mem::transmute::<u64, Type>(type_);
 
     let expr = builder.atomic_rmw(op, bytes, offset, ptr_ref, value_ref, type_);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 /// Creates a memory.init expression.
@@ -277,12 +277,12 @@ pub unsafe extern "C" fn BinaryenRustMemoryInit(
 ) -> BinaryenRustExpressionRef {
     let module = &mut *module;
     let builder = IrBuilder::new(&module.bump);
-    let dest_ref = &mut *(dest as *mut Expression);
-    let offset_ref = &mut *(offset as *mut Expression);
-    let size_ref = &mut *(size as *mut Expression);
+    let dest_ref = ExprRef::new(&mut *(dest as *mut Expression));
+    let offset_ref = ExprRef::new(&mut *(offset as *mut Expression));
+    let size_ref = ExprRef::new(&mut *(size as *mut Expression));
 
     let expr = builder.memory_init(segment, dest_ref, offset_ref, size_ref);
-    expr as *mut Expression as *mut c_void
+    expr.as_ptr() as *mut c_void
 }
 
 // Binary I/O functions

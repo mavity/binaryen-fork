@@ -1,5 +1,6 @@
 pub mod binary_reader;
 pub mod binary_writer;
+pub mod effects;
 pub mod expression;
 pub mod module;
 pub mod ops;
@@ -10,6 +11,7 @@ pub mod visitor;
 
 pub use binary_reader::BinaryReader;
 pub use binary_writer::BinaryWriter;
+pub use effects::{Effect, EffectAnalyzer};
 pub use expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
 pub use module::{Function, Module};
 pub use ops::{BinaryOp, UnaryOp};
@@ -30,23 +32,23 @@ mod tests {
         let _module_name = "test_module";
 
         // Create mismatched binary op: i32 + f32
-        let left = bump.alloc(Expression {
+        let left = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(1)),
             type_: Type::I32,
-        });
-        let right = bump.alloc(Expression {
+        }));
+        let right = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::F32(2.0)),
             type_: Type::F32,
-        });
+        }));
 
-        let binary_expr = bump.alloc(Expression {
+        let binary_expr = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Binary {
                 op: BinaryOp::AddInt32, // Note: using int32 add
                 left,
                 right,
             },
             type_: Type::I32, // Result type claimed to be i32
-        });
+        }));
 
         let functions = vec![Function {
             name: "bad_func".to_string(),
@@ -249,7 +251,7 @@ mod tests {
     }
 
     impl<'a> Visitor<'a> for CountVisitor {
-        fn visit_expression(&mut self, _expr: &mut Expression<'a>) {
+        fn visit_expression(&mut self, _expr: &mut ExprRef<'a>) {
             self.count += 1;
         }
     }
@@ -265,10 +267,10 @@ mod tests {
 
         let mut list = BumpVec::new_in(&bump);
         list.push(add);
-        let block = builder.block(None, list, Type::I32);
+        let mut block = builder.block(None, list, Type::I32);
 
         let mut v = CountVisitor { count: 0 };
-        v.visit(block);
+        v.visit(&mut block);
 
         // Block (1) -> Add (1) -> Const (1) + Const (1) = 4 expressions
         assert_eq!(v.count, 4);

@@ -1,4 +1,4 @@
-use crate::expression::{Expression, ExpressionKind, IrBuilder};
+use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
 use crate::module::{Export, ExportKind, Function, MemoryLimits, Module};
 use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
@@ -352,7 +352,7 @@ impl<'a> BinaryReader<'a> {
         Ok(exports)
     }
 
-    fn parse_code_section(&mut self) -> Result<Vec<(Vec<Type>, Option<&'a mut Expression<'a>>)>> {
+    fn parse_code_section(&mut self) -> Result<Vec<(Vec<Type>, Option<ExprRef<'a>>)>> {
         let count = self.read_leb128_u32()?;
         let mut codes = Vec::new();
 
@@ -380,16 +380,16 @@ impl<'a> BinaryReader<'a> {
         Ok(codes)
     }
 
-    fn parse_expression(&mut self) -> Result<Option<&'a mut Expression<'a>>> {
+    fn parse_expression(&mut self) -> Result<Option<ExprRef<'a>>> {
         self.parse_expression_impl(&mut Vec::new())
     }
 
     fn parse_expression_impl(
         &mut self,
         label_stack: &mut Vec<Option<String>>,
-    ) -> Result<Option<&'a mut Expression<'a>>> {
+    ) -> Result<Option<ExprRef<'a>>> {
         let builder = IrBuilder::new(self.bump);
-        let mut stack: Vec<&'a mut Expression<'a>> = Vec::new();
+        let mut stack: Vec<ExprRef<'a>> = Vec::new();
 
         loop {
             let opcode = self.read_u8()?;

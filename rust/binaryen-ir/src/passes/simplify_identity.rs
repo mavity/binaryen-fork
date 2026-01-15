@@ -1,4 +1,4 @@
-use crate::expression::{Expression, ExpressionKind};
+use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::Module;
 use crate::ops::BinaryOp;
 use crate::pass::Pass;
@@ -22,7 +22,7 @@ impl Pass for SimplifyIdentity {
 }
 
 impl<'a> Visitor<'a> for SimplifyIdentity {
-    fn visit_expression(&mut self, expr: &mut Expression<'a>) {
+    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
         // Optimization: x + 0 -> x
         if let ExpressionKind::Binary {
             op,
@@ -68,7 +68,7 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind};
+    use crate::expression::{ExprRef, Expression, ExpressionKind};
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
@@ -80,24 +80,24 @@ mod tests {
         // Construct: (val + 0)
         // Expected: val
 
-        let val = bump.alloc(Expression {
+        let val = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
-        });
+        }));
 
-        let zero = bump.alloc(Expression {
+        let zero = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(0)),
             type_: Type::I32,
-        });
+        }));
 
-        let binary = bump.alloc(Expression {
+        let binary = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Binary {
                 op: BinaryOp::AddInt32,
                 left: val,
                 right: zero,
             },
             type_: Type::I32,
-        });
+        }));
 
         let func = Function::new(
             "test".to_string(),

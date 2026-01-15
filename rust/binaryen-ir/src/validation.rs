@@ -1,4 +1,4 @@
-use crate::expression::{Expression, ExpressionKind};
+use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::{ExportKind, Function, Module};
 use crate::visitor::ReadOnlyVisitor;
 use binaryen_core::Type;
@@ -70,7 +70,7 @@ impl<'a, 'm> Validator<'a, 'm> {
 
             // Check body if present
             if let Some(body) = &func.body {
-                self.visit(body);
+                self.visit(*body);
 
                 // Check return type
                 if body.type_ != func.results {
@@ -253,7 +253,7 @@ impl<'a, 'm> Validator<'a, 'm> {
 }
 
 impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
-    fn visit_expression(&mut self, expr: &Expression<'a>) {
+    fn visit_expression(&mut self, expr: ExprRef<'a>) {
         match &expr.kind {
             ExpressionKind::Binary { op, left, right } => {
                 if left.type_ != right.type_

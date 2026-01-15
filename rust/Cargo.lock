@@ -71,6 +71,7 @@ name = "binaryen-ir"
 version = "0.1.0"
 dependencies = [
  "binaryen-core",
+ "bitflags 2.10.0",
  "bumpalo",
 ]
 

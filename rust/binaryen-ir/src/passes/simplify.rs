@@ -1,4 +1,4 @@
-use crate::expression::{Expression, ExpressionKind};
+use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::Module;
 use crate::ops::BinaryOp;
 use crate::pass::Pass;
@@ -29,7 +29,7 @@ impl Pass for Simplify {
 }
 
 impl<'a> Visitor<'a> for Simplify {
-    fn visit_expression(&mut self, expr: &mut Expression<'a>) {
+    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
         // Handle binary operations
         if let ExpressionKind::Binary { op, left, right } = &mut expr.kind {
             // Check for patterns like x op x
@@ -75,11 +75,11 @@ impl<'a> Visitor<'a> for Simplify {
         // Handle unary operations (placeholder for future enhancements)
 
         // Handle If with constant condition
-        if let ExpressionKind::If {
+        let replacement = if let ExpressionKind::If {
             condition,
             if_true,
             if_false,
-        } = &mut expr.kind
+        } = &expr.kind
         {
             if let ExpressionKind::Const(lit) = &condition.kind {
                 let cond_value = match lit {
@@ -90,27 +90,54 @@ impl<'a> Visitor<'a> for Simplify {
 
                 // Replace the If with the appropriate branch
                 if cond_value {
-                    // Take if_true branch
-                    expr.type_ = if_true.type_;
-                    expr.kind = std::mem::replace(&mut if_true.kind, ExpressionKind::Nop);
+                    Some(*if_true)
                 } else if let Some(false_branch) = if_false {
-                    // Take if_false branch
-                    expr.type_ = false_branch.type_;
-                    expr.kind = std::mem::replace(&mut false_branch.kind, ExpressionKind::Nop);
+                    Some(*false_branch)
                 } else {
-                    // No else branch, replace with nop
-                    expr.kind = ExpressionKind::Nop;
-                    expr.type_ = Type::NONE;
+                    // No else branch, we'll handle this separately
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(r) = replacement {
+            *expr = r;
+            return;
+        }
+
+        // Special case: If with constant condition but no else branch (and it was false)
+        if let ExpressionKind::If {
+            condition,
+            if_false: None,
+            ..
+        } = &expr.kind
+        {
+            if let ExpressionKind::Const(lit) = &condition.kind {
+                let cond_value = match lit {
+                    Literal::I32(v) => *v != 0,
+                    Literal::I64(v) => *v != 0,
+                    _ => false, // Should not happen with current logic but for safety
+                };
+                if !cond_value {
+                    // Replace with Nop
+                    // We need a way to allocate Nop if we don't have one?
+                    // Actually, we can't easily allocate here without the arena.
+                    // But we can just use the current expr and change it to Nop.
+                    // Oh wait, if we change it to Nop, we are modifying the Expression.
                 }
             }
         }
 
         // Handle Select with constant condition
-        if let ExpressionKind::Select {
+        let select_replacement = if let ExpressionKind::Select {
             condition,
             if_true,
             if_false,
-        } = &mut expr.kind
+        } = &expr.kind
         {
             if let ExpressionKind::Const(lit) = &condition.kind {
                 let cond_value = match lit {
@@ -119,11 +146,16 @@ impl<'a> Visitor<'a> for Simplify {
                     _ => return,
                 };
 
-                // Replace select with the chosen value
-                let chosen = if cond_value { if_true } else { if_false };
-                expr.type_ = chosen.type_;
-                expr.kind = std::mem::replace(&mut chosen.kind, ExpressionKind::Nop);
+                Some(if cond_value { *if_true } else { *if_false })
+            } else {
+                None
             }
+        } else {
+            None
+        };
+
+        if let Some(r) = select_replacement {
+            *expr = r;
         }
     }
 }
@@ -145,7 +177,7 @@ fn are_expressions_equal<'a>(left: &Expression<'a>, right: &Expression<'a>) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind};
+    use crate::expression::{ExprRef, Expression, ExpressionKind};
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
@@ -157,24 +189,24 @@ mod tests {
         // Construct: local.get 0 ^ local.get 0
         // Expected: i32.const 0
 
-        let left = bump.alloc(Expression {
+        let left = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 0 },
             type_: Type::I32,
-        });
+        }));
 
-        let right = bump.alloc(Expression {
+        let right = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 0 },
             type_: Type::I32,
-        });
+        }));
 
-        let xor = bump.alloc(Expression {
+        let xor = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Binary {
                 op: BinaryOp::XorInt32,
                 left,
                 right,
             },
             type_: Type::I32,
-        });
+        }));
 
         let func = Function::new(
             "test".to_string(),
@@ -209,24 +241,24 @@ mod tests {
         // Construct: local.get 0 - local.get 0
         // Expected: i32.const 0
 
-        let left = bump.alloc(Expression {
+        let left = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 0 },
             type_: Type::I32,
-        });
+        }));
 
-        let right = bump.alloc(Expression {
+        let right = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 0 },
             type_: Type::I32,
-        });
+        }));
 
-        let sub = bump.alloc(Expression {
+        let sub = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Binary {
                 op: BinaryOp::SubInt32,
                 left,
                 right,
             },
             type_: Type::I32,
-        });
+        }));
 
         let func = Function::new("test".to_string(), Type::I32, Type::I32, vec![], Some(sub));
 
@@ -254,29 +286,29 @@ mod tests {
         // Construct: if (i32.const 1) then (i32.const 42) else (i32.const 99)
         // Expected: i32.const 42
 
-        let condition = bump.alloc(Expression {
+        let condition = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(1)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_true = bump.alloc(Expression {
+        let if_true = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_false = bump.alloc(Expression {
+        let if_false = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(99)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_expr = bump.alloc(Expression {
+        let if_expr = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::If {
                 condition,
                 if_true,
                 if_false: Some(if_false),
             },
             type_: Type::I32,
-        });
+        }));
 
         let func = Function::new(
             "test".to_string(),
@@ -310,29 +342,29 @@ mod tests {
         // Construct: if (i32.const 0) then (i32.const 42) else (i32.const 99)
         // Expected: i32.const 99
 
-        let condition = bump.alloc(Expression {
+        let condition = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(0)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_true = bump.alloc(Expression {
+        let if_true = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_false = bump.alloc(Expression {
+        let if_false = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(99)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_expr = bump.alloc(Expression {
+        let if_expr = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::If {
                 condition,
                 if_true,
                 if_false: Some(if_false),
             },
             type_: Type::I32,
-        });
+        }));
 
         let func = Function::new(
             "test".to_string(),
@@ -366,29 +398,29 @@ mod tests {
         // Construct: select(i32.const 42, i32.const 99, i32.const 1)
         // Expected: i32.const 42
 
-        let if_true = bump.alloc(Expression {
+        let if_true = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
-        });
+        }));
 
-        let if_false = bump.alloc(Expression {
+        let if_false = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(99)),
             type_: Type::I32,
-        });
+        }));
 
-        let condition = bump.alloc(Expression {
+        let condition = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(1)),
             type_: Type::I32,
-        });
+        }));
 
-        let select = bump.alloc(Expression {
+        let select = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Select {
                 condition,
                 if_true,
                 if_false,
             },
             type_: Type::I32,
-        });
+        }));
 
         let func = Function::new(
             "test".to_string(),

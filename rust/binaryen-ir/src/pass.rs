@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_pass_runner_validation_failure() {
-        use crate::expression::{Expression, ExpressionKind};
+        use crate::expression::{ExprRef, Expression, ExpressionKind};
         use binaryen_core::Literal;
         use bumpalo::Bump;
 
@@ -124,7 +124,7 @@ mod tests {
             Type::NONE,
             Type::I32, // Correct
             vec![],
-            Some(body),
+            Some(ExprRef::new(body)),
         );
 
         let mut module = Module::new();

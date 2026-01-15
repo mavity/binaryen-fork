@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 binaryen-core = { path = "../binaryen-core" }
+bitflags = "2.4"
 bumpalo = { version = "3.19.1", features = ["collections"] }

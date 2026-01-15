@@ -1,4 +1,4 @@
-use crate::expression::{Expression, ExpressionKind};
+use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::{Function, Module};
 use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
@@ -443,7 +443,7 @@ impl BinaryWriter {
             // Expression
             if let Some(body) = &func.body {
                 let mut label_stack = Vec::new();
-                Self::write_expression(&mut body_buf, body, &mut label_stack, &func_map)?;
+                Self::write_expression(&mut body_buf, *body, &mut label_stack, &func_map)?;
             }
 
             // end
@@ -466,7 +466,7 @@ impl BinaryWriter {
 
     fn write_expression(
         buf: &mut Vec<u8>,
-        expr: &Expression,
+        expr: ExprRef,
         label_stack: &mut Vec<Option<String>>,
         func_map: &std::collections::HashMap<&str, u32>,
     ) -> Result<()> {
@@ -501,12 +501,12 @@ impl BinaryWriter {
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalSet { index, value } => {
-                Self::write_expression(buf, value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map)?;
                 buf.push(0x21); // local.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalTee { index, value } => {
-                Self::write_expression(buf, value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map)?;
                 buf.push(0x22); // local.tee
                 Self::write_leb128_u32(buf, *index)?;
             }
@@ -515,13 +515,13 @@ impl BinaryWriter {
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::GlobalSet { index, value } => {
-                Self::write_expression(buf, value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map)?;
                 buf.push(0x24); // global.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::Binary { op, left, right } => {
-                Self::write_expression(buf, left, label_stack, func_map)?;
-                Self::write_expression(buf, right, label_stack, func_map)?;
+                Self::write_expression(buf, *left, label_stack, func_map)?;
+                Self::write_expression(buf, *right, label_stack, func_map)?;
 
                 let opcode = match op {
                     // i32 operations
@@ -608,7 +608,7 @@ impl BinaryWriter {
                 buf.push(opcode);
             }
             ExpressionKind::Unary { op, value } => {
-                Self::write_expression(buf, value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map)?;
 
                 let opcode = match op {
                     // i32 unary operations
@@ -684,7 +684,7 @@ impl BinaryWriter {
 
                 // Write block body
                 for child in list.iter() {
-                    Self::write_expression(buf, child, label_stack, func_map)?;
+                    Self::write_expression(buf, *child, label_stack, func_map)?;
                 }
 
                 // Pop label
@@ -700,7 +700,7 @@ impl BinaryWriter {
                 label_stack.push(name.map(|s| s.to_string()));
 
                 // Write loop body
-                Self::write_expression(buf, body, label_stack, func_map)?;
+                Self::write_expression(buf, *body, label_stack, func_map)?;
 
                 // Pop label
                 label_stack.pop();
@@ -713,7 +713,7 @@ impl BinaryWriter {
                 if_false,
             } => {
                 // Write condition
-                Self::write_expression(buf, condition, label_stack, func_map)?;
+                Self::write_expression(buf, *condition, label_stack, func_map)?;
 
                 buf.push(0x04); // if opcode
                 buf.push(0x40); // block type: empty (void)
@@ -722,12 +722,12 @@ impl BinaryWriter {
                 label_stack.push(None);
 
                 // Write then branch
-                Self::write_expression(buf, if_true, label_stack, func_map)?;
+                Self::write_expression(buf, *if_true, label_stack, func_map)?;
 
                 // Write else branch if present
                 if let Some(if_false_expr) = if_false {
                     buf.push(0x05); // else opcode
-                    Self::write_expression(buf, if_false_expr, label_stack, func_map)?;
+                    Self::write_expression(buf, *if_false_expr, label_stack, func_map)?;
                 }
 
                 // Pop label
@@ -742,7 +742,7 @@ impl BinaryWriter {
             } => {
                 // Write value if present
                 if let Some(val) = value {
-                    Self::write_expression(buf, val, label_stack, func_map)?;
+                    Self::write_expression(buf, *val, label_stack, func_map)?;
                 }
 
                 // Find label depth
@@ -750,7 +750,7 @@ impl BinaryWriter {
 
                 if let Some(cond) = condition {
                     // br_if
-                    Self::write_expression(buf, cond, label_stack, func_map)?;
+                    Self::write_expression(buf, *cond, label_stack, func_map)?;
                     buf.push(0x0D); // br_if opcode
                 } else {
                     // br
@@ -761,7 +761,7 @@ impl BinaryWriter {
             }
             ExpressionKind::Return { value } => {
                 if let Some(val) = value {
-                    Self::write_expression(buf, val, label_stack, func_map)?;
+                    Self::write_expression(buf, *val, label_stack, func_map)?;
                 }
                 buf.push(0x0F); // return opcode
             }
@@ -769,7 +769,7 @@ impl BinaryWriter {
                 buf.push(0x00); // unreachable opcode
             }
             ExpressionKind::Drop { value } => {
-                Self::write_expression(buf, value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map)?;
                 buf.push(0x1A); // drop opcode
             }
             ExpressionKind::Select {
@@ -777,9 +777,9 @@ impl BinaryWriter {
                 if_true,
                 if_false,
             } => {
-                Self::write_expression(buf, if_true, label_stack, func_map)?;
-                Self::write_expression(buf, if_false, label_stack, func_map)?;
-                Self::write_expression(buf, condition, label_stack, func_map)?;
+                Self::write_expression(buf, *if_true, label_stack, func_map)?;
+                Self::write_expression(buf, *if_false, label_stack, func_map)?;
+                Self::write_expression(buf, *condition, label_stack, func_map)?;
                 buf.push(0x1B); // select opcode
             }
             ExpressionKind::Load {
@@ -789,7 +789,7 @@ impl BinaryWriter {
                 align,
                 ptr,
             } => {
-                Self::write_expression(buf, ptr, label_stack, func_map)?;
+                Self::write_expression(buf, *ptr, label_stack, func_map)?;
 
                 // Opcode selection based on type, size and signedness
                 let opcode = match (expr.type_, *bytes, *signed) {
@@ -824,8 +824,8 @@ impl BinaryWriter {
                 ptr,
                 value,
             } => {
-                Self::write_expression(buf, ptr, label_stack, func_map)?;
-                Self::write_expression(buf, value, label_stack, func_map)?;
+                Self::write_expression(buf, *ptr, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map)?;
 
                 // Opcode selection based on value type and size
                 let opcode = match (value.type_, *bytes) {
@@ -855,7 +855,7 @@ impl BinaryWriter {
             } => {
                 // Write operands (arguments)
                 for operand in operands.iter() {
-                    Self::write_expression(buf, operand, label_stack, func_map)?;
+                    Self::write_expression(buf, *operand, label_stack, func_map)?;
                 }
 
                 // Look up function index
@@ -882,11 +882,11 @@ impl BinaryWriter {
             } => {
                 // Write value if present
                 if let Some(val) = value {
-                    Self::write_expression(buf, val, label_stack, func_map)?;
+                    Self::write_expression(buf, *val, label_stack, func_map)?;
                 }
 
                 // Write condition (index)
-                Self::write_expression(buf, condition, label_stack, func_map)?;
+                Self::write_expression(buf, *condition, label_stack, func_map)?;
 
                 // br_table opcode
                 buf.push(0x0E);
@@ -912,11 +912,11 @@ impl BinaryWriter {
             } => {
                 // Write operands (arguments)
                 for operand in operands.iter() {
-                    Self::write_expression(buf, operand, label_stack, func_map)?;
+                    Self::write_expression(buf, *operand, label_stack, func_map)?;
                 }
 
                 // Write target (function index on stack)
-                Self::write_expression(buf, target, label_stack, func_map)?;
+                Self::write_expression(buf, *target, label_stack, func_map)?;
 
                 // call_indirect opcode
                 buf.push(0x11);
@@ -939,7 +939,7 @@ impl BinaryWriter {
                 buf.push(0x00);
             }
             ExpressionKind::MemoryGrow { delta } => {
-                Self::write_expression(buf, delta, label_stack, func_map)?;
+                Self::write_expression(buf, *delta, label_stack, func_map)?;
 
                 // memory.grow opcode
                 buf.push(0x40);
@@ -1172,7 +1172,7 @@ impl BinaryWriter {
 mod tests {
     use super::*;
     use crate::binary_reader::BinaryReader;
-    use crate::expression::{ExpressionKind, IrBuilder};
+    use crate::expression::{Expression, ExpressionKind, IrBuilder};
     use crate::module::ExportKind;
     use crate::ops::BinaryOp;
     use binaryen_core::Literal;
@@ -1194,7 +1194,7 @@ mod tests {
             Type::NONE,
             Type::I32,
             vec![],
-            Some(body),
+            Some(ExprRef::new(body)),
         ));
 
         let mut writer = BinaryWriter::new();
@@ -1222,7 +1222,7 @@ mod tests {
             Type::NONE,
             Type::I32,
             vec![],
-            Some(body),
+            Some(ExprRef::new(body)),
         ));
 
         // Write
@@ -1282,7 +1282,7 @@ mod tests {
             Type::I32, // Single param
             Type::I32,
             vec![],
-            Some(body),
+            Some(ExprRef::new(body)),
         ));
 
         let mut writer = BinaryWriter::new();
@@ -1306,10 +1306,10 @@ mod tests {
 
         // Module with function that has locals
         let mut module = Module::new();
-        let body = bump.alloc(Expression {
+        let body = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::LocalGet { index: 1 }, // Get local variable
             type_: Type::I32,
-        });
+        }));
 
         module.add_function(Function::new(
             "test".to_string(),
@@ -1971,9 +1971,9 @@ mod tests {
                     operands,
                     is_return,
                 } => {
-                    assert_eq!(*target, "func_0"); // Should call function at index 0
+                    assert!(*target == "func_0"); // Should call function at index 0
                     assert_eq!(operands.len(), 0); // No arguments
-                    assert!(!(*is_return)); // Not a tail call
+                    assert!(!*is_return); // Not a tail call
                 }
                 _ => panic!("Expected Call expression, got {:?}", body.kind),
             }

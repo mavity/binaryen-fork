@@ -1,4 +1,4 @@
-use crate::expression::{Expression, ExpressionKind};
+use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
@@ -21,7 +21,7 @@ impl Pass for DCE {
 }
 
 impl<'a> Visitor<'a> for DCE {
-    fn visit_expression(&mut self, expr: &mut Expression<'a>) {
+    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
         if let ExpressionKind::Block { list, .. } = &mut expr.kind {
             // Find the first instruction that doesn't return (is Unreachable)
             let mut cut_index = None;
@@ -45,7 +45,7 @@ impl<'a> Visitor<'a> for DCE {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind};
+    use crate::expression::{ExprRef, Expression, ExpressionKind};
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::collections::Vec as BumpVec;
@@ -62,31 +62,31 @@ mod tests {
         //    (i32.const 3)           <-- Should be removed
         // )
 
-        let const1 = bump.alloc(Expression {
+        let const1 = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(1)),
             type_: Type::I32,
-        });
+        }));
 
         // Simulate a helper that returns unreachable, e.g. an unconditional branch
-        let terminator = bump.alloc(Expression {
+        let terminator = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Nop,
             type_: Type::UNREACHABLE,
-        });
+        }));
 
-        let dead_code = bump.alloc(Expression {
+        let dead_code = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(3)),
             type_: Type::I32,
-        });
+        }));
 
         let mut list = BumpVec::new_in(&bump);
         list.push(const1);
         list.push(terminator);
         list.push(dead_code);
 
-        let block = bump.alloc(Expression {
+        let block = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Block { name: None, list },
             type_: Type::UNREACHABLE, // Block is unreachable because it contains unreachable
-        });
+        }));
 
         let func = Function::new(
             "test".to_string(),

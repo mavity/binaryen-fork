@@ -2,8 +2,38 @@ use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
+use std::ops::{Deref, DerefMut};
+use std::ptr::NonNull;
 
-pub type ExprRef<'a> = &'a mut Expression<'a>;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct ExprRef<'a>(NonNull<Expression<'a>>);
+
+impl<'a> ExprRef<'a> {
+    pub fn new(ptr: &'a mut Expression<'a>) -> Self {
+        Self(NonNull::from(ptr))
+    }
+
+    pub fn as_ptr(&self) -> *mut Expression<'a> {
+        self.0.as_ptr()
+    }
+}
+
+unsafe impl<'a> Send for ExprRef<'a> {}
+unsafe impl<'a> Sync for ExprRef<'a> {}
+
+impl<'a> Deref for ExprRef<'a> {
+    type Target = Expression<'a>;
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0.as_ref() }
+    }
+}
+
+impl<'a> DerefMut for ExprRef<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.0.as_mut() }
+    }
+}
 
 #[derive(Debug)]
 pub struct Expression<'a> {
@@ -200,7 +230,7 @@ pub enum ExpressionKind<'a> {
 
 impl<'a> Expression<'a> {
     pub fn new(bump: &'a Bump, kind: ExpressionKind<'a>, type_: Type) -> ExprRef<'a> {
-        bump.alloc(Expression { kind, type_ })
+        ExprRef::new(bump.alloc(Expression { kind, type_ }))
     }
 }
 
