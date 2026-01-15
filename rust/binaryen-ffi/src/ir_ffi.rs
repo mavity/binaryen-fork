@@ -238,6 +238,53 @@ pub unsafe extern "C" fn BinaryenRustLocalSet(
     expr as *mut Expression as *mut c_void
 }
 
+/// Creates an atomic RMW expression.
+///
+/// # Safety
+/// `module`, `ptr`, and `value` must be valid pointers.
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustAtomicRMW(
+    module: BinaryenRustModuleRef,
+    op: u32,
+    bytes: u32,
+    offset: u32,
+    ptr: BinaryenRustExpressionRef,
+    value: BinaryenRustExpressionRef,
+    type_: u64,
+) -> BinaryenRustExpressionRef {
+    let module = &mut *module;
+    let builder = IrBuilder::new(&module.bump);
+    let op = std::mem::transmute::<u32, binaryen_ir::ops::AtomicOp>(op);
+    let ptr_ref = &mut *(ptr as *mut Expression);
+    let value_ref = &mut *(value as *mut Expression);
+    let type_ = std::mem::transmute::<u64, Type>(type_);
+
+    let expr = builder.atomic_rmw(op, bytes, offset, ptr_ref, value_ref, type_);
+    expr as *mut Expression as *mut c_void
+}
+
+/// Creates a memory.init expression.
+///
+/// # Safety
+/// `module`, `dest`, `offset`, and `size` must be valid pointers.
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustMemoryInit(
+    module: BinaryenRustModuleRef,
+    segment: u32,
+    dest: BinaryenRustExpressionRef,
+    offset: BinaryenRustExpressionRef,
+    size: BinaryenRustExpressionRef,
+) -> BinaryenRustExpressionRef {
+    let module = &mut *module;
+    let builder = IrBuilder::new(&module.bump);
+    let dest_ref = &mut *(dest as *mut Expression);
+    let offset_ref = &mut *(offset as *mut Expression);
+    let size_ref = &mut *(size as *mut Expression);
+
+    let expr = builder.memory_init(segment, dest_ref, offset_ref, size_ref);
+    expr as *mut Expression as *mut c_void
+}
+
 // Binary I/O functions
 
 /// Parses a WebAssembly binary and creates a module.

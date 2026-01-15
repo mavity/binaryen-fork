@@ -107,6 +107,95 @@ pub enum ExpressionKind<'a> {
         delta: ExprRef<'a>,
     },
     MemorySize,
+    // Atomic operations
+    AtomicRMW {
+        op: crate::ops::AtomicOp,
+        bytes: u32,
+        offset: u32,
+        ptr: ExprRef<'a>,
+        value: ExprRef<'a>,
+    },
+    AtomicCmpxchg {
+        bytes: u32,
+        offset: u32,
+        ptr: ExprRef<'a>,
+        expected: ExprRef<'a>,
+        replacement: ExprRef<'a>,
+    },
+    AtomicWait {
+        ptr: ExprRef<'a>,
+        expected: ExprRef<'a>,
+        timeout: ExprRef<'a>,
+        expected_type: Type,
+    },
+    AtomicNotify {
+        ptr: ExprRef<'a>,
+        count: ExprRef<'a>,
+    },
+    AtomicFence,
+    // SIMD operations
+    SIMDExtract {
+        op: crate::ops::SIMDOp,
+        vec: ExprRef<'a>,
+        index: u8,
+    },
+    SIMDReplace {
+        op: crate::ops::SIMDOp,
+        vec: ExprRef<'a>,
+        index: u8,
+        value: ExprRef<'a>,
+    },
+    SIMDShuffle {
+        left: ExprRef<'a>,
+        right: ExprRef<'a>,
+        mask: [u8; 16],
+    },
+    SIMDTernary {
+        op: crate::ops::SIMDOp,
+        a: ExprRef<'a>,
+        b: ExprRef<'a>,
+        c: ExprRef<'a>,
+    },
+    SIMDShift {
+        op: crate::ops::SIMDOp,
+        vec: ExprRef<'a>,
+        shift: ExprRef<'a>,
+    },
+    SIMDLoad {
+        op: crate::ops::SIMDOp,
+        offset: u32,
+        align: u32,
+        ptr: ExprRef<'a>,
+    },
+    SIMDLoadStoreLane {
+        is_store: bool,
+        op: crate::ops::SIMDOp,
+        offset: u32,
+        align: u32,
+        index: u8,
+        ptr: ExprRef<'a>,
+        vec: ExprRef<'a>,
+    },
+    // Bulk memory operations
+    MemoryInit {
+        segment: u32,
+        dest: ExprRef<'a>,
+        offset: ExprRef<'a>,
+        size: ExprRef<'a>,
+    },
+    DataDrop {
+        segment: u32,
+    },
+    MemoryCopy {
+        dest: ExprRef<'a>,
+        src: ExprRef<'a>,
+        size: ExprRef<'a>,
+    },
+    MemoryFill {
+        dest: ExprRef<'a>,
+        value: ExprRef<'a>,
+        size: ExprRef<'a>,
+    },
 }
 
 impl<'a> Expression<'a> {
@@ -322,5 +411,221 @@ impl<'a> IrBuilder<'a> {
 
     pub fn memory_grow(&self, delta: ExprRef<'a>) -> ExprRef<'a> {
         Expression::new(self.bump, ExpressionKind::MemoryGrow { delta }, Type::I32)
+    }
+
+    pub fn atomic_rmw(
+        &self,
+        op: crate::ops::AtomicOp,
+        bytes: u32,
+        offset: u32,
+        ptr: ExprRef<'a>,
+        value: ExprRef<'a>,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::AtomicRMW {
+                op,
+                bytes,
+                offset,
+                ptr,
+                value,
+            },
+            type_,
+        )
+    }
+
+    pub fn atomic_cmpxchg(
+        &self,
+        bytes: u32,
+        offset: u32,
+        ptr: ExprRef<'a>,
+        expected: ExprRef<'a>,
+        replacement: ExprRef<'a>,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::AtomicCmpxchg {
+                bytes,
+                offset,
+                ptr,
+                expected,
+                replacement,
+            },
+            type_,
+        )
+    }
+
+    pub fn atomic_wait(
+        &self,
+        ptr: ExprRef<'a>,
+        expected: ExprRef<'a>,
+        timeout: ExprRef<'a>,
+        expected_type: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::AtomicWait {
+                ptr,
+                expected,
+                timeout,
+                expected_type,
+            },
+            Type::I32,
+        )
+    }
+
+    pub fn atomic_notify(&self, ptr: ExprRef<'a>, count: ExprRef<'a>) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::AtomicNotify { ptr, count },
+            Type::I32,
+        )
+    }
+
+    pub fn atomic_fence(&self) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::AtomicFence, Type::NONE)
+    }
+
+    pub fn memory_init(
+        &self,
+        segment: u32,
+        dest: ExprRef<'a>,
+        offset: ExprRef<'a>,
+        size: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::MemoryInit {
+                segment,
+                dest,
+                offset,
+                size,
+            },
+            Type::NONE,
+        )
+    }
+
+    pub fn data_drop(&self, segment: u32) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::DataDrop { segment }, Type::NONE)
+    }
+
+    pub fn memory_copy(
+        &self,
+        dest: ExprRef<'a>,
+        src: ExprRef<'a>,
+        size: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::MemoryCopy { dest, src, size },
+            Type::NONE,
+        )
+    }
+
+    pub fn memory_fill(
+        &self,
+        dest: ExprRef<'a>,
+        value: ExprRef<'a>,
+        size: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::MemoryFill { dest, value, size },
+            Type::NONE,
+        )
+    }
+
+    pub fn simd_extract(
+        &self,
+        op: crate::ops::SIMDOp,
+        vec: ExprRef<'a>,
+        index: u8,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::SIMDExtract { op, vec, index },
+            type_,
+        )
+    }
+
+    pub fn simd_replace(
+        &self,
+        op: crate::ops::SIMDOp,
+        vec: ExprRef<'a>,
+        index: u8,
+        value: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::SIMDReplace {
+                op,
+                vec,
+                index,
+                value,
+            },
+            Type::V128,
+        )
+    }
+
+    pub fn simd_shuffle(
+        &self,
+        left: ExprRef<'a>,
+        right: ExprRef<'a>,
+        mask: [u8; 16],
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::SIMDShuffle { left, right, mask },
+            Type::V128,
+        )
+    }
+
+    pub fn simd_ternary(
+        &self,
+        op: crate::ops::SIMDOp,
+        a: ExprRef<'a>,
+        b: ExprRef<'a>,
+        c: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::SIMDTernary { op, a, b, c },
+            Type::V128,
+        )
+    }
+
+    pub fn simd_shift(
+        &self,
+        op: crate::ops::SIMDOp,
+        vec: ExprRef<'a>,
+        shift: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::SIMDShift { op, vec, shift },
+            Type::V128,
+        )
+    }
+
+    pub fn simd_load(
+        &self,
+        op: crate::ops::SIMDOp,
+        offset: u32,
+        align: u32,
+        ptr: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::SIMDLoad {
+                op,
+                offset,
+                align,
+                ptr,
+            },
+            Type::V128,
+        )
     }
 }

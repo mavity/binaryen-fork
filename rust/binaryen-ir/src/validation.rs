@@ -380,7 +380,23 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             | ExpressionKind::Switch { .. }
             | ExpressionKind::CallIndirect { .. }
             | ExpressionKind::MemoryGrow { .. }
-            | ExpressionKind::MemorySize => {
+            | ExpressionKind::MemorySize
+            | ExpressionKind::AtomicRMW { .. }
+            | ExpressionKind::AtomicCmpxchg { .. }
+            | ExpressionKind::AtomicWait { .. }
+            | ExpressionKind::AtomicNotify { .. }
+            | ExpressionKind::AtomicFence
+            | ExpressionKind::SIMDExtract { .. }
+            | ExpressionKind::SIMDReplace { .. }
+            | ExpressionKind::SIMDShuffle { .. }
+            | ExpressionKind::SIMDTernary { .. }
+            | ExpressionKind::SIMDShift { .. }
+            | ExpressionKind::SIMDLoad { .. }
+            | ExpressionKind::SIMDLoadStoreLane { .. }
+            | ExpressionKind::MemoryInit { .. }
+            | ExpressionKind::DataDrop { .. }
+            | ExpressionKind::MemoryCopy { .. }
+            | ExpressionKind::MemoryFill { .. } => {
                 // These expression kinds don't require special validation yet
             }
         }

@@ -143,3 +143,36 @@ pub enum BinaryOp {
     GtFloat64,
     GeFloat64,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum AtomicOp {
+    Add,
+    Sub,
+    And,
+    Or,
+    Xor,
+    Xchg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum SIMDOp {
+    Splat,
+    ExtractLaneS,
+    ExtractLaneU,
+    ReplaceLane,
+    Add,
+    Sub,
+    Mul,
+    // Add more as needed for the 100s of variants
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum MemoryOp {
+    Init,
+    Drop,
+    Copy,
+    Fill,
+}

@@ -100,12 +100,90 @@ pub trait Visitor<'a> {
             ExpressionKind::MemoryGrow { delta } => {
                 self.visit(delta);
             }
+            ExpressionKind::AtomicRMW { ptr, value, .. } => {
+                self.visit(ptr);
+                self.visit(value);
+            }
+            ExpressionKind::AtomicCmpxchg {
+                ptr,
+                expected,
+                replacement,
+                ..
+            } => {
+                self.visit(ptr);
+                self.visit(expected);
+                self.visit(replacement);
+            }
+            ExpressionKind::AtomicWait {
+                ptr,
+                expected,
+                timeout,
+                ..
+            } => {
+                self.visit(ptr);
+                self.visit(expected);
+                self.visit(timeout);
+            }
+            ExpressionKind::AtomicNotify { ptr, count, .. } => {
+                self.visit(ptr);
+                self.visit(count);
+            }
+            ExpressionKind::SIMDExtract { vec, .. } => {
+                self.visit(vec);
+            }
+            ExpressionKind::SIMDReplace { vec, value, .. } => {
+                self.visit(vec);
+                self.visit(value);
+            }
+            ExpressionKind::SIMDShuffle { left, right, .. } => {
+                self.visit(left);
+                self.visit(right);
+            }
+            ExpressionKind::SIMDTernary { a, b, c, .. } => {
+                self.visit(a);
+                self.visit(b);
+                self.visit(c);
+            }
+            ExpressionKind::SIMDShift { vec, shift, .. } => {
+                self.visit(vec);
+                self.visit(shift);
+            }
+            ExpressionKind::SIMDLoad { ptr, .. } => {
+                self.visit(ptr);
+            }
+            ExpressionKind::SIMDLoadStoreLane { ptr, vec, .. } => {
+                self.visit(ptr);
+                self.visit(vec);
+            }
+            ExpressionKind::MemoryInit {
+                dest, offset, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(offset);
+                self.visit(size);
+            }
+            ExpressionKind::MemoryCopy {
+                dest, src, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(src);
+                self.visit(size);
+            }
+            ExpressionKind::MemoryFill {
+                dest, value, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(value);
+                self.visit(size);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
             | ExpressionKind::LocalGet { .. }
             | ExpressionKind::GlobalGet { .. }
-            | ExpressionKind::MemorySize => {}
+            | ExpressionKind::MemorySize
+            | ExpressionKind::AtomicFence
+            | ExpressionKind::DataDrop { .. } => {}
         }
     }
 }
@@ -210,12 +288,90 @@ pub trait ReadOnlyVisitor<'a> {
             ExpressionKind::MemoryGrow { delta } => {
                 self.visit(delta);
             }
+            ExpressionKind::AtomicRMW { ptr, value, .. } => {
+                self.visit(ptr);
+                self.visit(value);
+            }
+            ExpressionKind::AtomicCmpxchg {
+                ptr,
+                expected,
+                replacement,
+                ..
+            } => {
+                self.visit(ptr);
+                self.visit(expected);
+                self.visit(replacement);
+            }
+            ExpressionKind::AtomicWait {
+                ptr,
+                expected,
+                timeout,
+                ..
+            } => {
+                self.visit(ptr);
+                self.visit(expected);
+                self.visit(timeout);
+            }
+            ExpressionKind::AtomicNotify { ptr, count, .. } => {
+                self.visit(ptr);
+                self.visit(count);
+            }
+            ExpressionKind::SIMDExtract { vec, .. } => {
+                self.visit(vec);
+            }
+            ExpressionKind::SIMDReplace { vec, value, .. } => {
+                self.visit(vec);
+                self.visit(value);
+            }
+            ExpressionKind::SIMDShuffle { left, right, .. } => {
+                self.visit(left);
+                self.visit(right);
+            }
+            ExpressionKind::SIMDTernary { a, b, c, .. } => {
+                self.visit(a);
+                self.visit(b);
+                self.visit(c);
+            }
+            ExpressionKind::SIMDShift { vec, shift, .. } => {
+                self.visit(vec);
+                self.visit(shift);
+            }
+            ExpressionKind::SIMDLoad { ptr, .. } => {
+                self.visit(ptr);
+            }
+            ExpressionKind::SIMDLoadStoreLane { ptr, vec, .. } => {
+                self.visit(ptr);
+                self.visit(vec);
+            }
+            ExpressionKind::MemoryInit {
+                dest, offset, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(offset);
+                self.visit(size);
+            }
+            ExpressionKind::MemoryCopy {
+                dest, src, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(src);
+                self.visit(size);
+            }
+            ExpressionKind::MemoryFill {
+                dest, value, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(value);
+                self.visit(size);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
             | ExpressionKind::LocalGet { .. }
             | ExpressionKind::GlobalGet { .. }
-            | ExpressionKind::MemorySize => {}
+            | ExpressionKind::MemorySize
+            | ExpressionKind::AtomicFence
+            | ExpressionKind::DataDrop { .. } => {}
         }
     }
 }

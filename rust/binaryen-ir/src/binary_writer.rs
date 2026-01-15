@@ -489,6 +489,11 @@ impl BinaryWriter {
                         buf.push(0x44); // f64.const
                         buf.extend_from_slice(&val.to_le_bytes());
                     }
+                    Literal::V128(val) => {
+                        buf.push(0xFD); // v128.const
+                        Self::write_leb128_u32(buf, 0x0C)?; // v128.const opcode extension
+                        buf.extend_from_slice(val);
+                    }
                 }
             }
             ExpressionKind::LocalGet { index } => {
@@ -940,6 +945,24 @@ impl BinaryWriter {
                 buf.push(0x40);
                 // Memory index (always 0 in MVP)
                 buf.push(0x00);
+            }
+            ExpressionKind::AtomicRMW { .. }
+            | ExpressionKind::AtomicCmpxchg { .. }
+            | ExpressionKind::AtomicWait { .. }
+            | ExpressionKind::AtomicNotify { .. }
+            | ExpressionKind::AtomicFence
+            | ExpressionKind::SIMDExtract { .. }
+            | ExpressionKind::SIMDReplace { .. }
+            | ExpressionKind::SIMDShuffle { .. }
+            | ExpressionKind::SIMDTernary { .. }
+            | ExpressionKind::SIMDShift { .. }
+            | ExpressionKind::SIMDLoad { .. }
+            | ExpressionKind::SIMDLoadStoreLane { .. }
+            | ExpressionKind::MemoryInit { .. }
+            | ExpressionKind::DataDrop { .. }
+            | ExpressionKind::MemoryCopy { .. }
+            | ExpressionKind::MemoryFill { .. } => {
+                todo!("Implementation of advanced instructions in binary writer")
             }
         }
         Ok(())
