@@ -1,6 +1,7 @@
 pub mod avoid_reinterprets;
 pub mod coalesce_locals;
 pub mod code_pushing;
+pub mod const_hoisting;
 pub mod dae;
 pub mod dae_optimizing;
 pub mod dce;
