@@ -197,7 +197,7 @@ impl<'a> CFGBuilder<'a> {
         }
     }
 
-    pub fn build(mut self, root: &'a mut Expression<'a>) -> ControlFlowGraph<'a> {
+    pub fn build(mut self, root: &mut Expression<'a>) -> ControlFlowGraph<'a> {
         self.visit(root);
         self.cfg
     }
@@ -210,7 +210,7 @@ impl<'a> CFGBuilder<'a> {
         }
     }
 
-    fn visit(&mut self, expr: &'a mut Expression<'a>) {
+    fn visit(&mut self, expr: &mut Expression<'a>) {
         let expr_ptr = Self::make_ref(expr);
 
         match &mut expr.kind {
@@ -294,11 +294,11 @@ impl<'a> CFGBuilder<'a> {
                 }
                 if let Some(c) = condition {
                     self.visit(c);
-                    if let Some(target) = self.find_break_target(name.as_deref()) {
+                    if let Some(target) = self.find_break_target(Some(*name)) {
                         self.cfg.add_edge(self.current_block, target);
                     }
                 } else {
-                    if let Some(target) = self.find_break_target(name.as_deref()) {
+                    if let Some(target) = self.find_break_target(Some(*name)) {
                         self.cfg.add_edge(self.current_block, target);
                     }
                     let dead = self.cfg.add_block();
