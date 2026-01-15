@@ -1,5 +1,7 @@
 # Ignore built consumer binary and object files
 /test_ffi
+test_ffi_type_roundtrip_c
+test_ffi_type_roundtrip_cpp
 *.o
 *.so
 *.dll
