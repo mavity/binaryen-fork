@@ -1,5 +1,6 @@
 pub mod binary_reader;
 pub mod binary_writer;
+pub mod dataflow;
 pub mod effects;
 pub mod expression;
 pub mod module;
