@@ -3,6 +3,7 @@ pub mod dce;
 pub mod local_cse;
 pub mod memory_optimization;
 pub mod precompute;
+pub mod precompute_propagate;
 pub mod simplify;
 pub mod simplify_identity;
 pub mod simplify_locals;
