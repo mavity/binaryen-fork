@@ -3,6 +3,7 @@ pub mod cfg;
 pub mod cost;
 pub mod dominators;
 pub mod evaluator;
+pub mod global_analysis;
 pub mod hasher;
 pub mod patterns;
 pub mod ssa;

@@ -198,4 +198,76 @@ mod tests {
         let df2 = dom.frontiers.get(&2).unwrap_or(&empty);
         assert!(df2.contains(&3));
     }
+
+    #[test]
+    fn test_dominance_nested() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // Nested IFs
+        // (if (c1)
+        //   (if (c2)
+        //     (nop)
+        //     (nop)
+        //   )
+        //   (nop)
+        // )
+
+        let c1 = builder.const_(Literal::I32(1));
+        let c2 = builder.const_(Literal::I32(2));
+        let nop = builder.nop();
+
+        let inner_if = builder.if_(c2, nop, Some(nop), Type::NONE);
+        let outer_if = builder.if_(c1, inner_if, Some(nop), Type::NONE);
+
+        let func = Function::new(
+            "test".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            Some(outer_if),
+        );
+
+        let cfg = ControlFlowGraph::build(&func, outer_if);
+        let dom = DominanceTree::build(&cfg);
+
+        // Expected block IDs based on traversal order:
+        // 0: Entry
+        // 1: Outer Then
+        // 2: Outer Else
+        // 3: Outer Join
+        // 4: Inner Then
+        // 5: Inner Else
+        // 6: Inner Join
+
+        // Structure:
+        // 0 -> 1, 2
+        // 1 -> 4, 5
+        // 4 -> 6
+        // 5 -> 6
+        // 6 -> 3
+        // 2 -> 3
+
+        // Dominators:
+        // 0 dominates all.
+        // 1 dominates 4, 5, 6.
+        // 2 dominates nothing else (except itself).
+        // 3 dominated by 0.
+        // 6 dominated by 1.
+
+        // Check immediate dominators:
+        // idom(1) = 0
+        assert_eq!(*dom.doms.get(&1).unwrap(), 0);
+        // idom(2) = 0
+        assert_eq!(*dom.doms.get(&2).unwrap(), 0);
+        // idom(3) = 0 (merge of 2 and 6->...->1->0)
+        assert_eq!(*dom.doms.get(&3).unwrap(), 0);
+
+        // idom(4) = 1
+        assert_eq!(*dom.doms.get(&4).unwrap(), 1);
+        // idom(5) = 1
+        assert_eq!(*dom.doms.get(&5).unwrap(), 1);
+        // idom(6) = 1
+        assert_eq!(*dom.doms.get(&6).unwrap(), 1);
+    }
 }

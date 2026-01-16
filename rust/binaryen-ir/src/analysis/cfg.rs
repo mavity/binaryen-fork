@@ -273,4 +273,40 @@ mod tests {
         // 2 -> 3
         assert!(cfg.blocks[2].succs.contains(&3));
     }
+
+    #[test]
+    fn test_cfg_loop() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // (loop
+        //   (nop)
+        // )
+
+        let nop = builder.nop();
+        let loop_ = builder.loop_(Some("loop"), nop, Type::NONE);
+
+        let func = Function::new(
+            "test".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            Some(loop_),
+        );
+
+        let cfg = ControlFlowGraph::build(&func, loop_);
+
+        // Expected:
+        // 0: Entry -> 1 (Loop Header)
+        // 1: Header -> 2 (Exit)
+        // 2: Exit
+
+        // Note: My implementation above doesn't add back edge automatically for Loop expr.
+        // It relies on explicit 'br' inside the loop to jump back.
+        // So this loop just falls through.
+
+        assert_eq!(cfg.blocks.len(), 3);
+        assert!(cfg.blocks[0].succs.contains(&1));
+        assert!(cfg.blocks[1].succs.contains(&2));
+    }
 }

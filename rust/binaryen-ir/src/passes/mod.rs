@@ -35,6 +35,7 @@ pub mod rse;
 pub mod signext_lowering;
 pub mod simplify;
 pub mod simplify_control_flow;
+pub mod simplify_globals;
 pub mod simplify_identity;
 pub mod simplify_locals;
 pub mod ssa;

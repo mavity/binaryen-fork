@@ -329,4 +329,46 @@ mod tests {
             panic!("Use 2 not found or wrong type");
         }
     }
+
+    #[test]
+    fn test_ssa_simple_linear() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // (block
+        //   (local.set 0 (i32.const 1))
+        //   (local.get 0)
+        // )
+
+        let c1 = builder.const_(Literal::I32(1));
+        let set1 = builder.local_set(0, c1);
+        let get1 = builder.local_get(0, Type::I32);
+
+        let mut list = bumpalo::collections::Vec::new_in(&bump);
+        list.push(set1);
+        list.push(get1);
+        let block = builder.block(None, list, Type::NONE);
+
+        let func = Function::new(
+            "test".to_string(),
+            Type::NONE,
+            Type::NONE,
+            vec![],
+            Some(block),
+        );
+
+        let cfg = ControlFlowGraph::build(&func, block);
+        let dom = DominanceTree::build(&cfg);
+        let ssa = SSABuilder::build(&func, &cfg, &dom);
+
+        // Should find use-def
+        if let Some(DefA::Instruction(def)) = ssa.use_def.get(&get1) {
+            assert_eq!(def.as_ptr(), set1.as_ptr());
+        } else {
+            panic!("Use not resolved");
+        }
+
+        // No Phis needed
+        assert!(ssa.phi_nodes.is_empty());
+    }
 }
