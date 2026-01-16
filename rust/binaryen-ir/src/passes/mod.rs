@@ -32,6 +32,7 @@ pub mod remove_unused_module_elements;
 pub mod remove_unused_names;
 pub mod rereloop;
 pub mod rse;
+pub mod signature_pruning;
 pub mod signext_lowering;
 pub mod simplify;
 pub mod simplify_control_flow;
