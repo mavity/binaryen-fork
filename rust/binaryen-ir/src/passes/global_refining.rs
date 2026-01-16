@@ -62,12 +62,8 @@ impl GlobalAnalyzer {
         }
     }
 
-    fn lub(a: Type, b: Type) -> Type {
-        if a == b {
-            a
-        } else {
-            a
-        }
+    fn lub(a: Type, _b: Type) -> Type {
+        a
     }
 }
 

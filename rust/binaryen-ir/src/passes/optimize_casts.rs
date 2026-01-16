@@ -10,6 +10,12 @@ pub struct OptimizeCasts {
     matcher: PatternMatcher,
 }
 
+impl Default for OptimizeCasts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizeCasts {
     pub fn new() -> Self {
         let mut matcher = PatternMatcher::new();

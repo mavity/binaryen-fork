@@ -229,8 +229,9 @@ pub enum ExpressionKind<'a> {
 }
 
 impl<'a> Expression<'a> {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(bump: &'a Bump, kind: ExpressionKind<'a>, type_: Type) -> ExprRef<'a> {
-        ExprRef::new(bump.alloc(Expression { kind, type_ }))
+        ExprRef(NonNull::from(bump.alloc(Expression { kind, type_ })))
     }
 
     /// Create a new nop expression
@@ -745,7 +746,7 @@ impl<'a> IrBuilder<'a> {
                     new_operands.push(self.deep_clone(*op));
                 }
                 ExpressionKind::Call {
-                    target: *target,
+                    target,
                     operands: new_operands,
                     is_return: *is_return,
                 }
@@ -782,7 +783,7 @@ impl<'a> IrBuilder<'a> {
                 condition,
                 value,
             } => ExpressionKind::Break {
-                name: *name,
+                name,
                 condition: condition.map(|e| self.deep_clone(e)),
                 value: value.map(|e| self.deep_clone(e)),
             },
@@ -836,7 +837,7 @@ impl<'a> IrBuilder<'a> {
                 value,
             } => ExpressionKind::Switch {
                 names: names.clone(),
-                default: *default,
+                default,
                 condition: self.deep_clone(*condition),
                 value: value.map(|e| self.deep_clone(e)),
             },
@@ -851,7 +852,7 @@ impl<'a> IrBuilder<'a> {
                     new_operands.push(self.deep_clone(*op));
                 }
                 ExpressionKind::CallIndirect {
-                    table: *table,
+                    table,
                     target: self.deep_clone(*target),
                     operands: new_operands,
                     type_: *type_,

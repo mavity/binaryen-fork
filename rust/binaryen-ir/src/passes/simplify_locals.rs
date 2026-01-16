@@ -254,7 +254,7 @@ impl SimplifyLocals {
         } else {
             None
         };
-        if let Some(_) = tee_vals {
+        if tee_vals.is_some() {
             if let ExpressionKind::LocalTee { value, .. } = &mut expr.kind {
                 self.optimize_function(value, ctx);
             }
@@ -397,20 +397,18 @@ impl SimplifyLocals {
         }
 
         let match_result = if let ExpressionKind::If {
-            if_true, if_false, ..
-        } = &expr.kind
+            if_true,
+            if_false: Some(false_branch),
+            ..
+        } = &mut expr.kind
         {
-            if let Some(false_branch) = if_false {
-                if let ExpressionKind::LocalSet { index: idx1, .. } = &if_true.kind {
-                    if let ExpressionKind::LocalSet { index: idx2, .. } = &false_branch.kind {
-                        if idx1 == idx2 {
-                            Some((*idx1, *if_true, *false_branch))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+            if let (
+                ExpressionKind::LocalSet { index: idx1, .. },
+                ExpressionKind::LocalSet { index: idx2, .. },
+            ) = (&if_true.kind, &false_branch.kind)
+            {
+                if idx1 == idx2 {
+                    Some((*idx1, *if_true, *false_branch))
                 } else {
                     None
                 }
@@ -547,10 +545,8 @@ where
             f(ptr);
             f(value);
         }
-        ExpressionKind::Return { value } => {
-            if let Some(v) = value {
-                f(v);
-            }
+        ExpressionKind::Return { value: Some(v) } => {
+            f(v);
         }
         ExpressionKind::Drop { value } => {
             f(value);
@@ -625,10 +621,8 @@ where
             f(ptr);
             f(value);
         }
-        ExpressionKind::Return { value } => {
-            if let Some(v) = value {
-                f(v);
-            }
+        ExpressionKind::Return { value: Some(v) } => {
+            f(v);
         }
         ExpressionKind::Drop { value } => {
             f(value);
@@ -676,9 +670,6 @@ mod tests {
         let bump = Bump::new();
         let mut module = Module::new(&bump);
         pass.run(&mut module);
-
-        // Pass should complete without errors
-        assert!(true);
     }
 
     #[test]

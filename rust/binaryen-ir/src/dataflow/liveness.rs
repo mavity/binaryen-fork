@@ -56,6 +56,12 @@ pub struct InterferenceGraph {
     pub matrix: HashMap<u32, HashSet<u32>>,
 }
 
+impl Default for InterferenceGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InterferenceGraph {
     pub fn new() -> Self {
         Self {

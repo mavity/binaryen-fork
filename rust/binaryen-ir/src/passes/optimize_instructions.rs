@@ -11,6 +11,12 @@ pub struct OptimizeInstructions {
     matcher: PatternMatcher,
 }
 
+impl Default for OptimizeInstructions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizeInstructions {
     pub fn new() -> Self {
         let mut matcher = PatternMatcher::new();

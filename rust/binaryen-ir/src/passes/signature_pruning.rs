@@ -203,10 +203,10 @@ impl<'a, 'b> Visitor<'b> for ParamUsageScanner<'a> {
         if let Some(usage) = &mut self.usage {
             match expr.kind {
                 ExpressionKind::LocalGet { index } => {
-                    if (index as usize) < self.num_params {
-                        if usage[index as usize] == ParamStatus::Unused {
-                            usage[index as usize] = ParamStatus::Read;
-                        }
+                    if (index as usize) < self.num_params
+                        && usage[index as usize] == ParamStatus::Unused
+                    {
+                        usage[index as usize] = ParamStatus::Read;
                     }
                 }
                 ExpressionKind::LocalSet { index, .. } | ExpressionKind::LocalTee { index, .. } => {
@@ -336,10 +336,10 @@ impl<'a, 'b> Visitor<'b> for CallUpdater<'a> {
                             status,
                             ParamStatus::Read | ParamStatus::Written | ParamStatus::Variable
                         ) {
-                            new_operands.push(op.clone());
+                            new_operands.push(*op);
                         }
                     } else {
-                        new_operands.push(op.clone());
+                        new_operands.push(*op);
                     }
                 }
                 *operands = new_operands;

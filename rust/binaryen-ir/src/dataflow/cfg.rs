@@ -30,6 +30,12 @@ pub struct ControlFlowGraph<'a> {
     pub entry: usize,
 }
 
+impl<'a> Default for ControlFlowGraph<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> ControlFlowGraph<'a> {
     pub fn new() -> Self {
         Self {
@@ -110,10 +116,8 @@ impl<'a> ControlFlowGraph<'a> {
                         ends_live_range[i] = true;
                         live.insert(action.index);
                     }
-                } else if action.is_set() {
-                    if live.remove(&action.index) {
-                        action.effective = true;
-                    }
+                } else if action.is_set() && live.remove(&action.index) {
+                    action.effective = true;
                 }
             }
 
@@ -125,7 +129,7 @@ impl<'a> ControlFlowGraph<'a> {
 
             let mut live = block.live_in.clone();
 
-            for i in 0..block.actions.len() {
+            for (i, _action) in block.actions.iter().enumerate() {
                 let action_ref = &block.actions[i]; // Immutable ref first
                 let index = action_ref.index;
                 let is_get = action_ref.is_get();
@@ -182,6 +186,12 @@ pub struct CFGBuilder<'a> {
     current_block: usize,
     scope_stack: Vec<Scope>,
     _marker: std::marker::PhantomData<&'a mut Expression<'a>>,
+}
+
+impl<'a> Default for CFGBuilder<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'a> CFGBuilder<'a> {
@@ -363,10 +373,8 @@ impl<'a> CFGBuilder<'a> {
                     return scope.continue_target.or(Some(scope.break_target));
                 }
             }
-        } else {
-            if let Some(scope) = self.scope_stack.last() {
-                return scope.continue_target.or(Some(scope.break_target));
-            }
+        } else if let Some(scope) = self.scope_stack.last() {
+            return scope.continue_target.or(Some(scope.break_target));
         }
         None
     }

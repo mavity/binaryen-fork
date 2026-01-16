@@ -58,8 +58,6 @@ impl Pass for RemoveUnusedModuleElements {
         // Re-mapping logic:
         // We need to iterate over (Imports ++ Defined) for Globals and generate new indices.
 
-        // Let's implement index remapping properly.
-
         // Rebuild Imports?
         // If we remove an import, we shift indices.
         // C++ removes imports too.
@@ -140,10 +138,8 @@ impl Pass for RemoveUnusedModuleElements {
                     if let Some(&new_idx) = global_remap.get(&export.index) {
                         export.index = new_idx;
                         true
-                    } else if export.index < num_global_imports {
-                        true
                     } else {
-                        false
+                        export.index < num_global_imports
                     }
                 }
                 _ => true,
@@ -174,10 +170,8 @@ impl Pass for RemoveUnusedModuleElements {
                 if let Some(&new_idx) = func_remap.get(idx) {
                     *idx = new_idx;
                     true
-                } else if *idx < num_func_imports {
-                    true
                 } else {
-                    false
+                    *idx < num_func_imports
                 }
             });
         }
@@ -243,6 +237,250 @@ impl<'a, 'map> Visitor<'a> for IndexMapper<'map> {
             _ => {}
         }
     }
+}
+
+struct Analyzer<'a, 'b> {
+    module: &'b Module<'a>,
+    used_funcs: HashSet<String>,
+    used_globals: HashSet<u32>,
+    // Queue for reachability
+    func_queue: Vec<String>,
+    // We queue global indices to check their inits
+    global_queue: Vec<u32>,
+}
+
+impl<'a, 'b> Analyzer<'a, 'b> {
+    fn new(module: &'b Module<'a>) -> Self {
+        Self {
+            module,
+            used_funcs: HashSet::new(),
+            used_globals: HashSet::new(),
+            func_queue: Vec::new(),
+            global_queue: Vec::new(),
+        }
+    }
+
+    fn run(&mut self) {
+        // 1. Roots
+
+        // Exports
+        for export in &self.module.exports {
+            match export.kind {
+                ExportKind::Function => {
+                    // Export uses index!
+                    // We need to resolve index to name for functions.
+                    if let Some(name) = self.get_func_name(export.index) {
+                        self.mark_func_used(&name);
+                    }
+                }
+                ExportKind::Global => {
+                    self.mark_global_used(export.index);
+                }
+                _ => {} // Tables/Memories ignored for now
+            }
+        }
+
+        // Start function
+        if let Some(start_idx) = self.module.start {
+            if let Some(name) = self.get_func_name(start_idx) {
+                self.mark_func_used(&name);
+            }
+        }
+
+        // Element Segments (active/passive)
+        // If active, they are roots if they write to imported table?
+        // For MVP, just treat all element segments as roots?
+        // Or if they are used by `table.init`.
+        // C++: Active segments writing to visible tables are roots.
+        // Let's assume all element segments keep functions alive for now.
+        for elem in &self.module.elements {
+            for &func_idx in &elem.func_indices {
+                if let Some(name) = self.get_func_name(func_idx) {
+                    self.mark_func_used(&name);
+                }
+            }
+        }
+
+        // Data Segments
+        // Offsets use globals.
+        for data in &self.module.data {
+            self.visit_expression_root(&data.offset);
+        }
+        for elem in &self.module.elements {
+            self.visit_expression_root(&elem.offset);
+        }
+
+        // 2. Process Queues
+        while !self.func_queue.is_empty() || !self.global_queue.is_empty() {
+            while let Some(func_name) = self.func_queue.pop() {
+                if let Some(func) = self.module.get_function(&func_name) {
+                    if let Some(body) = &func.body {
+                        // Visit function body
+                        self.scan_expression(body);
+                    }
+                }
+            }
+
+            while let Some(global_idx) = self.global_queue.pop() {
+                // Find global by index
+                // Index space: Imports then Defined.
+                let num_global_imports = self
+                    .module
+                    .imports
+                    .iter()
+                    .filter(|i| matches!(i.kind, ImportKind::Global(_, _)))
+                    .count() as u32;
+
+                if global_idx < num_global_imports {
+                    // Imported global - no init to scan (it's external)
+                } else {
+                    let defined_idx = (global_idx - num_global_imports) as usize;
+                    if let Some(global) = self.module.globals.get(defined_idx) {
+                        self.scan_expression(&global.init);
+                    }
+                }
+            }
+        }
+    }
+
+    fn get_func_name(&self, idx: u32) -> Option<String> {
+        // Resolve index to name
+        let mut func_idx = 0;
+        for import in &self.module.imports {
+            if let ImportKind::Function(_, _) = import.kind {
+                if func_idx == idx {
+                    return Some(import.name.clone());
+                }
+                func_idx += 1;
+            }
+        }
+
+        let defined_idx = idx - func_idx;
+        self.module
+            .functions
+            .get(defined_idx as usize)
+            .map(|f| f.name.clone())
+    }
+
+    fn mark_func_used(&mut self, name: &str) {
+        if self.used_funcs.insert(name.to_string()) {
+            self.func_queue.push(name.to_string());
+        }
+    }
+
+    fn mark_global_used(&mut self, idx: u32) {
+        if self.used_globals.insert(idx) {
+            self.global_queue.push(idx);
+        }
+    }
+
+    fn visit_expression_root(&mut self, expr: &ExprRef<'a>) {
+        self.scan_expression(expr);
+    }
+
+    fn scan_expression(&mut self, expr: &ExprRef<'a>) {
+        // Manual read-only traversal
+        match &expr.kind {
+            ExpressionKind::Call {
+                target, operands, ..
+            } => {
+                self.mark_func_used(target);
+                for op in operands {
+                    self.scan_expression(op);
+                }
+            }
+            ExpressionKind::GlobalGet { index } => {
+                self.mark_global_used(*index);
+            }
+            ExpressionKind::GlobalSet { index, value } => {
+                self.mark_global_used(*index);
+                self.scan_expression(value);
+            }
+            ExpressionKind::Block { list, .. } => {
+                for child in list {
+                    self.scan_expression(child);
+                }
+            }
+            ExpressionKind::Loop { body, .. } => self.scan_expression(body),
+            ExpressionKind::If {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.scan_expression(condition);
+                self.scan_expression(if_true);
+                if let Some(e) = if_false {
+                    self.scan_expression(e);
+                }
+            }
+            ExpressionKind::Unary { value, .. }
+            | ExpressionKind::Drop { value }
+            | ExpressionKind::LocalSet { value, .. }
+            | ExpressionKind::LocalTee { value, .. }
+            | ExpressionKind::Load { ptr: value, .. }
+            | ExpressionKind::MemoryGrow { delta: value } => self.scan_expression(value),
+
+            ExpressionKind::Binary { left, right, .. }
+            | ExpressionKind::Store {
+                ptr: left,
+                value: right,
+                ..
+            } => {
+                self.scan_expression(left);
+                self.scan_expression(right);
+            }
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.scan_expression(condition);
+                self.scan_expression(if_true);
+                self.scan_expression(if_false);
+            }
+            ExpressionKind::CallIndirect {
+                target, operands, ..
+            } => {
+                self.scan_expression(target);
+                for op in operands {
+                    self.scan_expression(op);
+                }
+            }
+            ExpressionKind::Break {
+                condition, value, ..
+            } => {
+                if let Some(c) = condition {
+                    self.scan_expression(c);
+                }
+                if let Some(v) = value {
+                    self.scan_expression(v);
+                }
+            }
+            ExpressionKind::Switch {
+                condition, value, ..
+            } => {
+                self.scan_expression(condition);
+                if let Some(v) = value {
+                    self.scan_expression(v);
+                }
+            }
+            ExpressionKind::Return { value: Some(v) } => {
+                self.scan_expression(v);
+            }
+            _ => {}
+        }
+    }
+}
+
+// Helper struct to collect usages if we needed one, but `scan_expression` works.
+#[allow(dead_code)]
+struct UsageCollector;
+#[allow(dead_code)]
+impl UsageCollector {
+    fn new() -> Self {
+        Self
+    }
+    fn visit(&mut self, _expr: &mut crate::expression::Expression) {}
 }
 
 #[cfg(test)]
@@ -362,271 +600,4 @@ mod tests {
             panic!("Expected GlobalGet");
         }
     }
-}
-
-struct Analyzer<'a, 'b> {
-    module: &'b Module<'a>,
-    used_funcs: HashSet<String>,
-    used_globals: HashSet<u32>,
-    // Queue for reachability
-    func_queue: Vec<String>,
-    // We queue global indices to check their inits
-    global_queue: Vec<u32>,
-}
-
-impl<'a, 'b> Analyzer<'a, 'b> {
-    fn new(module: &'b Module<'a>) -> Self {
-        Self {
-            module,
-            used_funcs: HashSet::new(),
-            used_globals: HashSet::new(),
-            func_queue: Vec::new(),
-            global_queue: Vec::new(),
-        }
-    }
-
-    fn run(&mut self) {
-        // 1. Roots
-
-        // Exports
-        for export in &self.module.exports {
-            match export.kind {
-                ExportKind::Function => {
-                    // Export uses index!
-                    // We need to resolve index to name for functions.
-                    if let Some(name) = self.get_func_name(export.index) {
-                        self.mark_func_used(&name);
-                    }
-                }
-                ExportKind::Global => {
-                    self.mark_global_used(export.index);
-                }
-                _ => {} // Tables/Memories ignored for now
-            }
-        }
-
-        // Start function
-        if let Some(start_idx) = self.module.start {
-            if let Some(name) = self.get_func_name(start_idx) {
-                self.mark_func_used(&name);
-            }
-        }
-
-        // Element Segments (active/passive)
-        // If active, they are roots if they write to imported table?
-        // For MVP, just treat all element segments as roots?
-        // Or if they are used by `table.init`.
-        // C++: Active segments writing to visible tables are roots.
-        // Let's assume all element segments keep functions alive for now.
-        for elem in &self.module.elements {
-            for &func_idx in &elem.func_indices {
-                if let Some(name) = self.get_func_name(func_idx) {
-                    self.mark_func_used(&name);
-                }
-            }
-        }
-
-        // Data Segments
-        // Offsets use globals.
-        for data in &self.module.data {
-            self.visit_expression_root(&data.offset);
-        }
-        for elem in &self.module.elements {
-            self.visit_expression_root(&elem.offset);
-        }
-
-        // 2. Process Queues
-        while !self.func_queue.is_empty() || !self.global_queue.is_empty() {
-            while let Some(func_name) = self.func_queue.pop() {
-                if let Some(func) = self.module.get_function(&func_name) {
-                    if let Some(body) = &func.body {
-                        // Visit function body
-                        // We need a visitor that calls back to `self.mark_*`
-                        // But we can't pass `self` to visitor easily if we are borrowing `self.module`.
-                        // We can collect usages into a temp list.
-                        let mut usages = UsageCollector::new();
-                        usages.visit(unsafe { &mut *(body.as_ptr()) }); // Safe? ExprRef implies ownership logic but here we just read.
-                                                                        // Actually `visit` expects `&mut ExprRef`.
-                                                                        // But we are analyzing read-only module?
-                                                                        // `Visitor` trait requires `&mut ExprRef`.
-                                                                        // We cannot use mutable visitor on immutable module.
-                                                                        // We need a ReadOnlyVisitor? Or just manual traversal.
-                                                                        // `Visitor` trait is: `fn visit_expression(&mut self, expr: &mut ExprRef<'a>)`
-                                                                        // It requires mutable expr.
-                                                                        // We can't use it.
-
-                        // We have to implement a read-only traversal.
-                        self.scan_expression(body);
-                    }
-                }
-            }
-
-            while let Some(global_idx) = self.global_queue.pop() {
-                // Find global by index
-                // Index space: Imports then Defined.
-                let _num_func_imports = self
-                    .module
-                    .imports
-                    .iter()
-                    .filter(|i| matches!(i.kind, ImportKind::Function(_, _)))
-                    .count();
-                let num_global_imports = self
-                    .module
-                    .imports
-                    .iter()
-                    .filter(|i| matches!(i.kind, ImportKind::Global(_, _)))
-                    .count() as u32;
-
-                if global_idx < num_global_imports {
-                    // Imported global - no init to scan (it's external)
-                } else {
-                    let defined_idx = (global_idx - num_global_imports) as usize;
-                    if let Some(global) = self.module.globals.get(defined_idx) {
-                        self.scan_expression(&global.init);
-                    }
-                }
-            }
-        }
-    }
-
-    fn get_func_name(&self, idx: u32) -> Option<String> {
-        // Resolve index to name
-        let mut func_idx = 0;
-        for import in &self.module.imports {
-            if let ImportKind::Function(_, _) = import.kind {
-                if func_idx == idx {
-                    return Some(import.name.clone());
-                }
-                func_idx += 1;
-            }
-        }
-
-        let defined_idx = idx - func_idx;
-        self.module
-            .functions
-            .get(defined_idx as usize)
-            .map(|f| f.name.clone())
-    }
-
-    fn mark_func_used(&mut self, name: &str) {
-        if self.used_funcs.insert(name.to_string()) {
-            self.func_queue.push(name.to_string());
-        }
-    }
-
-    fn mark_global_used(&mut self, idx: u32) {
-        if self.used_globals.insert(idx) {
-            self.global_queue.push(idx);
-        }
-    }
-
-    fn visit_expression_root(&mut self, expr: &ExprRef<'a>) {
-        self.scan_expression(expr);
-    }
-
-    fn scan_expression(&mut self, expr: &ExprRef<'a>) {
-        // Manual read-only traversal
-        match &expr.kind {
-            ExpressionKind::Call {
-                target, operands, ..
-            } => {
-                self.mark_func_used(target);
-                for op in operands {
-                    self.scan_expression(op);
-                }
-            }
-            ExpressionKind::GlobalGet { index } => {
-                self.mark_global_used(*index);
-            }
-            ExpressionKind::GlobalSet { index, value } => {
-                self.mark_global_used(*index);
-                self.scan_expression(value);
-            }
-            // ... recurse for others ...
-            ExpressionKind::Block { list, .. } => {
-                for child in list {
-                    self.scan_expression(child);
-                }
-            }
-            ExpressionKind::Loop { body, .. } => self.scan_expression(body),
-            ExpressionKind::If {
-                condition,
-                if_true,
-                if_false,
-            } => {
-                self.scan_expression(condition);
-                self.scan_expression(if_true);
-                if let Some(e) = if_false {
-                    self.scan_expression(e);
-                }
-            }
-            ExpressionKind::Unary { value, .. }
-            | ExpressionKind::Drop { value }
-            | ExpressionKind::LocalSet { value, .. }
-            | ExpressionKind::LocalTee { value, .. }
-            | ExpressionKind::Load { ptr: value, .. }
-            | ExpressionKind::MemoryGrow { delta: value } => self.scan_expression(value),
-
-            ExpressionKind::Binary { left, right, .. }
-            | ExpressionKind::Store {
-                ptr: left,
-                value: right,
-                ..
-            } => {
-                self.scan_expression(left);
-                self.scan_expression(right);
-            }
-            ExpressionKind::Select {
-                condition,
-                if_true,
-                if_false,
-            } => {
-                self.scan_expression(condition);
-                self.scan_expression(if_true);
-                self.scan_expression(if_false);
-            }
-            ExpressionKind::CallIndirect {
-                target, operands, ..
-            } => {
-                self.scan_expression(target);
-                for op in operands {
-                    self.scan_expression(op);
-                }
-                // Table used? usually table 0
-            }
-            ExpressionKind::Break {
-                condition, value, ..
-            } => {
-                if let Some(c) = condition {
-                    self.scan_expression(c);
-                }
-                if let Some(v) = value {
-                    self.scan_expression(v);
-                }
-            }
-            ExpressionKind::Switch {
-                condition, value, ..
-            } => {
-                self.scan_expression(condition);
-                if let Some(v) = value {
-                    self.scan_expression(v);
-                }
-            }
-            ExpressionKind::Return { value } => {
-                if let Some(v) = value {
-                    self.scan_expression(v);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-// Helper struct to collect usages if we needed one, but `scan_expression` works.
-struct UsageCollector;
-impl UsageCollector {
-    fn new() -> Self {
-        Self
-    }
-    fn visit(&mut self, _expr: &mut crate::expression::Expression) {}
 }

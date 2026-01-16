@@ -92,7 +92,7 @@ impl Pass for LegalizeJSInterface {
         // Current function count + i
         let start_func_index = module.functions.len() as u32;
 
-        for (_i, task) in tasks.iter().enumerate() {
+        for task in tasks.iter() {
             let original_func = &module.functions[task.func_index as usize];
             let wrapper_name = format!("legalized_{}", original_func.name);
 

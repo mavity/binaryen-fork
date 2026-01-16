@@ -15,7 +15,7 @@ fuzz_target!(|data: &[u8]| {
         match op {
                 0 => {
                     if i >= data.len() { break; }
-                    let l = (data[i] as usize % 32) as usize;
+                    let l = data[i] as usize % 32;
                     i += 1;
                     if i + l > data.len() { break; }
                     let s = String::from_utf8_lossy(&data[i..i + l]).to_string();
@@ -31,7 +31,7 @@ fuzz_target!(|data: &[u8]| {
                 }
                 1 => {
                     if i >= data.len() { break; }
-                    let l = (data[i] as usize % 32) as usize;
+                    let l = data[i] as usize % 32;
                     i += 1;
                     if i + l > data.len() { break; }
                     let s = String::from_utf8_lossy(&data[i..i + l]).to_string();
@@ -40,7 +40,7 @@ fuzz_target!(|data: &[u8]| {
                 }
                 2 => {
                     if i >= data.len() { break; }
-                    let l = (data[i] as usize % 32) as usize;
+                    let l = data[i] as usize % 32;
                     i += 1;
                     if i + l > data.len() { break; }
                     let s = String::from_utf8_lossy(&data[i..i + l]).to_string();

@@ -200,97 +200,97 @@ pub trait ReadOnlyVisitor<'a> {
         match &expr.kind {
             ExpressionKind::Block { list, .. } => {
                 for child in list.iter() {
-                    self.visit(child.clone());
+                    self.visit(*child);
                 }
             }
             ExpressionKind::Unary { value, .. } => {
-                self.visit(value.clone());
+                self.visit(*value);
             }
             ExpressionKind::Binary { left, right, .. } => {
-                self.visit(left.clone());
-                self.visit(right.clone());
+                self.visit(*left);
+                self.visit(*right);
             }
             ExpressionKind::Call { operands, .. } => {
                 for operand in operands.iter() {
-                    self.visit(operand.clone());
+                    self.visit(*operand);
                 }
             }
             ExpressionKind::LocalSet { value, .. } | ExpressionKind::LocalTee { value, .. } => {
-                self.visit(value.clone());
+                self.visit(*value);
             }
             ExpressionKind::GlobalSet { value, .. } => {
-                self.visit(value.clone());
+                self.visit(*value);
             }
             ExpressionKind::If {
                 condition,
                 if_true,
                 if_false,
             } => {
-                self.visit(condition.clone());
-                self.visit(if_true.clone());
+                self.visit(*condition);
+                self.visit(*if_true);
                 if let Some(false_branch) = if_false {
-                    self.visit(false_branch.clone());
+                    self.visit(*false_branch);
                 }
             }
             ExpressionKind::Loop { body, .. } => {
-                self.visit(body.clone());
+                self.visit(*body);
             }
             ExpressionKind::Break {
                 condition, value, ..
             } => {
                 if let Some(cond) = condition {
-                    self.visit(cond.clone());
+                    self.visit(*cond);
                 }
                 if let Some(val) = value {
-                    self.visit(val.clone());
+                    self.visit(*val);
                 }
             }
             ExpressionKind::Return { value } => {
                 if let Some(val) = value {
-                    self.visit(val.clone());
+                    self.visit(*val);
                 }
             }
             ExpressionKind::Drop { value } => {
-                self.visit(value.clone());
+                self.visit(*value);
             }
             ExpressionKind::Select {
                 condition,
                 if_true,
                 if_false,
             } => {
-                self.visit(condition.clone());
-                self.visit(if_true.clone());
-                self.visit(if_false.clone());
+                self.visit(*condition);
+                self.visit(*if_true);
+                self.visit(*if_false);
             }
             ExpressionKind::Load { ptr, .. } => {
-                self.visit(ptr.clone());
+                self.visit(*ptr);
             }
             ExpressionKind::Store { ptr, value, .. } => {
-                self.visit(ptr.clone());
-                self.visit(value.clone());
+                self.visit(*ptr);
+                self.visit(*value);
             }
             ExpressionKind::Switch {
                 condition, value, ..
             } => {
-                self.visit(condition.clone());
+                self.visit(*condition);
                 if let Some(val) = value {
-                    self.visit(val.clone());
+                    self.visit(*val);
                 }
             }
             ExpressionKind::CallIndirect {
                 target, operands, ..
             } => {
-                self.visit(target.clone());
+                self.visit(*target);
                 for operand in operands.iter() {
-                    self.visit(operand.clone());
+                    self.visit(*operand);
                 }
             }
             ExpressionKind::MemoryGrow { delta } => {
-                self.visit(delta.clone());
+                self.visit(*delta);
             }
             ExpressionKind::AtomicRMW { ptr, value, .. } => {
-                self.visit(ptr.clone());
-                self.visit(value.clone());
+                self.visit(*ptr);
+                self.visit(*value);
             }
             ExpressionKind::AtomicCmpxchg {
                 ptr,
@@ -298,9 +298,9 @@ pub trait ReadOnlyVisitor<'a> {
                 replacement,
                 ..
             } => {
-                self.visit(ptr.clone());
-                self.visit(expected.clone());
-                self.visit(replacement.clone());
+                self.visit(*ptr);
+                self.visit(*expected);
+                self.visit(*replacement);
             }
             ExpressionKind::AtomicWait {
                 ptr,
@@ -308,61 +308,61 @@ pub trait ReadOnlyVisitor<'a> {
                 timeout,
                 ..
             } => {
-                self.visit(ptr.clone());
-                self.visit(expected.clone());
-                self.visit(timeout.clone());
+                self.visit(*ptr);
+                self.visit(*expected);
+                self.visit(*timeout);
             }
             ExpressionKind::AtomicNotify { ptr, count, .. } => {
-                self.visit(ptr.clone());
-                self.visit(count.clone());
+                self.visit(*ptr);
+                self.visit(*count);
             }
             ExpressionKind::SIMDExtract { vec, .. } => {
-                self.visit(vec.clone());
+                self.visit(*vec);
             }
             ExpressionKind::SIMDReplace { vec, value, .. } => {
-                self.visit(vec.clone());
-                self.visit(value.clone());
+                self.visit(*vec);
+                self.visit(*value);
             }
             ExpressionKind::SIMDShuffle { left, right, .. } => {
-                self.visit(left.clone());
-                self.visit(right.clone());
+                self.visit(*left);
+                self.visit(*right);
             }
             ExpressionKind::SIMDTernary { a, b, c, .. } => {
-                self.visit(a.clone());
-                self.visit(b.clone());
-                self.visit(c.clone());
+                self.visit(*a);
+                self.visit(*b);
+                self.visit(*c);
             }
             ExpressionKind::SIMDShift { vec, shift, .. } => {
-                self.visit(vec.clone());
-                self.visit(shift.clone());
+                self.visit(*vec);
+                self.visit(*shift);
             }
             ExpressionKind::SIMDLoad { ptr, .. } => {
-                self.visit(ptr.clone());
+                self.visit(*ptr);
             }
             ExpressionKind::SIMDLoadStoreLane { ptr, vec, .. } => {
-                self.visit(ptr.clone());
-                self.visit(vec.clone());
+                self.visit(*ptr);
+                self.visit(*vec);
             }
             ExpressionKind::MemoryInit {
                 dest, offset, size, ..
             } => {
-                self.visit(dest.clone());
-                self.visit(offset.clone());
-                self.visit(size.clone());
+                self.visit(*dest);
+                self.visit(*offset);
+                self.visit(*size);
             }
             ExpressionKind::MemoryCopy {
                 dest, src, size, ..
             } => {
-                self.visit(dest.clone());
-                self.visit(src.clone());
-                self.visit(size.clone());
+                self.visit(*dest);
+                self.visit(*src);
+                self.visit(*size);
             }
             ExpressionKind::MemoryFill {
                 dest, value, size, ..
             } => {
-                self.visit(dest.clone());
-                self.visit(value.clone());
-                self.visit(size.clone());
+                self.visit(*dest);
+                self.visit(*value);
+                self.visit(*size);
             }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)

@@ -32,6 +32,12 @@ pub struct SSABuilder<'a> {
     pub use_def: HashMap<ExprRef<'a>, DefA<'a>>,
 }
 
+impl<'a> Default for SSABuilder<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> SSABuilder<'a> {
     pub fn new() -> Self {
         Self {

@@ -59,10 +59,8 @@ fn optimize<'a>(expr: &mut Expression<'a>) {
             optimize(ptr);
             optimize(value);
         }
-        ExpressionKind::Return { value } => {
-            if let Some(value) = value {
-                optimize(value);
-            }
+        ExpressionKind::Return { value: Some(value) } => {
+            optimize(value);
         }
         ExpressionKind::Drop { value } => optimize(value),
         ExpressionKind::Select {

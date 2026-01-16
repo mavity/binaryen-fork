@@ -91,11 +91,8 @@ impl<'a> Visitor<'a> for Simplify {
                 // Replace the If with the appropriate branch
                 if cond_value {
                     Some(*if_true)
-                } else if let Some(false_branch) = if_false {
-                    Some(*false_branch)
                 } else {
-                    // No else branch, we'll handle this separately
-                    None
+                    *if_false
                 }
             } else {
                 None

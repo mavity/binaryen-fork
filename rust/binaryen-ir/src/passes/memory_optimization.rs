@@ -83,6 +83,12 @@ impl<'a> Visitor<'a> for MemoryOptimization {
     }
 }
 
+impl Default for MemoryOptimization {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryOptimization {
     /// Eliminate redundant adjacent operations (stores, local.sets, global.sets)
     fn eliminate_redundant_operations<'a>(

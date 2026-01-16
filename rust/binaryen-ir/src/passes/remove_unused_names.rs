@@ -46,7 +46,7 @@ impl NameAnalyzer {
         let id = self.get_expr_id();
         self.branches_seen
             .entry(name.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(id);
     }
 }

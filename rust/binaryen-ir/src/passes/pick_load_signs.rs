@@ -50,13 +50,12 @@ impl<'a> Visitor<'a> for LoadSignPicker<'a> {
         {
             if let ExpressionKind::Const(Literal::I32(mask)) = right.kind {
                 if let ExpressionKind::Load { bytes, signed, .. } = &mut left.kind {
-                    if *signed {
-                        if (*bytes == 1 && mask == 0xFF) || (*bytes == 2 && mask == 0xFFFF) {
-                            *signed = false;
-                            // We capture the modified *left (which is an ExprRef).
-                            // This ExprRef points to the Load expression (which we just modified in place).
-                            replacement = Some(*left);
-                        }
+                    if *signed && ((*bytes == 1 && mask == 0xFF) || (*bytes == 2 && mask == 0xFFFF))
+                    {
+                        *signed = false;
+                        // We capture the modified *left (which is an ExprRef).
+                        // This ExprRef points to the Load expression (which we just modified in place).
+                        replacement = Some(*left);
                     }
                 }
             }
@@ -102,7 +101,7 @@ mod tests {
         match body.kind {
             ExpressionKind::Load { bytes, signed, .. } => {
                 assert_eq!(bytes, 1);
-                assert_eq!(signed, false); // Changed to unsigned
+                assert!(!signed); // Changed to unsigned
             }
             ExpressionKind::Binary { .. } => {
                 panic!("Should have removed the And");

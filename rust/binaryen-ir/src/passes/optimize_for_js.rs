@@ -13,7 +13,7 @@ impl Pass for OptimizeForJS {
 
     fn run<'a>(&mut self, module: &mut Module<'a>) {
         let mut optimizer = JSOptimizer {
-            allocator: &module.allocator,
+            allocator: module.allocator,
         };
 
         for func in &mut module.functions {
@@ -70,7 +70,6 @@ impl<'a> Visitor<'a> for JSOptimizer<'a> {
                 } else {
                     *expr = *if_false;
                 }
-                return;
             }
         }
     }

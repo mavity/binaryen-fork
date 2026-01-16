@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::ops::{BinaryOp, UnaryOp};
 use binaryen_core::Literal;
@@ -110,6 +111,12 @@ pub struct Rule {
 /// Engine to apply simplification rules
 pub struct PatternMatcher {
     rules: Vec<Rule>,
+}
+
+impl Default for PatternMatcher {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PatternMatcher {

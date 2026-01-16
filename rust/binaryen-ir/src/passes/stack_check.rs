@@ -135,7 +135,7 @@ mod tests {
 
         // Verify check was added
         if let ExpressionKind::Block { list, .. } = &body.kind {
-            assert!(list.len() >= 1);
+            assert!(!list.is_empty());
             let check = list[0];
             if let ExpressionKind::If {
                 condition, if_true, ..

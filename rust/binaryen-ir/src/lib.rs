@@ -1562,7 +1562,7 @@ mod tests {
         );
         module.add_function(func1);
 
-        let body2 = builder.const_(Literal::F64(3.14));
+        let body2 = builder.const_(Literal::F64(std::f64::consts::PI));
         let func2 = Function::with_type_idx(
             "f1".to_string(),
             1,
@@ -1760,7 +1760,7 @@ mod tests {
             let mut module = Module::new(&bump);
             module.add_type(Type::I32, Type::I32);
 
-            let body = builder.const_(Literal::F64(3.14));
+            let body = builder.const_(Literal::F64(std::f64::consts::PI));
             let func = Function::with_type_idx(
                 "mismatch".to_string(),
                 0,
@@ -1801,7 +1801,7 @@ mod tests {
         let parsed = reader.parse_module().expect("Failed to parse");
 
         // Writer should have inferred and created a type
-        assert!(parsed.types.len() > 0, "Should have inferred types");
+        assert!(!parsed.types.is_empty(), "Should have inferred types");
         assert_eq!(parsed.functions.len(), 1);
     }
 
@@ -1836,14 +1836,14 @@ mod tests {
                 module.add_function(func);
 
                 let mut writer = BinaryWriter::new();
-                let bytes = writer
-                    .write_module(&module)
-                    .expect(&format!("Failed to write param {} result {}", i, j));
+                let bytes = writer.write_module(&module).unwrap_or_else(|e| {
+                    panic!("Failed to write param {} result {}: {:?}", i, j, e)
+                });
 
                 let mut reader = BinaryReader::new(&bump, bytes);
-                let parsed = reader
-                    .parse_module()
-                    .expect(&format!("Failed to parse param {} result {}", i, j));
+                let parsed = reader.parse_module().unwrap_or_else(|e| {
+                    panic!("Failed to parse param {} result {}: {:?}", i, j, e)
+                });
 
                 assert_eq!(parsed.functions.len(), 1);
                 assert_eq!(parsed.functions[0].params, *param_type);
@@ -1910,12 +1910,12 @@ mod tests {
             let mut writer = BinaryWriter::new();
             let bytes = writer
                 .write_module(&module)
-                .expect(&format!("Failed to write: {}", desc));
+                .unwrap_or_else(|e| panic!("Failed to write: {}: {:?}", desc, e));
 
             let mut reader = BinaryReader::new(&bump, bytes);
             let parsed = reader
                 .parse_module()
-                .expect(&format!("Failed to parse: {}", desc));
+                .unwrap_or_else(|e| panic!("Failed to parse: {}: {:?}", desc, e));
 
             assert_eq!(
                 parsed.functions.len(),
@@ -2310,7 +2310,7 @@ mod tests {
         }
 
         // Add function referencing type 199
-        let body = builder.const_(Literal::F64(3.14));
+        let body = builder.const_(Literal::F64(std::f64::consts::PI));
         let func = Function::with_type_idx(
             "f199".to_string(),
             199,
@@ -2416,8 +2416,8 @@ mod tests {
         let test_cases = [
             (Literal::I32(42), Type::I32),
             (Literal::I64(123456), Type::I64),
-            (Literal::F32(3.14), Type::F32),
-            (Literal::F64(2.718), Type::F64),
+            (Literal::F32(std::f32::consts::PI), Type::F32),
+            (Literal::F64(std::f64::consts::E), Type::F64),
         ];
 
         for (lit, typ) in &test_cases {
@@ -2482,12 +2482,12 @@ mod tests {
             let mut writer = BinaryWriter::new();
             let bytes = writer
                 .write_module(&module)
-                .expect(&format!("Failed to write {}", name));
+                .unwrap_or_else(|e| panic!("Failed to write {}: {:?}", name, e));
 
             let mut reader = BinaryReader::new(&bump, bytes);
             let parsed = reader
                 .parse_module()
-                .expect(&format!("Failed to parse {}", name));
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {:?}", name, e));
 
             assert_eq!(parsed.functions.len(), 1);
         }
@@ -3681,7 +3681,7 @@ mod tests {
         });
 
         // f32 global
-        let init3 = builder.const_(Literal::F32(3.14));
+        let init3 = builder.const_(Literal::F32(std::f32::consts::PI));
         module.add_global(Global {
             name: "g3".to_string(),
             type_: Type::F32,
@@ -3690,7 +3690,7 @@ mod tests {
         });
 
         // f64 global
-        let init4 = builder.const_(Literal::F64(2.718));
+        let init4 = builder.const_(Literal::F64(std::f64::consts::E));
         module.add_global(Global {
             name: "g4".to_string(),
             type_: Type::F64,
@@ -5984,7 +5984,7 @@ mod tests {
         let val1 = builder.const_(Literal::F32(-42.7));
         let abs_val = builder.unary(UnaryOp::AbsFloat32, val1, Type::F32);
 
-        let val2 = builder.const_(Literal::F32(3.14));
+        let val2 = builder.const_(Literal::F32(std::f32::consts::PI));
         let neg_val = builder.unary(UnaryOp::NegFloat32, val2, Type::F32);
 
         let val3 = builder.const_(Literal::F32(4.7));
@@ -6216,7 +6216,7 @@ mod tests {
         let val1 = builder.const_(Literal::F64(-142.7));
         let abs_val = builder.unary(UnaryOp::AbsFloat64, val1, Type::F64);
 
-        let val2 = builder.const_(Literal::F64(3.14159));
+        let val2 = builder.const_(Literal::F64(std::f64::consts::PI));
         let neg_val = builder.unary(UnaryOp::NegFloat64, val2, Type::F64);
 
         let val3 = builder.const_(Literal::F64(64.0));
@@ -7338,7 +7338,7 @@ mod tests {
         );
 
         // Float operations
-        let f32_a = builder.const_(Literal::F32(3.14));
+        let f32_a = builder.const_(Literal::F32(std::f32::consts::PI));
         let f32_b = builder.const_(Literal::F32(2.0));
         let f32_div = builder.binary(BinaryOp::DivFloat32, f32_a, f32_b, Type::F32);
         let f32_sqrt = builder.unary(UnaryOp::SqrtFloat32, f32_div, Type::F32);
@@ -7493,11 +7493,11 @@ mod tests {
         let mut module = Module::new(&bump);
 
         // Mix f32 and f64 operations
-        let f32_val = builder.const_(Literal::F32(3.14));
+        let f32_val = builder.const_(Literal::F32(std::f32::consts::PI));
         let f32_result = builder.unary(UnaryOp::SqrtFloat32, f32_val, Type::F32);
 
-        let f64_val1 = builder.const_(Literal::F64(2.718));
-        let f64_val2 = builder.const_(Literal::F64(2.718));
+        let f64_val1 = builder.const_(Literal::F64(std::f64::consts::E));
+        let f64_val2 = builder.const_(Literal::F64(std::f64::consts::E));
         let f64_result = builder.binary(BinaryOp::MulFloat64, f64_val1, f64_val2, Type::F64);
 
         // Compare f32 value
@@ -7709,7 +7709,7 @@ mod tests {
 
         // i32 -> f32 -> f64 -> i64 -> i32
         let i32_to_f32 = builder.unary(UnaryOp::ConvertSInt32ToFloat32, i32_val, Type::F32);
-        let f32_val = builder.const_(Literal::F32(3.14));
+        let f32_val = builder.const_(Literal::F32(std::f32::consts::PI));
         let f32_sum = builder.binary(BinaryOp::AddFloat32, i32_to_f32, f32_val, Type::F32);
 
         let f32_to_i64 = builder.unary(UnaryOp::TruncSFloat32ToInt64, f32_sum, Type::I64);
@@ -7762,7 +7762,7 @@ mod tests {
             Type::I32,
         );
 
-        let f32_val = builder.const_(Literal::F32(3.14));
+        let f32_val = builder.const_(Literal::F32(std::f32::consts::PI));
         let f32_sqrt = builder.unary(UnaryOp::SqrtFloat32, f32_val, Type::F32);
         let f32_to_i32 = builder.unary(UnaryOp::TruncSFloat32ToInt32, f32_sqrt, Type::I32);
 
@@ -7821,7 +7821,7 @@ mod tests {
             builder.const_(Literal::I64(1500)),
             Type::I32,
         );
-        let f32_true = builder.const_(Literal::F32(3.14));
+        let f32_true = builder.const_(Literal::F32(std::f32::consts::PI));
         let f32_false = builder.const_(Literal::F32(2.71));
         let select_f32 = builder.select(cond3, f32_true, f32_false, Type::F32);
 

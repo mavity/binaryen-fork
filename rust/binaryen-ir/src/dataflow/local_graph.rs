@@ -42,7 +42,7 @@ impl<'a> LocalGraph<'a> {
 
         // Add parameter definitions
         for i in 0..num_params {
-            graph.definitions.entry(i).or_insert_with(Vec::new);
+            graph.definitions.entry(i).or_default();
         }
 
         // Walk expression tree and record def/use
@@ -63,17 +63,13 @@ impl<'a> LocalGraph<'a> {
             fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
                 match &expr.kind {
                     ExpressionKind::LocalGet { index } => {
-                        self.graph
-                            .uses
-                            .entry(*index)
-                            .or_insert_with(Vec::new)
-                            .push(*expr);
+                        self.graph.uses.entry(*index).or_default().push(*expr);
                     }
                     ExpressionKind::LocalSet { index, .. } => {
                         self.graph
                             .definitions
                             .entry(*index)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(*expr);
                     }
                     ExpressionKind::LocalTee { index, .. } => {
@@ -81,13 +77,9 @@ impl<'a> LocalGraph<'a> {
                         self.graph
                             .definitions
                             .entry(*index)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(*expr);
-                        self.graph
-                            .uses
-                            .entry(*index)
-                            .or_insert_with(Vec::new)
-                            .push(*expr);
+                        self.graph.uses.entry(*index).or_default().push(*expr);
                     }
                     _ => {}
                 }
@@ -226,13 +218,6 @@ impl<'a> LocalGraph<'a> {
 
 #[cfg(test)]
 mod tests {
-
     // TODO: Add tests once Expression builder API is finalized
     // Tests disabled temporarily to unblock infrastructure implementation
-
-    #[test]
-    fn test_placeholder() {
-        // Placeholder test
-        assert!(true);
-    }
 }

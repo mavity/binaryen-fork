@@ -18,6 +18,12 @@ pub struct GlobalAnalysis {
     pub reachable_functions: HashSet<FunctionId>,
 }
 
+impl Default for GlobalAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GlobalAnalysis {
     pub fn new() -> Self {
         Self {
@@ -109,10 +115,8 @@ impl GlobalAnalysis {
                 self.visit_for_globals(*value, sets);
             }
             ExpressionKind::Drop { value } => self.visit_for_globals(*value, sets),
-            ExpressionKind::Return { value } => {
-                if let Some(v) = value {
-                    self.visit_for_globals(*v, sets);
-                }
+            ExpressionKind::Return { value: Some(v) } => {
+                self.visit_for_globals(*v, sets);
             }
             ExpressionKind::Select {
                 condition,

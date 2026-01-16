@@ -68,7 +68,7 @@ impl<'a, 'b> GlobalOptimizer<'a, 'b> {
                 for child in list.iter() {
                     new_list.push(self.transform(*child));
                 }
-                builder.block(name.clone(), new_list, expr.type_)
+                builder.block(*name, new_list, expr.type_)
             }
             ExpressionKind::Binary { op, left, right } => {
                 let new_left = self.transform(*left);
@@ -115,7 +115,7 @@ mod tests {
             name: "g0".to_string(),
             type_: Type::I32,
             mutable: false,
-            init: init,
+            init,
         };
 
         // Function: (return (global.get 0))
@@ -137,12 +137,10 @@ mod tests {
 
         // Check body is now (return (i32.const 42))
         let body = module.functions[0].body.unwrap();
-        if let ExpressionKind::Return { value } = &body.kind {
-            if let Some(val) = value {
-                if let ExpressionKind::Const(value) = &val.kind {
-                    assert_eq!(*value, Literal::I32(42));
-                    return;
-                }
+        if let ExpressionKind::Return { value: Some(val) } = &body.kind {
+            if let ExpressionKind::Const(value) = &val.kind {
+                assert_eq!(*value, Literal::I32(42));
+                return;
             }
         }
         panic!("Optimization failed: expected Const(42)");
