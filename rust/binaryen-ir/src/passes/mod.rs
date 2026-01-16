@@ -5,6 +5,7 @@ pub mod const_hoisting;
 pub mod dae;
 pub mod dae_optimizing;
 pub mod dce;
+pub mod dfo;
 pub mod duplicate_function_elimination;
 pub mod flatten;
 pub mod global_refining;

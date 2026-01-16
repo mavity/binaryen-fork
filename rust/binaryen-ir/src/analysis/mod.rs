@@ -1,5 +1,8 @@
 pub mod call_graph;
+pub mod cfg;
 pub mod cost;
+pub mod dominators;
 pub mod evaluator;
 pub mod hasher;
 pub mod patterns;
+pub mod ssa;
