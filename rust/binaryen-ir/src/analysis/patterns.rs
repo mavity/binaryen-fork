@@ -147,7 +147,7 @@ impl PatternMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use binaryen_core::Type;
     use bumpalo::Bump;
 

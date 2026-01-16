@@ -2,7 +2,6 @@ use crate::analysis::cfg::{BlockId, ControlFlowGraph};
 use crate::analysis::dominators::DominanceTree;
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Function;
-use bumpalo::Bump;
 use std::collections::{HashMap, HashSet};
 
 pub type LocalId = u32;
@@ -208,7 +207,7 @@ mod tests {
     use super::*;
     use crate::analysis::cfg::ControlFlowGraph;
     use crate::analysis::dominators::DominanceTree;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;

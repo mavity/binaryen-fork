@@ -60,17 +60,6 @@ impl Pass for RemoveUnusedModuleElements {
 
         // Let's implement index remapping properly.
 
-        let num_func_imports = module
-            .imports
-            .iter()
-            .filter(|i| matches!(i.kind, ImportKind::Function(_, _)))
-            .count();
-        let num_global_imports = module
-            .imports
-            .iter()
-            .filter(|i| matches!(i.kind, ImportKind::Global(_, _)))
-            .count();
-
         // Rebuild Imports?
         // If we remove an import, we shift indices.
         // C++ removes imports too.
@@ -85,17 +74,6 @@ impl Pass for RemoveUnusedModuleElements {
         // Or analyze using Names for functions, and Indices for globals.
 
         // Let's refine Analyzer.
-        let _num_global_imports = module
-            .imports
-            .iter()
-            .filter(|i| matches!(i.kind, ImportKind::Global(_, _)))
-            .count();
-        let num_global_imports = module.imports.len() as u32; // Assuming imports are ordered: funcs, globals...?
-                                                              // Wait, imports are mixed in the vector?
-                                                              // Index space:
-                                                              // Function Index Space: Imported Functions, then Defined Functions.
-                                                              // Global Index Space: Imported Globals, then Defined Globals.
-                                                              // So we need to count specific import kinds to get the offset.
         let num_global_imports = module
             .imports
             .iter()
@@ -270,8 +248,8 @@ impl<'a, 'map> Visitor<'a> for IndexMapper<'map> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
-    use crate::module::{ExportKind, Function, Global, Module};
+    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::module::{Function, Global, Module};
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
 

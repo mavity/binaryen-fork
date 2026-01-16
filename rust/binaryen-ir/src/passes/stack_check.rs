@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+use crate::expression::{ExpressionKind, IrBuilder};
 use crate::module::{ImportKind, Module};
 use crate::ops::BinaryOp;
 use crate::pass::Pass;
@@ -83,7 +83,7 @@ impl Pass for StackCheck {
 mod tests {
     use super::*;
     use crate::expression::{ExprRef, Expression, ExpressionKind};
-    use crate::module::{Function, Global, Import};
+    use crate::module::{Function, Global};
     use binaryen_core::{Literal, Type};
     use bumpalo::collections::Vec as BumpVec;
     use bumpalo::Bump;
@@ -141,7 +141,7 @@ mod tests {
                 condition, if_true, ..
             } = &check.kind
             {
-                if let ExpressionKind::Binary { op, left, right } = &condition.kind {
+                if let ExpressionKind::Binary { op, left, .. } = &condition.kind {
                     assert!(matches!(op, BinaryOp::LtUInt32));
                     if let ExpressionKind::GlobalGet { index } = left.kind {
                         assert_eq!(index, 0); // SP is first global (index 0 if no imports)

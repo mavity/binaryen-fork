@@ -1,8 +1,5 @@
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Function;
-use crate::visitor::ReadOnlyVisitor;
-use bumpalo::collections::Vec as BumpVec;
-use std::collections::{HashMap, HashSet};
 
 pub type BlockId = u32;
 
@@ -32,7 +29,7 @@ pub struct ControlFlowGraph<'a> {
 }
 
 impl<'a> ControlFlowGraph<'a> {
-    pub fn build(func: &Function, entry_expr: ExprRef<'a>) -> Self {
+    pub fn build(_func: &Function, entry_expr: ExprRef<'a>) -> Self {
         let mut builder = CFGBuilder::new();
         builder.build(entry_expr);
         builder.cfg
@@ -209,8 +206,9 @@ impl<'a> CFGBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use binaryen_core::{Literal, Type};
+    use bumpalo::collections::Vec as BumpVec;
     use bumpalo::Bump;
 
     #[test]

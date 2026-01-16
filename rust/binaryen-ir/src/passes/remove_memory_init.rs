@@ -27,7 +27,7 @@ impl Pass for RemoveMemoryInit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind};
+    use crate::expression::Expression;
     use crate::module::{DataSegment, Function, Module};
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;

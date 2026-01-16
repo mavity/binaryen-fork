@@ -16,7 +16,7 @@ impl Pass for Memory64Lowering {
         // and injecting logic to handle 64-bit offsets/indices.
 
         // Check if module uses memory64.
-        let is_memory64 = if let Some(mem) = &module.memory {
+        let is_memory64 = if let Some(_mem) = &module.memory {
             // Wait, MemoryLimits doesn't store index type (i32/i64).
             // Binaryen-ir Module might assume i32 memory for MVP, but Memory64 proposal adds i64.
             // Currently our MemoryLimits struct in module.rs:
@@ -35,7 +35,7 @@ impl Pass for Memory64Lowering {
         }
 
         for func in &mut module.functions {
-            if let Some(body) = func.body {
+            if let Some(_body) = func.body {
                 // TODO: lowering logic
             }
         }

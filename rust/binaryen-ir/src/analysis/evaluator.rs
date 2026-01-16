@@ -5,6 +5,7 @@ use bumpalo::Bump;
 use std::collections::HashMap;
 
 /// Compile-time expression evaluator
+#[allow(dead_code)]
 pub struct Evaluator<'a> {
     _arena: &'a Bump,
     /// Known constant values for globals/locals
@@ -150,7 +151,7 @@ impl<'a> Evaluator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use binaryen_core::Type;
 
     #[test]

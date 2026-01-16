@@ -1,5 +1,5 @@
-use crate::analysis::patterns::{Env, Pattern, PatternMatcher};
-use crate::expression::{ExprRef, ExpressionKind};
+use crate::analysis::patterns::{Pattern, PatternMatcher};
+use crate::expression::ExprRef;
 use crate::module::Module;
 use crate::ops::UnaryOp;
 use crate::pass::Pass;
@@ -74,14 +74,14 @@ impl<'a, 'b> Visitor<'a> for OptimizeCastsVisitor<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
-    use binaryen_core::{Literal, Type};
+    use crate::expression::{ExpressionKind, IrBuilder};
+    use binaryen_core::Type;
     use bumpalo::Bump;
 
     #[test]
     fn test_optimize_wrap_extend_s() {
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         // wrap(extend_s(local.get 0)) -> local.get 0
         let x = builder.local_get(0, Type::I32);

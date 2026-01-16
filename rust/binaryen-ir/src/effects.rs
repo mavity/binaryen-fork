@@ -496,7 +496,7 @@ impl EffectAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+    use crate::expression::{ExprRef, IrBuilder};
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
 
@@ -965,9 +965,6 @@ mod tests {
 
     #[test]
     fn test_analyzer_call_indirect() {
-        let _bump = Bump::new();
-        let _builder = IrBuilder::new(&_bump);
-
         // CallIndirect not yet available in IrBuilder
         // Skipping test for now - would test:
         // - effect.calls() == true

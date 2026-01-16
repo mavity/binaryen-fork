@@ -62,7 +62,7 @@ impl<'a> Visitor<'a> for UnteeTransformer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind};
+    use crate::expression::{Expression, ExpressionKind};
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;

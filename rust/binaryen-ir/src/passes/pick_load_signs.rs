@@ -1,9 +1,9 @@
 use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::Module;
-use crate::ops::{BinaryOp, UnaryOp};
+use crate::ops::BinaryOp;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
-use binaryen_core::{Literal, Type};
+use binaryen_core::Literal;
 
 /// Pick Load Signs pass: Optimizes load signs based on usage
 ///
@@ -29,6 +29,7 @@ impl Pass for PickLoadSigns {
     }
 }
 
+#[allow(dead_code)]
 struct LoadSignPicker<'a> {
     builder: IrBuilder<'a>,
 }
@@ -72,7 +73,7 @@ impl<'a> Visitor<'a> for LoadSignPicker<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind};
+    use crate::expression::ExpressionKind;
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
@@ -88,7 +89,7 @@ mod tests {
         let mask = builder.const_(Literal::I32(0xFF));
         let and = builder.binary(BinaryOp::AndInt32, load, mask, Type::I32);
 
-        let mut func = Function::new("test".to_string(), Type::NONE, Type::I32, vec![], Some(and));
+        let func = Function::new("test".to_string(), Type::NONE, Type::I32, vec![], Some(and));
         let mut module = Module::new(&bump);
         module.add_function(func);
 

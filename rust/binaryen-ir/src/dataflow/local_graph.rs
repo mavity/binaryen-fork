@@ -226,7 +226,6 @@ impl<'a> LocalGraph<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     // TODO: Add tests once Expression builder API is finalized
     // Tests disabled temporarily to unblock infrastructure implementation

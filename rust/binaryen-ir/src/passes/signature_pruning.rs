@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
@@ -108,14 +108,14 @@ impl Pass for SignaturePruning {
                 let mut remap = HashMap::new();
                 let mut constant_replacements = HashMap::new();
 
-                let mut keep_any = false;
+                let mut _keep_any = false;
 
                 for (i, status) in infos.iter().enumerate() {
                     match status {
                         ParamStatus::Read | ParamStatus::Written | ParamStatus::Variable => {
                             remap.insert(i as u32, new_params.len() as u32);
                             new_params.push(old_params_vec[i]);
-                            keep_any = true;
+                            _keep_any = true;
                         }
                         ParamStatus::Unused => {
                             // Drop
@@ -191,6 +191,7 @@ enum ParamStatus {
     Variable,
 }
 
+#[allow(dead_code)]
 struct ParamUsageScanner<'a> {
     target_func: &'a str,
     usage: Option<&'a mut Vec<ParamStatus>>,
@@ -239,7 +240,7 @@ impl<'a, 'b> Visitor<'b> for CallSiteScanner<'a> {
                         }
 
                         // Check if op is constant
-                        let is_const = matches!(op.kind, ExpressionKind::Const(_));
+                        let _is_const = matches!(op.kind, ExpressionKind::Const(_));
                         let const_val = if let ExpressionKind::Const(lit) = &op.kind {
                             Some(lit.clone())
                         } else {
@@ -361,7 +362,7 @@ mod tests {
         let mut module = Module::new(&bump);
 
         let nop = Expression::nop(&bump);
-        let mut func = Function::new(
+        let func = Function::new(
             "unused_params".to_string(),
             Type::I32,
             Type::NONE,

@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
@@ -35,6 +35,7 @@ impl Pass for LocalCSE {
     }
 }
 
+#[allow(dead_code)]
 struct CSETransformer<'a> {
     allocator: &'a bumpalo::Bump,
     expr_map: HashMap<ExprKey, (ExprRef<'a>, u32)>, // expr -> (original, temp_local)

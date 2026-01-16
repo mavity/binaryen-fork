@@ -83,9 +83,9 @@ impl<'a, 'b> ReadOnlyVisitor<'a> for CallGraphBuilder<'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use crate::module::Function;
-    use binaryen_core::{Literal, Type};
+    use binaryen_core::Type;
     use bumpalo::Bump;
 
     #[test]

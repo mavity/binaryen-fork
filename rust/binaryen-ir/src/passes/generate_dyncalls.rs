@@ -1,7 +1,8 @@
-use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+use crate::expression::{Expression, ExpressionKind, IrBuilder};
 use crate::module::{Function, Module};
 use crate::pass::Pass;
-use binaryen_core::{Literal, Type};
+use binaryen_core::Type;
+
 use bumpalo::collections::Vec as BumpVec;
 use std::collections::HashSet;
 

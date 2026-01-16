@@ -1,4 +1,4 @@
-use crate::expression::{ExprRef, ExpressionKind};
+use crate::expression::ExprRef;
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
@@ -26,6 +26,7 @@ impl Pass for RSE {
     }
 }
 
+#[allow(dead_code)]
 struct RedundantSetEliminator<'a> {
     allocator: &'a bumpalo::Bump,
 }

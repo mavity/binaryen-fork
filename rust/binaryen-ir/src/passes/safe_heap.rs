@@ -1,6 +1,6 @@
 use crate::expression::{ExprRef, Expression, ExpressionKind};
 use crate::module::Module;
-use crate::ops::{BinaryOp, UnaryOp};
+use crate::ops::BinaryOp;
 use crate::pass::Pass;
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
@@ -369,7 +369,7 @@ mod tests {
     use crate::expression::{ExprRef, Expression, ExpressionKind};
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
-    use bumpalo::collections::Vec as BumpVec;
+
     use bumpalo::Bump;
 
     #[test]

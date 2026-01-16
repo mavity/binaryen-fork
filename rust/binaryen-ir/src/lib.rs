@@ -598,8 +598,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind, MemoryLimits};
 
-        let _bump = Bump::new();
-
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -1143,8 +1141,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test 1: Empty types
         {
             let bump = bumpalo::Bump::new();
@@ -1205,8 +1201,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test all basic WebAssembly value types
         let test_types = [
             (Type::I32, "i32"),
@@ -1257,8 +1251,6 @@ mod tests {
     fn test_type_section_empty_signatures() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-
-        let bump = Bump::new();
 
         // Test 1: () -> ()
         {
@@ -1317,8 +1309,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test funcref and externref
         let ref_types = [(Type::FUNCREF, "funcref"), (Type::EXTERNREF, "externref")];
 
@@ -1371,8 +1361,6 @@ mod tests {
     fn test_type_section_many_types() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-
-        let bump = Bump::new();
 
         // Test with 100 types to ensure proper LEB128 encoding and no limit issues
         let bump = bumpalo::Bump::new();
@@ -1473,8 +1461,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind};
-
-        let bump = Bump::new();
 
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -1871,8 +1857,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test module with types but no functions
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -2110,8 +2094,6 @@ mod tests {
     fn test_function_section_no_body() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-
-        let bump = Bump::new();
 
         // Test function with no body (None)
         let bump = bumpalo::Bump::new();
@@ -2858,8 +2840,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test function with no body (None)
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -2966,8 +2946,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test with maximum reasonable number of types (1000)
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -2991,8 +2969,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test with many functions (500)
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -3014,8 +2990,6 @@ mod tests {
     fn test_roundtrip_various_type_signatures() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-
-        let bump = Bump::new();
 
         // Test with various single-param single-result types
         let bump = bumpalo::Bump::new();
@@ -3044,8 +3018,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
-
         // Test completely empty module
         let bump = bumpalo::Bump::new();
         let module = Module::new(&bump);
@@ -3068,8 +3040,6 @@ mod tests {
     fn test_roundtrip_mixed_function_types() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-
-        let bump = Bump::new();
 
         // Test functions with and without type_idx
         let bump = bumpalo::Bump::new();
@@ -3182,7 +3152,7 @@ mod tests {
     fn test_roundtrip_all_sections_together() {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
-        use crate::module::{Export, Global, Import};
+        use crate::module::{Global, Import};
 
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
@@ -3262,7 +3232,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind};
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3289,7 +3258,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind, MemoryLimits};
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3317,7 +3285,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind};
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3342,7 +3309,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind, MemoryLimits};
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3392,7 +3358,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{Import, ImportKind};
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3421,7 +3386,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::ExportKind;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3453,7 +3417,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::ExportKind;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3484,7 +3447,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::ExportKind;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3538,7 +3500,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::{ExportKind, TableLimits};
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3567,7 +3528,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3590,7 +3550,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -3613,7 +3572,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -4071,7 +4029,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -4098,7 +4055,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -4129,7 +4085,6 @@ mod tests {
         use crate::binary_reader::BinaryReader;
         use crate::binary_writer::BinaryWriter;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -4159,7 +4114,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::TableLimits;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -4187,7 +4141,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::TableLimits;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
@@ -4215,7 +4168,6 @@ mod tests {
         use crate::binary_writer::BinaryWriter;
         use crate::module::TableLimits;
 
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 

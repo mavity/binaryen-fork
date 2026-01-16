@@ -2,7 +2,6 @@ use crate::analysis::call_graph::CallGraph;
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use binaryen_core::Literal;
-use bumpalo::Bump;
 use std::collections::{HashMap, HashSet};
 
 pub type GlobalId = usize;
@@ -179,9 +178,9 @@ impl GlobalAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
-    use crate::module::{ExportKind, Function, Module};
-    use binaryen_core::{Literal, Type};
+    use crate::expression::IrBuilder;
+    use crate::module::{Function, Module};
+    use binaryen_core::Type;
     use bumpalo::Bump;
 
     #[test]
@@ -221,14 +220,6 @@ mod tests {
 
         // Func 2: Called by Func 1
         let nop = builder.nop();
-        let func2 = Function::new(
-            "func2".to_string(),
-            Type::NONE,
-            Type::NONE,
-            vec![],
-            Some(nop.clone()),
-        ); // Cloning ExprRef is cheap (copy) but nop is ExprRef
-           // ExprRef is Copy.
         let func2_def = Function::new(
             "func2".to_string(),
             Type::NONE,

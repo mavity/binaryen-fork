@@ -1,4 +1,4 @@
-use crate::analysis::patterns::{Env, Pattern, PatternMatcher};
+use crate::analysis::patterns::{Pattern, PatternMatcher};
 use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::Module;
 use crate::ops::BinaryOp;
@@ -305,15 +305,14 @@ impl<'a, 'b> Visitor<'a> for OptimizeInstructionsVisitor<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
-    use crate::module::Function;
+    use crate::expression::{ExpressionKind, IrBuilder};
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
 
     #[test]
     fn test_optimize_add_zero() {
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         // (local.get 0) + 0
         let x = builder.local_get(0, Type::I32);
@@ -339,7 +338,7 @@ mod tests {
     #[test]
     fn test_optimize_mul_one() {
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         // 1 * (local.get 0)
         let x = builder.local_get(0, Type::I32);
@@ -365,7 +364,7 @@ mod tests {
     fn test_optimize_nested() {
         // ((x + 0) * 1) -> x
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         let x = builder.local_get(0, Type::I32);
         let zero = builder.const_(Literal::I32(0));
@@ -392,7 +391,7 @@ mod tests {
     #[test]
     fn test_strength_reduction_mul_pow2() {
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         // x * 8 -> x << 3
         let x = builder.local_get(0, Type::I32);
@@ -425,7 +424,7 @@ mod tests {
     #[test]
     fn test_comparison_eq_zero() {
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         // x == 0 -> eqz(x)
         let x = builder.local_get(0, Type::I32);
@@ -451,7 +450,7 @@ mod tests {
     #[test]
     fn test_comparison_gt_u_zero() {
         let bump = Bump::new();
-        let mut builder = IrBuilder::new(&bump);
+        let builder = IrBuilder::new(&bump);
 
         // x >u 0 -> x != 0
         let x = builder.local_get(0, Type::I32);

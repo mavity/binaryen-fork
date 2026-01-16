@@ -4,7 +4,7 @@ use crate::pass::Pass;
 use crate::visitor::Visitor;
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// ConstHoisting pass: Move repeated constants to locals to reduce code size
 ///
@@ -62,10 +62,6 @@ impl Hash for HashableLiteral {
             Literal::V128(val) => {
                 4u8.hash(state);
                 val.hash(state);
-            }
-            // Ignore others for now or hash empty
-            _ => {
-                255u8.hash(state);
             }
         }
     }
@@ -248,7 +244,7 @@ impl<'a, 'b> Visitor<'a> for ConstRewriter<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind};
+    use crate::expression::ExpressionKind;
     use crate::module::Function;
     use crate::ops::BinaryOp;
     use bumpalo::Bump;

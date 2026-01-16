@@ -17,7 +17,7 @@ impl Pass for GlobalRefining {
 
     fn run<'a>(&mut self, module: &mut Module<'a>) {
         // Map from global index to LUB of assigned types
-        let mut inferred_types: HashMap<u32, Option<Type>> = HashMap::new();
+        // let mut inferred_types: HashMap<u32, Option<Type>> = HashMap::new();
 
         let mut analyzer = GlobalAnalyzer {
             assigned_types: HashMap::new(),
@@ -35,7 +35,7 @@ impl Pass for GlobalRefining {
             analyzer.note_assignment(i as u32, global.init.type_);
         }
 
-        inferred_types = analyzer.assigned_types;
+        let inferred_types = analyzer.assigned_types;
 
         // Update globals
         for (i, global) in module.globals.iter_mut().enumerate() {

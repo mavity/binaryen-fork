@@ -71,6 +71,7 @@ struct SinkableInfo<'a> {
 }
 
 /// Context for a single function optimization
+#[allow(dead_code)]
 struct FunctionContext<'a> {
     /// Map from local index to sinkable info
     sinkables: HashMap<u32, SinkableInfo<'a>>,
@@ -97,13 +98,19 @@ impl<'a> FunctionContext<'a> {
     }
 
     /// Check if a local.set can be sunk
-    fn can_sink(&self, set: &Expression) -> bool {
+    fn can_sink(&mut self, set: &Expression) -> bool {
         if let ExpressionKind::LocalSet { index, .. } = &set.kind {
             // If in first cycle or not allowing tees, cannot sink if >1 use
             // (would require creating a tee)
             let use_count = self.get_counts.get(index).copied().unwrap_or(0);
-            if (self.first_cycle || !self.allow_tee) && use_count > 1 {
-                return false;
+            if use_count > 1 {
+                if !self.allow_tee {
+                    return false;
+                }
+                if self.first_cycle {
+                    // Deferred to next cycle when we can create a tee
+                    return false;
+                }
             }
 
             true
@@ -127,6 +134,7 @@ impl Pass for SimplifyLocals {
     }
 
     fn run<'a>(&mut self, module: &mut Module<'a>) {
+        let mut first_cycle = true;
         // Run multiple cycles until no more changes
         loop {
             self.another_cycle = false;
@@ -138,17 +146,18 @@ impl Pass for SimplifyLocals {
                         self.allow_structure,
                         self.allow_nesting,
                     );
+                    ctx.first_cycle = first_cycle;
 
                     // First pass: count local.get operations
+                    ctx.get_counts.clear();
                     count_gets(body, &mut ctx.get_counts);
 
                     // Second pass: optimize
                     self.optimize_function(body, &mut ctx);
-
-                    ctx.first_cycle = false;
                 }
             }
 
+            first_cycle = false;
             if !self.another_cycle {
                 break;
             }
@@ -193,14 +202,6 @@ impl SimplifyLocals {
                         unreachable!("Sinkable set must be a LocalSet");
                     }
                 }
-            } else {
-                if ctx.sinkables.contains_key(&index) {
-                    let one_use =
-                        ctx.first_cycle || ctx.get_counts.get(&index).copied().unwrap_or(0) == 1;
-                    if one_use || ctx.allow_tee {
-                        self.another_cycle = true;
-                    }
-                }
             }
             let effects = EffectAnalyzer::analyze(*expr);
             ctx.check_invalidations(effects);
@@ -220,7 +221,6 @@ impl SimplifyLocals {
 
             if ctx.sinkables.contains_key(&index) {
                 ctx.sinkables.remove(&index);
-                self.another_cycle = true;
             }
 
             let effects = EffectAnalyzer::analyze(*expr);
@@ -236,6 +236,13 @@ impl SimplifyLocals {
                             set: *expr,
                         },
                     );
+                }
+            } else if ctx.first_cycle && ctx.allow_tee {
+                // If we couldn't sink only because it was the first cycle (tee needed),
+                // trigger another cycle.
+                let use_count = ctx.get_counts.get(&index).copied().unwrap_or(0);
+                if use_count > 1 {
+                    self.another_cycle = true;
                 }
             }
             return;
@@ -466,11 +473,17 @@ impl SimplifyLocals {
     fn visit_drop_post<'a>(&mut self, expr: &mut ExprRef<'a>, _ctx: &mut FunctionContext<'a>) {
         // Collapse drop-tee into set (drop (local.tee) -> local.set)
         if let ExpressionKind::Drop { value } = &mut expr.kind {
-            if let ExpressionKind::LocalTee { index, .. } = &value.kind {
-                // Convert drop(tee) to set
-                // We need to extract the value from the tee and create a new set
-                // For now, just mark that optimization is possible
-                let _ = index; // Use index to avoid warning
+            if let ExpressionKind::LocalTee {
+                index,
+                value: tee_val,
+            } = &value.kind
+            {
+                let index = *index;
+                let tee_val = *tee_val;
+                expr.kind = ExpressionKind::LocalSet {
+                    index,
+                    value: tee_val,
+                };
                 self.another_cycle = true;
             }
         }
@@ -648,6 +661,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::IrBuilder;
+    use binaryen_core::{Literal, Type};
+    use bumpalo::collections::Vec as BumpVec;
+    use bumpalo::Bump;
 
     #[test]
     fn test_simplify_locals_basic() {
@@ -656,7 +673,7 @@ mod tests {
         assert_eq!(pass.name(), "SimplifyLocals");
 
         // Create empty module
-        let bump = bumpalo::Bump::new();
+        let bump = Bump::new();
         let mut module = Module::new(&bump);
         pass.run(&mut module);
 
@@ -683,47 +700,96 @@ mod tests {
         assert!(ctx.allow_nesting);
         assert!(ctx.first_cycle);
     }
-}
 
-#[test]
-fn test_sink_to_tee() {
-    use crate::expression::{Expression, ExpressionKind};
-    use binaryen_core::Type;
-    use bumpalo::Bump;
+    #[test]
+    fn test_sink_to_tee() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new(&bump);
 
-    // Construct:
-    // (block
-    //   (local.set 0 (const 42))
-    //   (drop (local.get 0))
-    //   (drop (local.get 0))
-    // )
-    //
-    // Should optimize to:
-    // (block
-    //   (nop)
-    //   (drop (local.tee 0 (const 42)))
-    //   (drop (local.get 0))
-    // )
+        // (block
+        //   (local.set 0 (const 42))
+        //   (drop (local.get 0))
+        //   (drop (local.get 0))
+        // )
+        let mut list = BumpVec::new_in(&bump);
+        list.push(builder.local_set(0, builder.const_(Literal::I32(42))));
+        list.push(builder.drop(builder.local_get(0, Type::I32)));
+        list.push(builder.drop(builder.local_get(0, Type::I32)));
 
-    let bump = Bump::new();
-    // Since we don't have easy builder in this test context, we'll manually check logic
-    // But wait, the Pass runs on Module.
-    // We will trust the integration mostly, but let's check if we can simulate the "sinking" logic by inspection.
-    // Actually, better to test the run() if possible.
-    // But verifying the output structure is hard without an inspector/printer.
-    // We can just rely on the implementation logic for now, provided unit tests covered basic usage in previous steps.
-    // We will just create a "test_sink_tee_logic" placeholder if needed.
-    assert!(true);
-}
+        let block = builder.block(None, list, Type::NONE);
 
-#[test]
-fn test_structure_opt_mock() {
-    // Placeholder test for structure optimization.
-    // Verifies the code compiles and logic doesn't crash.
-    // Real structure test requires constructing Block/If which needs Bump.
-    use bumpalo::Bump;
-    let bump = Bump::new();
-    // Since we can't easily construct the graph, we rely on the logic correctness
-    // validated by compilation and prior Safe Refactoring.
-    assert!(true);
+        module.functions.push(crate::module::Function {
+            name: "test".to_string(),
+            type_idx: None,
+            params: Type::NONE,
+            results: Type::NONE,
+            vars: vec![Type::I32],
+            body: Some(block),
+        });
+
+        let mut pass = SimplifyLocals::new();
+        pass.run(&mut module);
+
+        let body = module.functions[0]
+            .body
+            .expect("Function should have a body");
+        if let ExpressionKind::Block { list, .. } = &body.kind {
+            assert_eq!(list.len(), 3);
+            // After all cycles:
+            // 1. (nop) - the original set was sunk
+            assert!(matches!(list[0].kind, ExpressionKind::Nop));
+            // 2. (nop) - the sunk set (from tee) was sunk again
+            assert!(matches!(list[1].kind, ExpressionKind::Nop));
+            // 3. (drop (const 42)) - final destination
+            if let ExpressionKind::Drop { value } = &list[2].kind {
+                assert!(matches!(
+                    value.kind,
+                    ExpressionKind::Const(Literal::I32(42))
+                ));
+            } else {
+                panic!("Expected Drop(Const), got {:?}", list[2].kind);
+            }
+        } else {
+            panic!("Expected Block, got {:?}", body.kind);
+        }
+    }
+
+    #[test]
+    fn test_structure_opt() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = Module::new(&bump);
+
+        // (if (local.get 1) (local.set 0 (const 1)) (local.set 0 (const 2)))
+        // -> (local.set 0 (if (local.get 1) (const 1) (const 2)))
+
+        let condition = builder.local_get(1, Type::I32);
+        let if_true = builder.local_set(0, builder.const_(Literal::I32(1)));
+        let if_false = Some(builder.local_set(0, builder.const_(Literal::I32(2))));
+
+        let if_expr = builder.if_(condition, if_true, if_false, Type::NONE);
+
+        module.functions.push(crate::module::Function {
+            name: "test".to_string(),
+            type_idx: None,
+            params: Type::NONE,
+            results: Type::NONE,
+            vars: vec![Type::I32, Type::I32],
+            body: Some(if_expr),
+        });
+
+        let mut pass = SimplifyLocals::new();
+        pass.run(&mut module);
+
+        let body = module.functions[0]
+            .body
+            .expect("Function should have a body");
+        if let ExpressionKind::LocalSet { index, value } = &body.kind {
+            assert_eq!(*index, 0);
+            assert!(matches!(value.kind, ExpressionKind::If { .. }));
+        } else {
+            panic!("Expected LocalSet, got {:?}", body.kind);
+        }
+    }
 }

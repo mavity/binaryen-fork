@@ -27,7 +27,7 @@ impl DominanceTree {
         // Here we use iterative algorithm
 
         // Initial state: dom(entry) = {entry}, others = all
-        let mut all_nodes: HashSet<BlockId> = blocks.iter().map(|b| b.id).collect();
+        let all_nodes: HashSet<BlockId> = blocks.iter().map(|b| b.id).collect();
         let mut dom_sets: HashMap<BlockId, HashSet<BlockId>> = HashMap::new();
 
         dom_sets.insert(cfg.entry, [cfg.entry].iter().cloned().collect());
@@ -85,8 +85,7 @@ impl DominanceTree {
                 continue;
             }
 
-            let mut candidates: Vec<BlockId> =
-                dominators.iter().cloned().filter(|&d| d != n).collect();
+            let candidates: Vec<BlockId> = dominators.iter().cloned().filter(|&d| d != n).collect();
             // Find the one that is dominated by all others (closest)
             // Actually, idom dominates n, and is dominated by all strict dominators of n.
             // So idom is the "largest" strict dominator.
@@ -143,7 +142,7 @@ impl DominanceTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;

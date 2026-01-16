@@ -146,7 +146,7 @@ impl<'a> Visitor<'a> for LocalAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+    use crate::expression::IrBuilder;
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;
@@ -161,7 +161,7 @@ mod tests {
         let set = builder.local_set(0, c42);
 
         // Function has local 0 as I32
-        let mut func = Function::new(
+        let func = Function::new(
             "test".to_string(),
             Type::NONE,
             Type::NONE,

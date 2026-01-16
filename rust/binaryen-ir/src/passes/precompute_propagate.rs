@@ -3,7 +3,7 @@ use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
-use binaryen_core::{Literal, Type};
+use binaryen_core::Literal;
 use std::collections::HashMap;
 
 /// PrecomputePropagate pass: Evaluates expressions and propagates constants through locals
@@ -123,7 +123,7 @@ impl<'a, 'b> Visitor<'a> for PrecomputePropagateVisitor<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind};
+    use crate::expression::ExpressionKind;
     use crate::module::Function;
     use crate::ops::BinaryOp;
     use binaryen_core::{Literal, Type};

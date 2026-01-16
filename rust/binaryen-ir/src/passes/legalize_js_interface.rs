@@ -92,7 +92,7 @@ impl Pass for LegalizeJSInterface {
         // Current function count + i
         let start_func_index = module.functions.len() as u32;
 
-        for (i, task) in tasks.iter().enumerate() {
+        for (_i, task) in tasks.iter().enumerate() {
             let original_func = &module.functions[task.func_index as usize];
             let wrapper_name = format!("legalized_{}", original_func.name);
 
@@ -257,9 +257,9 @@ impl Pass for LegalizeJSInterface {
 mod tests {
     use super::*;
     use crate::expression::{ExprRef, Expression, ExpressionKind};
-    use crate::module::{ExportKind, Function};
+    use crate::module::Function;
     use binaryen_core::{Literal, Type};
-    use bumpalo::collections::Vec as BumpVec;
+
     use bumpalo::Bump;
 
     #[test]

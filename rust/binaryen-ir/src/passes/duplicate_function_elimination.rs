@@ -54,9 +54,6 @@ impl Pass for DuplicateFunctionElimination {
             }
         }
 
-        use crate::expression::IrBuilder;
-        use bumpalo::Bump;
-
         // ...
 
         if replacements.is_empty() {
@@ -104,7 +101,7 @@ impl<'a, 'b> Visitor<'a> for CallRedirector<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind, IrBuilder};
+    use crate::expression::{ExpressionKind, IrBuilder};
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;

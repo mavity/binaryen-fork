@@ -727,7 +727,7 @@ mod tests {
             kind: ExpressionKind::Block { name: None, list },
             type_: Type::NONE,
         }));
-        let mut func = Function::new(
+        let func = Function::new(
             "test".to_string(),
             Type::NONE,
             Type::NONE,

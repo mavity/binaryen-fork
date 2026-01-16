@@ -4,7 +4,6 @@ use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::Module;
 use crate::pass::Pass;
 use bumpalo::Bump;
-use std::collections::HashMap;
 
 pub struct SimplifyGlobals;
 
@@ -87,7 +86,7 @@ impl<'a, 'b> GlobalOptimizer<'a, 'b> {
                 for op in operands.iter() {
                     new_ops.push(self.transform(*op));
                 }
-                builder.call(target.clone(), new_ops, expr.type_, *is_return)
+                builder.call(target, new_ops, expr.type_, *is_return)
             }
             ExpressionKind::Return { value } => {
                 let new_val = value.map(|v| self.transform(v));

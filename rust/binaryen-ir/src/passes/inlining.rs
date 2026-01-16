@@ -68,7 +68,8 @@ impl<'a, 'b> Visitor<'a> for Inliner<'a, 'b> {
             target, operands, ..
         } = &expr.kind
         {
-            if let Some((callee_body, callee_params, callee_vars)) = self.function_info.get(*target)
+            if let Some((callee_body, _callee_params, callee_vars)) =
+                self.function_info.get(*target)
             {
                 // Perform inlining
 
@@ -154,7 +155,7 @@ impl<'a> Visitor<'a> for LocalRemapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{Expression, ExpressionKind};
+    use crate::expression::ExpressionKind;
     use crate::module::Function;
     use binaryen_core::{Literal, Type};
     use bumpalo::Bump;

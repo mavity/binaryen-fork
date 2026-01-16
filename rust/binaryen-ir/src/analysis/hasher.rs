@@ -24,16 +24,13 @@ impl<'a, H: Hasher> ReadOnlyVisitor<'a> for DeepHasher<'a, H> {
         expr.type_.hash(self.hasher);
 
         match &expr.kind {
-            ExpressionKind::Const(lit) => {
-                match lit {
-                    Literal::I32(v) => v.hash(self.hasher),
-                    Literal::I64(v) => v.hash(self.hasher),
-                    Literal::F32(v) => v.to_bits().hash(self.hasher),
-                    Literal::F64(v) => v.to_bits().hash(self.hasher),
-                    Literal::V128(v) => v.hash(self.hasher),
-                    _ => {} // Ignore others
-                }
-            }
+            ExpressionKind::Const(lit) => match lit {
+                Literal::I32(v) => v.hash(self.hasher),
+                Literal::I64(v) => v.hash(self.hasher),
+                Literal::F32(v) => v.to_bits().hash(self.hasher),
+                Literal::F64(v) => v.to_bits().hash(self.hasher),
+                Literal::V128(v) => v.hash(self.hasher),
+            },
             ExpressionKind::LocalGet { index }
             | ExpressionKind::LocalSet { index, .. }
             | ExpressionKind::LocalTee { index, .. }

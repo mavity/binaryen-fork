@@ -23,6 +23,7 @@ impl Pass for RemoveUnusedBrs {
     }
 }
 
+#[allow(dead_code)]
 struct BrOptimizer<'a> {
     bump: &'a Bump,
 }
@@ -247,7 +248,7 @@ impl<'a> BrOptimizer<'a> {
 
                 flow
             }
-            ExpressionKind::Break { condition, .. } => {
+            ExpressionKind::Break { condition: _, .. } => {
                 // If unconditional, we break.
                 // If conditional, we break AND fall through.
 

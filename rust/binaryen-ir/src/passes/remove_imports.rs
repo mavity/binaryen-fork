@@ -120,7 +120,7 @@ impl<'a, 'b> Visitor<'a> for CallReplacer<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
+    use crate::expression::{ExpressionKind, IrBuilder};
     use crate::module::{ElementSegment, Function, Import, ImportKind, Module};
     use binaryen_core::{Literal, Type};
     use bumpalo::collections::Vec as BumpVec;

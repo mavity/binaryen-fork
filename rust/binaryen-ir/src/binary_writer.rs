@@ -1210,8 +1210,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip() {
-        let bump = Bump::new();
-
         // Original module
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -1269,8 +1267,6 @@ mod tests {
 
     #[test]
     fn test_write_multi_param_function() {
-        let bump = Bump::new();
-
         // Create a module with a function that has a single parameter
         // (our IR currently stores params as single Type, not Vec<Type>)
         let bump = bumpalo::Bump::new();
@@ -1305,8 +1301,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_with_locals() {
-        let bump = Bump::new();
-
         // Module with function that has locals
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -2193,7 +2187,6 @@ mod tests {
 
     #[test]
     fn test_globals_roundtrip() {
-        let bump = Bump::new();
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
 
