@@ -107,3 +107,48 @@ Since your port is in Rust, you can easily use crates like `petgraph` to perform
 ### Why this works
 
 By treating decompilation as a **Pass-based transformation**, you stay "Binaryen-idiomatic." You are just adding a few more passes at the end of the pipeline that target human-readability instead of machine-efficiency. This allows you to leverage all 48+ passes you are currently porting while adding your own "secret sauce" for the decompiler.
+
+
+## III. Advanced Semantic Enrichment: The "Human-Fluency" Layer
+
+Based on our intent to elevate the decompiler from a structural "printer" to a semantically "fluent" tool, this section focuses on leveraging the **Binaryen Pass Runner** for pattern-matching and heuristic enrichment.
+
+While the foundation ensures the decompiled code is **structurally correct**, this layer ensures it is **human-readable**. By implementing decompiler-specific passes, we can transform low-level Wasm idioms into high-level language constructs (like `for` loops or `struct` access) that are lost during compilation.
+
+### 1. Benefits of Enrichment Passes
+
+* **Noise Reduction**: Standard Wasm often includes compiler-generated "stack noise" (e.g., unnecessary local sets/gets). Using enrichment passes like `SimplifyLocals` and `Vacuum` as pre-processors strips this away before the user ever sees it.
+* **Contextual Recovery**: Unlike a general-purpose disassembler, a pass-based decompiler can use heuristics to "guess" intent. For example, an `i32` that is only ever compared to `0` or `1` can be "lifted" into a `bool` type in the final output.
+* **Infrastructure Synergy**: Since this port uses the same **Pass Runner** as the optimizer, these decompiler passes are "first-class citizens." They can be scheduled, validated, and tested using the same infrastructure you are building for `binaryen-ir`.
+
+### 2. Implementation Plan: The Enrichment Pipeline
+
+To implement these passes, follow this three-stage "Decompile-specific" pipeline:
+
+#### Stage A: Normalization (Standard Passes)
+
+Before applying heuristics, run the core Binaryen passes you have already ported:
+
+* **`SimplifyLocals`**: Collapses temporary stack variables.
+* **`CoalesceLocals`**: Merges different locals that have non-overlapping lifetimes into a single high-level variable.
+* **`Vacuum`**: Removes instructions with no side effects.
+
+#### Stage B: Pattern Recognition (Semantic Passes)
+
+Implement a **Pattern Matching Engine** (potentially using a Rust DSL or macros) to identify specific code "shapes":
+
+* **`IdentifyIdiomaticLoops`**: Look for `loop` nodes with a counter increment at the end and a conditional break at the top. Tag these as `ForLoop` metadata for the printer.
+* **`StructRecovery`**: Identify base pointers with fixed offsets (e.g., `base + 4`, `base + 8`) and lift them into a logical `struct` access rather than raw memory loads.
+
+#### Stage C: Fluency Injection (Heuristic Passes)
+
+Apply high-level heuristics to "humanize" the code:
+
+* **`VariableNamingHeuristics`**: Rename variables based on usage (e.g., rename `local_1` to `i` if it's used as a loop index, or `ptr` if used in a load).
+* **`OriginTracking`**: Use advanced data-flow analysis (via crates like `petgraph`) to track if a value originated from a specific system call (e.g., naming a return value `bytes_read` if it comes from `fd_read`).
+
+### 3. Strategy for Adding Passes
+
+1. **Tagging, Not Re-writing**: Instead of changing the IR structure, use the **Metadata Tagging** strategy. A pass should find a `Loop` node and simply attach a `metadata: LoopType::For` tag to it.
+2. **Visitor Integration**: Update the `DecompileWriter` (the visitor) to check for these tags. If a `ForLoop` tag exists, print `for (i=0; i < n; i++)`; otherwise, fall back to the standard `loop { ... }`.
+3. **Cross-Compiler Fingerprinting**: Create specific passes that recognize "code shapes" unique to `rustc` vs. `emscripten` to allow the decompiler to switch "dialects" within the same merged Wasm module.
