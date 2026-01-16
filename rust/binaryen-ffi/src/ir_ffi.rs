@@ -288,6 +288,69 @@ pub unsafe extern "C" fn BinaryenRustMemoryInit(
 
 // Binary I/O functions
 
+/// Reads a module from WebAssembly Text (WAT) format.
+///
+/// # Safety
+/// `wat` must be a null-terminated UTF-8 string. Returns null on failure.
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleReadWat(wat: *const c_char) -> BinaryenRustModuleRef {
+    let c_str = CStr::from_ptr(wat);
+    let wat_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+
+    let bump = Box::new(Bump::new());
+    let bump_ref: &'static Bump = std::mem::transmute(bump.as_ref());
+
+    match Module::read_wat(bump_ref, wat_str) {
+        Ok(module) => {
+            let module: Module<'static> = std::mem::transmute(module);
+            let wrapper = Box::new(WrappedModule { bump, module });
+            Box::into_raw(wrapper)
+        }
+        Err(e) => {
+            eprintln!("Error reading WAT: {}", e);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Converts a module to WebAssembly Text (WAT) format.
+///
+/// # Safety
+/// `module` must be a valid pointer. Returns a pointer to a null-terminated C string
+/// that must be freed with `BinaryenRustModuleFreeWatString`.
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleToWat(module: BinaryenRustModuleRef) -> *mut c_char {
+    if module.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let module_ref = &(*module).module;
+    match module_ref.to_wat() {
+        Ok(wat) => {
+            let s = std::ffi::CString::new(wat).unwrap();
+            s.into_raw()
+        }
+        Err(e) => {
+            eprintln!("Error converting to WAT: {}", e);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Frees a WAT string returned by `BinaryenRustModuleToWat`.
+///
+/// # Safety
+/// `wat` must be a valid pointer returned by `BinaryenRustModuleToWat`.
+#[no_mangle]
+pub unsafe extern "C" fn BinaryenRustModuleFreeWatString(wat: *mut c_char) {
+    if !wat.is_null() {
+        let _ = std::ffi::CString::from_raw(wat);
+    }
+}
+
 /// Parses a WebAssembly binary and creates a module.
 ///
 /// # Safety

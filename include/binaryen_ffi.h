@@ -79,10 +79,6 @@ uintptr_t BinaryenFastHashMapLen(struct BinaryenFastHashMap *p);
 // Type system helpers (added by Rust port)
 typedef uint64_t BinaryenType;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 BinaryenType BinaryenTypeCreateSignature(BinaryenType params, BinaryenType results);
 BinaryenType BinaryenTypeGetParams(BinaryenType ty);
 BinaryenType BinaryenTypeGetResults(BinaryenType ty);
@@ -101,6 +97,16 @@ typedef struct BinaryenRustExpression *BinaryenRustExpressionRef;
 BinaryenRustModuleRef BinaryenRustModuleCreate(void);
 void BinaryenRustModuleDispose(BinaryenRustModuleRef module);
 
+BinaryenRustModuleRef BinaryenRustModuleReadBinary(const uint8_t *bytes, uintptr_t len);
+int32_t BinaryenRustModuleWriteBinary(BinaryenRustModuleRef module, uint8_t **out_ptr, uintptr_t *out_len);
+void BinaryenRustModuleFreeBinary(uint8_t *ptr, uintptr_t len);
+
+BinaryenRustModuleRef BinaryenRustModuleReadWat(const char *wat);
+char *BinaryenRustModuleToWat(BinaryenRustModuleRef module);
+void BinaryenRustModuleFreeWatString(char *wat);
+
+int32_t BinaryenRustModuleRunPasses(BinaryenRustModuleRef module, const char **pass_names, uintptr_t num_passes);
+
 BinaryenRustExpressionRef BinaryenRustConst(BinaryenRustModuleRef module, int32_t value);
 BinaryenRustExpressionRef BinaryenRustBlock(BinaryenRustModuleRef module, const char *name, BinaryenRustExpressionRef *children, uintptr_t num_children, BinaryenType type);
 BinaryenRustExpressionRef BinaryenRustUnary(BinaryenRustModuleRef module, uint32_t op, BinaryenRustExpressionRef value, BinaryenType type);
@@ -109,10 +115,6 @@ BinaryenRustExpressionRef BinaryenRustLocalGet(BinaryenRustModuleRef module, uin
 BinaryenRustExpressionRef BinaryenRustLocalSet(BinaryenRustModuleRef module, uint32_t index, BinaryenRustExpressionRef value);
 
 void BinaryenRustAddFunction(BinaryenRustModuleRef module, const char *name, BinaryenType params, BinaryenType results, BinaryenRustExpressionRef body);
-
-#ifdef __cplusplus
-}
-#endif
 
 #ifdef __cplusplus
 }
