@@ -711,6 +711,284 @@ impl<'a> IrBuilder<'a> {
             Type::V128,
         )
     }
+
+    /// Deep clone an expression tree
+    pub fn deep_clone(&self, expr: ExprRef<'a>) -> ExprRef<'a> {
+        let kind = match &expr.kind {
+            ExpressionKind::Block { name, list } => {
+                let mut new_list = BumpVec::with_capacity_in(list.len(), self.bump);
+                for child in list.iter() {
+                    new_list.push(self.deep_clone(*child));
+                }
+                ExpressionKind::Block {
+                    name: *name,
+                    list: new_list,
+                }
+            }
+            ExpressionKind::Const(lit) => ExpressionKind::Const(lit.clone()),
+            ExpressionKind::Unary { op, value } => ExpressionKind::Unary {
+                op: *op,
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::Binary { op, left, right } => ExpressionKind::Binary {
+                op: *op,
+                left: self.deep_clone(*left),
+                right: self.deep_clone(*right),
+            },
+            ExpressionKind::Call {
+                target,
+                operands,
+                is_return,
+            } => {
+                let mut new_operands = BumpVec::with_capacity_in(operands.len(), self.bump);
+                for op in operands.iter() {
+                    new_operands.push(self.deep_clone(*op));
+                }
+                ExpressionKind::Call {
+                    target: *target,
+                    operands: new_operands,
+                    is_return: *is_return,
+                }
+            }
+            ExpressionKind::LocalGet { index } => ExpressionKind::LocalGet { index: *index },
+            ExpressionKind::LocalSet { index, value } => ExpressionKind::LocalSet {
+                index: *index,
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::LocalTee { index, value } => ExpressionKind::LocalTee {
+                index: *index,
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::GlobalGet { index } => ExpressionKind::GlobalGet { index: *index },
+            ExpressionKind::GlobalSet { index, value } => ExpressionKind::GlobalSet {
+                index: *index,
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::If {
+                condition,
+                if_true,
+                if_false,
+            } => ExpressionKind::If {
+                condition: self.deep_clone(*condition),
+                if_true: self.deep_clone(*if_true),
+                if_false: if_false.map(|e| self.deep_clone(e)),
+            },
+            ExpressionKind::Loop { name, body } => ExpressionKind::Loop {
+                name: *name,
+                body: self.deep_clone(*body),
+            },
+            ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            } => ExpressionKind::Break {
+                name: *name,
+                condition: condition.map(|e| self.deep_clone(e)),
+                value: value.map(|e| self.deep_clone(e)),
+            },
+            ExpressionKind::Return { value } => ExpressionKind::Return {
+                value: value.map(|e| self.deep_clone(e)),
+            },
+            ExpressionKind::Unreachable => ExpressionKind::Unreachable,
+            ExpressionKind::Drop { value } => ExpressionKind::Drop {
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => ExpressionKind::Select {
+                condition: self.deep_clone(*condition),
+                if_true: self.deep_clone(*if_true),
+                if_false: self.deep_clone(*if_false),
+            },
+            ExpressionKind::Load {
+                bytes,
+                signed,
+                offset,
+                align,
+                ptr,
+            } => ExpressionKind::Load {
+                bytes: *bytes,
+                signed: *signed,
+                offset: *offset,
+                align: *align,
+                ptr: self.deep_clone(*ptr),
+            },
+            ExpressionKind::Store {
+                bytes,
+                offset,
+                align,
+                ptr,
+                value,
+            } => ExpressionKind::Store {
+                bytes: *bytes,
+                offset: *offset,
+                align: *align,
+                ptr: self.deep_clone(*ptr),
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::Nop => ExpressionKind::Nop,
+            ExpressionKind::Switch {
+                names,
+                default,
+                condition,
+                value,
+            } => ExpressionKind::Switch {
+                names: names.clone(),
+                default: *default,
+                condition: self.deep_clone(*condition),
+                value: value.map(|e| self.deep_clone(e)),
+            },
+            ExpressionKind::CallIndirect {
+                table,
+                target,
+                operands,
+                type_,
+            } => {
+                let mut new_operands = BumpVec::with_capacity_in(operands.len(), self.bump);
+                for op in operands.iter() {
+                    new_operands.push(self.deep_clone(*op));
+                }
+                ExpressionKind::CallIndirect {
+                    table: *table,
+                    target: self.deep_clone(*target),
+                    operands: new_operands,
+                    type_: *type_,
+                }
+            }
+            ExpressionKind::MemoryGrow { delta } => ExpressionKind::MemoryGrow {
+                delta: self.deep_clone(*delta),
+            },
+            ExpressionKind::MemorySize => ExpressionKind::MemorySize,
+            ExpressionKind::AtomicRMW {
+                op,
+                bytes,
+                offset,
+                ptr,
+                value,
+            } => ExpressionKind::AtomicRMW {
+                op: *op,
+                bytes: *bytes,
+                offset: *offset,
+                ptr: self.deep_clone(*ptr),
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::AtomicCmpxchg {
+                bytes,
+                offset,
+                ptr,
+                expected,
+                replacement,
+            } => ExpressionKind::AtomicCmpxchg {
+                bytes: *bytes,
+                offset: *offset,
+                ptr: self.deep_clone(*ptr),
+                expected: self.deep_clone(*expected),
+                replacement: self.deep_clone(*replacement),
+            },
+            ExpressionKind::AtomicWait {
+                ptr,
+                expected,
+                timeout,
+                expected_type,
+            } => ExpressionKind::AtomicWait {
+                ptr: self.deep_clone(*ptr),
+                expected: self.deep_clone(*expected),
+                timeout: self.deep_clone(*timeout),
+                expected_type: *expected_type,
+            },
+            ExpressionKind::AtomicNotify { ptr, count } => ExpressionKind::AtomicNotify {
+                ptr: self.deep_clone(*ptr),
+                count: self.deep_clone(*count),
+            },
+            ExpressionKind::AtomicFence => ExpressionKind::AtomicFence,
+            ExpressionKind::SIMDExtract { op, vec, index } => ExpressionKind::SIMDExtract {
+                op: *op,
+                vec: self.deep_clone(*vec),
+                index: *index,
+            },
+            ExpressionKind::SIMDReplace {
+                op,
+                vec,
+                index,
+                value,
+            } => ExpressionKind::SIMDReplace {
+                op: *op,
+                vec: self.deep_clone(*vec),
+                index: *index,
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::SIMDShuffle { left, right, mask } => ExpressionKind::SIMDShuffle {
+                left: self.deep_clone(*left),
+                right: self.deep_clone(*right),
+                mask: *mask,
+            },
+            ExpressionKind::SIMDTernary { op, a, b, c } => ExpressionKind::SIMDTernary {
+                op: *op,
+                a: self.deep_clone(*a),
+                b: self.deep_clone(*b),
+                c: self.deep_clone(*c),
+            },
+            ExpressionKind::SIMDShift { op, vec, shift } => ExpressionKind::SIMDShift {
+                op: *op,
+                vec: self.deep_clone(*vec),
+                shift: self.deep_clone(*shift),
+            },
+            ExpressionKind::SIMDLoad {
+                op,
+                offset,
+                align,
+                ptr,
+            } => ExpressionKind::SIMDLoad {
+                op: *op,
+                offset: *offset,
+                align: *align,
+                ptr: self.deep_clone(*ptr),
+            },
+            ExpressionKind::SIMDLoadStoreLane {
+                is_store,
+                op,
+                offset,
+                align,
+                index,
+                ptr,
+                vec,
+            } => ExpressionKind::SIMDLoadStoreLane {
+                is_store: *is_store,
+                op: *op,
+                offset: *offset,
+                align: *align,
+                index: *index,
+                ptr: self.deep_clone(*ptr),
+                vec: self.deep_clone(*vec),
+            },
+            ExpressionKind::MemoryInit {
+                segment,
+                dest,
+                offset,
+                size,
+            } => ExpressionKind::MemoryInit {
+                segment: *segment,
+                dest: self.deep_clone(*dest),
+                offset: self.deep_clone(*offset),
+                size: self.deep_clone(*size),
+            },
+            ExpressionKind::DataDrop { segment } => ExpressionKind::DataDrop { segment: *segment },
+            ExpressionKind::MemoryCopy { dest, src, size } => ExpressionKind::MemoryCopy {
+                dest: self.deep_clone(*dest),
+                src: self.deep_clone(*src),
+                size: self.deep_clone(*size),
+            },
+            ExpressionKind::MemoryFill { dest, value, size } => ExpressionKind::MemoryFill {
+                dest: self.deep_clone(*dest),
+                value: self.deep_clone(*value),
+                size: self.deep_clone(*size),
+            },
+        };
+
+        Expression::new(self.bump, kind, expr.type_)
+    }
 }
 
 #[cfg(test)]
