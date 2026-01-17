@@ -58,6 +58,30 @@ impl CallGraph {
     pub fn get_callers(&self, func: &str) -> Option<&HashSet<String>> {
         self.callers.get(func)
     }
+
+    /// Propagate a property backwards from callees to callers.
+    /// `initial` is the set of functions that initially have the property.
+    /// `can_have` is a filter function to check if a function can ever have the property.
+    pub fn propagate_back<F>(&self, initial: HashSet<String>, mut can_have: F) -> HashSet<String>
+    where
+        F: FnMut(&str) -> bool,
+    {
+        let mut result = initial;
+        let mut worklist: Vec<String> = result.iter().cloned().collect();
+
+        while let Some(curr) = worklist.pop() {
+            if let Some(callers) = self.get_callers(&curr) {
+                for caller in callers {
+                    if !result.contains(caller) && can_have(caller) {
+                        result.insert(caller.clone());
+                        worklist.push(caller.clone());
+                    }
+                }
+            }
+        }
+
+        result
+    }
 }
 
 struct CallGraphBuilder<'a> {
