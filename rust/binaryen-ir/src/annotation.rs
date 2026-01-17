@@ -6,6 +6,10 @@ pub enum Annotation<'a> {
     Loop(LoopType),
     Type(HighLevelType),
     Variable(VariableRole),
+    If {
+        condition: ExprRef<'a>,
+        inverted: bool,
+    },
     Inlined,                   // Tag for local.set that should be omitted
     InlinedValue(ExprRef<'a>), // Tag for local.get that should be replaced by this expression
 }

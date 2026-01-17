@@ -70,18 +70,35 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
 
         match &expr.kind {
             binaryen_ir::ExpressionKind::Block { name, list, .. } => {
-                if let Some(n) = name {
+                let mut is_if = false;
+                if let Some(Annotation::If {
+                    condition,
+                    inverted,
+                }) = self.module.get_annotation(expr)
+                {
+                    is_if = true;
+                    self.output.push_str("if (");
+                    if *inverted {
+                        self.output.push_str("!");
+                    }
+                    self.walk_inline_expression(*condition);
+                    self.output.push_str(") ");
+                } else if let Some(n) = name {
                     self.output.push_str(&format!("{}: ", n));
                 }
+
                 self.output.push_str("{\n");
                 self.indent += 1;
-                for &child in list {
+
+                let start_idx = if is_if { 1 } else { 0 };
+                for &child in &list[start_idx..] {
                     self.walk_expression(child);
                 }
+
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");
-                return; // Blocks don't need a semicolon here usually
+                return;
             }
             binaryen_ir::ExpressionKind::LocalSet { index, value } => {
                 self.output.push_str(&format!("p{} = ", index));
@@ -133,6 +150,7 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
 
     fn walk_inline_expression(&mut self, expr: binaryen_ir::ExprRef<'a>) {
         use binaryen_ir::annotation::Annotation;
+        use binaryen_ir::ExpressionKind;
 
         // Check for inlined value
         if let Some(Annotation::InlinedValue(val)) = self.module.get_annotation(expr) {
@@ -141,20 +159,63 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
         }
 
         match &expr.kind {
-            binaryen_ir::ExpressionKind::Binary { op, left, right } => {
+            ExpressionKind::Binary { op, left, right } => {
                 self.output.push_str("(");
                 self.walk_inline_expression(*left);
-                self.output.push_str(&format!(" {:?} ", op));
+                let op_str = match op {
+                    binaryen_ir::BinaryOp::AddInt32 | binaryen_ir::BinaryOp::AddInt64 => " + ",
+                    binaryen_ir::BinaryOp::SubInt32 | binaryen_ir::BinaryOp::SubInt64 => " - ",
+                    binaryen_ir::BinaryOp::MulInt32 | binaryen_ir::BinaryOp::MulInt64 => " * ",
+                    binaryen_ir::BinaryOp::DivSInt32 | binaryen_ir::BinaryOp::DivSInt64 => " / ",
+                    binaryen_ir::BinaryOp::EqInt32 | binaryen_ir::BinaryOp::EqInt64 => " == ",
+                    binaryen_ir::BinaryOp::NeInt32 | binaryen_ir::BinaryOp::NeInt64 => " != ",
+                    binaryen_ir::BinaryOp::LtSInt32 | binaryen_ir::BinaryOp::LtSInt64 => " < ",
+                    binaryen_ir::BinaryOp::LeSInt32 | binaryen_ir::BinaryOp::LeSInt64 => " <= ",
+                    binaryen_ir::BinaryOp::GtSInt32 | binaryen_ir::BinaryOp::GtSInt64 => " > ",
+                    binaryen_ir::BinaryOp::GeSInt32 | binaryen_ir::BinaryOp::GeSInt64 => " >= ",
+                    _ => " <OP> ",
+                };
+                self.output.push_str(op_str);
                 self.walk_inline_expression(*right);
                 self.output.push_str(")");
             }
-            binaryen_ir::ExpressionKind::LocalGet { index } => {
+            ExpressionKind::Unary { op, value } => {
+                self.output.push_str(&format!("{:?}(", op));
+                self.walk_inline_expression(*value);
+                self.output.push_str(")");
+            }
+            ExpressionKind::LocalGet { index } => {
                 self.output.push_str(&format!("p{}", index));
             }
-            binaryen_ir::ExpressionKind::Const(lit) => {
-                self.output.push_str(&format!("{:?}", lit));
+            ExpressionKind::LocalSet { index, value } => {
+                self.output.push_str(&format!("(p{} = ", index));
+                self.walk_inline_expression(*value);
+                self.output.push_str(")");
             }
-            binaryen_ir::ExpressionKind::Load { ptr, .. } => {
+            ExpressionKind::LocalTee { index, value } => {
+                self.output.push_str(&format!("(p{} = ", index));
+                self.walk_inline_expression(*value);
+                self.output.push_str(")");
+            }
+            ExpressionKind::GlobalGet { index } => {
+                self.output.push_str(&format!("g{}", index));
+            }
+            ExpressionKind::GlobalSet { index, value } => {
+                self.output.push_str(&format!("(g{} = ", index));
+                self.walk_inline_expression(*value);
+                self.output.push_str(")");
+            }
+            ExpressionKind::Const(lit) => {
+                let s = match lit {
+                    binaryen_core::Literal::I32(v) => v.to_string(),
+                    binaryen_core::Literal::I64(v) => v.to_string(),
+                    binaryen_core::Literal::F32(v) => v.to_string(),
+                    binaryen_core::Literal::F64(v) => v.to_string(),
+                    _ => format!("{:?}", lit),
+                };
+                self.output.push_str(&s);
+            }
+            ExpressionKind::Load { ptr, .. } => {
                 if let Some(Annotation::Type(binaryen_ir::annotation::HighLevelType::Pointer)) =
                     self.module.get_annotation(*ptr)
                 {
@@ -164,6 +225,49 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
                 }
                 self.walk_inline_expression(*ptr);
                 self.output.push_str(")");
+            }
+            ExpressionKind::Store { ptr, value, .. } => {
+                self.output.push_str("Store(");
+                self.walk_inline_expression(*ptr);
+                self.output.push_str(", ");
+                self.walk_inline_expression(*value);
+                self.output.push_str(")");
+            }
+            ExpressionKind::Call {
+                target, operands, ..
+            } => {
+                self.output.push_str(&format!("{}(", target));
+                for (i, op) in operands.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.walk_inline_expression(*op);
+                }
+                self.output.push_str(")");
+            }
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.output.push_str("(");
+                self.walk_inline_expression(*condition);
+                self.output.push_str(" ? ");
+                self.walk_inline_expression(*if_true);
+                self.output.push_str(" : ");
+                self.walk_inline_expression(*if_false);
+                self.output.push_str(")");
+            }
+            ExpressionKind::Drop { value } => {
+                self.output.push_str("Drop(");
+                self.walk_inline_expression(*value);
+                self.output.push_str(")");
+            }
+            ExpressionKind::Nop => {
+                self.output.push_str("nop");
+            }
+            ExpressionKind::Unreachable => {
+                self.output.push_str("unreachable");
             }
             _ => {
                 self.output.push_str(&format!("{:?}", expr.kind));

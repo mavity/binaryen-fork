@@ -37,9 +37,8 @@ fn test_boolean_lifting() {
         let output = decompiler.decompile();
         println!("Output:\n{}", output);
 
-        // Should contain the relational op in a high-level way (if we had boolean printing)
-        // For now, our printer just prints EqInt32, but we can check the lifter's work.
-        assert!(output.contains("EqInt32"));
+        // Should contain the relational op in a high-level way
+        assert!(output.contains(" == "));
     }
 }
 
@@ -158,6 +157,6 @@ fn test_expression_recombination() {
         assert!(!output.contains("p1 = "));
 
         // Should contain Load with inlined addition
-        assert!(output.contains("Load((p0 AddInt32 i32.const 10))"));
+        assert!(output.contains("Load((p0 + 10))"));
     }
 }

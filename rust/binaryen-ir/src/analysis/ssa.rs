@@ -268,12 +268,12 @@ mod tests {
         // 2: Else (set 0) -> 3
         // 3: Join (get 0) -> Exit
 
-        // Local 0 defined in 1 and 2.
-        // DF(1) = {3}
-        // DF(2) = {3}
-        // So Phi should be in 3.
+        // Local 0 defined in 3 and 4.
+        // DF(3) = {5}
+        // DF(4) = {5}
+        // So Phi should be in 5.
 
-        let phis = ssa.phi_nodes.get(&3);
+        let phis = ssa.phi_nodes.get(&5);
         assert!(phis.is_some());
         assert_eq!(phis.unwrap().len(), 1);
         assert_eq!(phis.unwrap()[0].result_local, 0);

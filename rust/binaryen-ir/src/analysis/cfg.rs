@@ -21,24 +21,40 @@ pub struct BasicBlockA<'a> {
     pub preds: Vec<BlockId>,
     pub succs: Vec<BlockId>,
     pub contents: Vec<ExprRef<'a>>,
+    pub is_virtual: bool,
 }
 
 pub struct ControlFlowGraph<'a> {
     pub blocks: Vec<BasicBlockA<'a>>,
     pub entry: BlockId,
+    pub exit: BlockId,
+    pub expr_to_block: HashMap<ExprRef<'a>, BlockId>,
 }
 
 impl<'a> ControlFlowGraph<'a> {
     pub fn build(_func: &Function, entry_expr: ExprRef<'a>) -> Self {
         let mut builder = CFGBuilder::new();
         builder.build(entry_expr);
+
+        // Finalize: link any block with no succs to the virtual exit (unless it's the exit itself)
+        let exit_id = builder.cfg.exit;
+        for i in 0..builder.cfg.blocks.len() {
+            if i as u32 != exit_id && builder.cfg.blocks[i].succs.is_empty() {
+                let from = i as u32;
+                builder.add_edge(from, exit_id);
+            }
+        }
+
         builder.cfg
     }
 }
 
+use std::collections::HashMap;
+
 struct CFGBuilder<'a> {
     cfg: ControlFlowGraph<'a>,
     current_block: BlockId,
+    labels: HashMap<&'a str, BlockId>,
 }
 
 impl<'a> CFGBuilder<'a> {
@@ -48,14 +64,27 @@ impl<'a> CFGBuilder<'a> {
             preds: vec![],
             succs: vec![],
             contents: vec![],
+            is_virtual: false,
+        };
+
+        // Create a virtual exit block as well
+        let exit_block = BasicBlockA {
+            id: 1,
+            preds: vec![],
+            succs: vec![],
+            contents: vec![],
+            is_virtual: true,
         };
 
         Self {
             cfg: ControlFlowGraph {
-                blocks: vec![entry_block],
+                blocks: vec![entry_block, exit_block],
                 entry: 0,
+                exit: 1,
+                expr_to_block: HashMap::new(),
             },
             current_block: 0,
+            labels: HashMap::new(),
         }
     }
 
@@ -66,6 +95,7 @@ impl<'a> CFGBuilder<'a> {
             preds: vec![],
             succs: vec![],
             contents: vec![],
+            is_virtual: false,
         });
         id
     }
@@ -83,23 +113,44 @@ impl<'a> CFGBuilder<'a> {
     }
 
     fn visit(&mut self, expr: ExprRef<'a>) {
+        // Map expression to current block
+        self.cfg.expr_to_block.insert(expr, self.current_block);
+
         // Add to current block
         self.cfg.blocks[self.current_block as usize]
             .contents
             .push(expr);
 
         match &expr.kind {
-            ExpressionKind::Block { list, .. } => {
+            ExpressionKind::Block { name, list } => {
+                let join_block = self.create_block();
+
+                // Save old label if shadowed
+                let old_label = name.and_then(|n| self.labels.insert(n, join_block));
+
                 for child in list.iter() {
                     self.visit(*child);
                 }
+
+                // End of block falls through to join
+                self.add_edge(self.current_block, join_block);
+
+                // Restore label
+                if let Some(n) = name {
+                    if let Some(old) = old_label {
+                        self.labels.insert(n, old);
+                    } else {
+                        self.labels.remove(n);
+                    }
+                }
+
+                self.current_block = join_block;
             }
             ExpressionKind::If {
                 condition,
                 if_true,
                 if_false,
             } => {
-                // Condition is in current block
                 self.visit(*condition);
 
                 let entry_block = self.current_block;
@@ -111,15 +162,12 @@ impl<'a> CFGBuilder<'a> {
                 };
                 let join_block = self.create_block();
 
-                // Edge to then
                 self.add_edge(entry_block, then_block);
 
-                // Process Then
                 self.current_block = then_block;
                 self.visit(*if_true);
                 self.add_edge(self.current_block, join_block);
 
-                // Process Else
                 if let Some(else_b) = else_block {
                     self.add_edge(entry_block, else_b);
                     self.current_block = else_b;
@@ -128,77 +176,170 @@ impl<'a> CFGBuilder<'a> {
                     }
                     self.add_edge(self.current_block, join_block);
                 } else {
-                    // If no else, edge from entry to join
                     self.add_edge(entry_block, join_block);
                 }
 
                 self.current_block = join_block;
             }
-            ExpressionKind::Loop { body, .. } => {
+            ExpressionKind::Loop { name, body } => {
                 let entry_block = self.current_block;
                 let loop_header = self.create_block();
                 let loop_exit = self.create_block();
 
                 self.add_edge(entry_block, loop_header);
 
+                // For a loop, the label points to the header
+                let old_label = name.and_then(|n| self.labels.insert(n, loop_header));
+
                 self.current_block = loop_header;
                 self.visit(*body);
 
-                // Back edge?
-                // In Wasm, back edge is explicit via `br` to loop label.
-                // But structurally, the end of loop body falls through to exit.
+                // Structural fallthrough to exit
                 self.add_edge(self.current_block, loop_exit);
+
+                if let Some(n) = name {
+                    if let Some(old) = old_label {
+                        self.labels.insert(n, old);
+                    } else {
+                        self.labels.remove(n);
+                    }
+                }
 
                 self.current_block = loop_exit;
             }
-            ExpressionKind::Break { .. } => {
-                // Terminator.
-                // We need to resolve targets.
-                // For simplicity in this initial implementation, we don't fully resolve labels.
-                // We just mark it as end of block.
+            ExpressionKind::Break {
+                name, condition, ..
+            } => {
+                if let Some(cond) = condition {
+                    self.visit(*cond);
+                }
+
+                let entry_block = self.current_block;
+                if let Some(&target) = self.labels.get(name) {
+                    self.add_edge(entry_block, target);
+                }
+
                 let next_block = self.create_block();
-                // No edge to next block (unconditional break).
-                // Edge goes to target (not resolved here yet).
+                if condition.is_some() {
+                    // Conditional break: join with next block
+                    self.add_edge(entry_block, next_block);
+                }
                 self.current_block = next_block;
             }
             ExpressionKind::Return { value } => {
                 if let Some(v) = value {
                     self.visit(*v);
                 }
+                self.add_edge(self.current_block, self.cfg.exit);
+
                 let next_block = self.create_block();
                 self.current_block = next_block;
             }
-            // For other nodes, visit children
-            _ => {
-                // Use a helper or manual match?
-                // ReadOnlyVisitor doesn't help much if we change control flow.
-                // But for content collection, we need to visit sub-expressions.
-                // NOTE: This basic implementation treats most expressions as linear.
-                // Call, Binary, etc. are just added to block and children visited.
-
-                // We need to visit children manually to keep order?
-                // Or implement a visitor pattern?
-                // Let's do a shallow match for children.
-                match &expr.kind {
-                    ExpressionKind::Binary { left, right, .. } => {
-                        self.visit(*left);
-                        self.visit(*right);
-                    }
-                    ExpressionKind::Unary { value, .. } => {
-                        self.visit(*value);
-                    }
-                    ExpressionKind::Call { operands, .. } => {
-                        for op in operands.iter() {
-                            self.visit(*op);
-                        }
-                    }
-                    ExpressionKind::LocalSet { value, .. } => self.visit(*value),
-                    ExpressionKind::LocalTee { value, .. } => self.visit(*value),
-                    ExpressionKind::Drop { value } => self.visit(*value),
-                    // ... and others
-                    _ => {}
-                }
+            ExpressionKind::Unreachable => {
+                self.add_edge(self.current_block, self.cfg.exit);
+                let next_block = self.create_block();
+                self.current_block = next_block;
             }
+            ExpressionKind::Switch {
+                names,
+                default,
+                condition,
+                value,
+            } => {
+                self.visit(*condition);
+                if let Some(v) = value {
+                    self.visit(*v);
+                }
+
+                let entry_block = self.current_block;
+                for &name in names.iter().chain(std::iter::once(default)) {
+                    if let Some(&target) = self.labels.get(name) {
+                        self.add_edge(entry_block, target);
+                    }
+                }
+
+                let next_block = self.create_block();
+                self.current_block = next_block;
+            }
+            _ => match &expr.kind {
+                ExpressionKind::Binary { left, right, .. } => {
+                    self.visit(*left);
+                    self.visit(*right);
+                }
+                ExpressionKind::Unary { value, .. } => {
+                    self.visit(*value);
+                }
+                ExpressionKind::Call { operands, .. } => {
+                    for op in operands.iter() {
+                        self.visit(*op);
+                    }
+                }
+                ExpressionKind::CallIndirect {
+                    target, operands, ..
+                } => {
+                    self.visit(*target);
+                    for op in operands.iter() {
+                        self.visit(*op);
+                    }
+                }
+                ExpressionKind::LocalSet { value, .. } => self.visit(*value),
+                ExpressionKind::LocalTee { value, .. } => self.visit(*value),
+                ExpressionKind::GlobalSet { value, .. } => self.visit(*value),
+                ExpressionKind::Drop { value } => self.visit(*value),
+                ExpressionKind::Select {
+                    condition,
+                    if_true,
+                    if_false,
+                } => {
+                    self.visit(*condition);
+                    self.visit(*if_true);
+                    self.visit(*if_false);
+                }
+                ExpressionKind::Load { ptr, .. } => self.visit(*ptr),
+                ExpressionKind::Store { ptr, value, .. } => {
+                    self.visit(*ptr);
+                    self.visit(*value);
+                }
+                ExpressionKind::MemoryGrow { delta } => self.visit(*delta),
+                ExpressionKind::AtomicRMW { ptr, value, .. } => {
+                    self.visit(*ptr);
+                    self.visit(*value);
+                }
+                ExpressionKind::AtomicCmpxchg {
+                    ptr,
+                    expected,
+                    replacement,
+                    ..
+                } => {
+                    self.visit(*ptr);
+                    self.visit(*expected);
+                    self.visit(*replacement);
+                }
+                ExpressionKind::AtomicWait {
+                    ptr,
+                    expected,
+                    timeout,
+                    ..
+                } => {
+                    self.visit(*ptr);
+                    self.visit(*expected);
+                    self.visit(*timeout);
+                }
+                ExpressionKind::AtomicNotify { ptr, count } => {
+                    self.visit(*ptr);
+                    self.visit(*count);
+                }
+                ExpressionKind::SIMDExtract { vec, .. } => self.visit(*vec),
+                ExpressionKind::SIMDReplace { vec, value, .. } => {
+                    self.visit(*vec);
+                    self.visit(*value);
+                }
+                ExpressionKind::SIMDShuffle { left, right, .. } => {
+                    self.visit(*left);
+                    self.visit(*right);
+                }
+                _ => {}
+            },
         }
     }
 }
@@ -243,33 +384,25 @@ mod tests {
         let cfg = ControlFlowGraph::build(&func, block);
 
         // Expected blocks:
-        // 0: Entry (block start, if condition) -> 1 (Then), 2 (Else)
-        // 1: Then (nop) -> 3 (Join)
-        // 2: Else (nop) -> 3 (Join)
-        // 3: Join -> Exit
+        // 0: Entry
+        // 1: Virtual Exit
+        // 2: Block Join
+        // 3: If Then
+        // 4: If Else
+        // 5: If Join
 
-        // Count blocks. We have:
-        // Entry block created at start (0)
-        // Inside 'if':
-        //   Then block created (1)
-        //   Else block created (2)
-        //   Join block created (3)
-
-        // So total 4 blocks.
-
-        assert_eq!(cfg.blocks.len(), 4);
+        assert_eq!(cfg.blocks.len(), 6);
 
         // Check edges
-        // 0 -> 1
-        assert!(cfg.blocks[0].succs.contains(&1));
-        // 0 -> 2
-        assert!(cfg.blocks[0].succs.contains(&2));
+        // Entry (0) should have edges to Then (3) and Else (4) via If visit
+        assert!(cfg.blocks[0].succs.contains(&3));
+        assert!(cfg.blocks[0].succs.contains(&4));
 
-        // 1 -> 3
-        assert!(cfg.blocks[1].succs.contains(&3));
+        // 3 -> 5
+        assert!(cfg.blocks[3].succs.contains(&5));
 
-        // 2 -> 3
-        assert!(cfg.blocks[2].succs.contains(&3));
+        // 4 -> 5
+        assert!(cfg.blocks[4].succs.contains(&5));
     }
 
     #[test]
@@ -303,8 +436,14 @@ mod tests {
         // It relies on explicit 'br' inside the loop to jump back.
         // So this loop just falls through.
 
-        assert_eq!(cfg.blocks.len(), 3);
-        assert!(cfg.blocks[0].succs.contains(&1));
-        assert!(cfg.blocks[1].succs.contains(&2));
+        // Blocks:
+        // 0: Entry
+        // 1: Virtual Exit
+        // 2: Header (Loop)
+        // 3: Exit (Loop)
+
+        assert_eq!(cfg.blocks.len(), 4);
+        assert!(cfg.blocks[0].succs.contains(&2));
+        assert!(cfg.blocks[2].succs.contains(&3));
     }
 }

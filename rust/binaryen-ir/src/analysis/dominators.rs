@@ -139,6 +139,103 @@ impl DominanceTree {
     }
 }
 
+pub struct PostDominanceTree {
+    pub pdoms: HashMap<BlockId, BlockId>, // id -> immediate post-dominator
+}
+
+impl PostDominanceTree {
+    pub fn build(cfg: &ControlFlowGraph) -> Self {
+        let mut pdoms = HashMap::new();
+        let blocks = &cfg.blocks;
+        let num_blocks = blocks.len();
+
+        if num_blocks == 0 {
+            return Self { pdoms };
+        }
+
+        // Start node for post-dominance is the exit node
+        let exit = cfg.exit;
+        pdoms.insert(exit, exit);
+
+        let all_nodes: HashSet<BlockId> = blocks.iter().map(|b| b.id).collect();
+        let mut pdom_sets: HashMap<BlockId, HashSet<BlockId>> = HashMap::new();
+
+        pdom_sets.insert(exit, [exit].iter().cloned().collect());
+        for b in blocks {
+            if b.id != exit {
+                pdom_sets.insert(b.id, all_nodes.clone());
+            }
+        }
+
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for b in blocks {
+                if b.id == exit {
+                    continue;
+                }
+
+                // pdom(n) = {n} U (intersection of pdom(s) for all succs s)
+                let mut new_pdom = all_nodes.clone();
+
+                if b.succs.is_empty() {
+                    // Block with no successors (e.g. infinite loop if not connected to exit)
+                    // If it's not the exit node, it might not reach exit.
+                    continue;
+                }
+
+                let mut first = true;
+                for &succ in &b.succs {
+                    if let Some(succ_pdoms) = pdom_sets.get(&succ) {
+                        if first {
+                            new_pdom = succ_pdoms.clone();
+                            first = false;
+                        } else {
+                            new_pdom.retain(|x| succ_pdoms.contains(x));
+                        }
+                    }
+                }
+
+                new_pdom.insert(b.id);
+
+                if pdom_sets.get(&b.id) != Some(&new_pdom) {
+                    pdom_sets.insert(b.id, new_pdom);
+                    changed = true;
+                }
+            }
+        }
+
+        // Compute immediate post-dominators
+        for (&n, post_dominators) in &pdom_sets {
+            if n == exit {
+                continue;
+            }
+
+            let candidates: Vec<BlockId> = post_dominators
+                .iter()
+                .cloned()
+                .filter(|&d| d != n)
+                .collect();
+
+            // ipdom(n) is the strict post-dominator that is post-dominated by all other strict post-dominators
+            if let Some(&ipdom) = candidates.iter().find(|&&candidate| {
+                candidates.iter().all(|&other| {
+                    if other == candidate {
+                        true
+                    } else {
+                        // other post-dominates candidate?
+                        pdom_sets.get(&candidate).unwrap().contains(&other)
+                    }
+                })
+            }) {
+                pdoms.insert(n, ipdom);
+            }
+        }
+
+        Self { pdoms }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,26 +273,29 @@ mod tests {
         let cfg = ControlFlowGraph::build(&func, block);
         let dom = DominanceTree::build(&cfg);
 
-        // Dom tree should be:
-        // 0 dominates 1, 2, 3
-        // 1 does not dominate 3 (because path through 2 exists)
-        // 2 does not dominate 3
+        // Blocks:
+        // 0: Entry
+        // 1: Virtual Exit
+        // 2: Block Join
+        // 3: If Then
+        // 4: If Else
+        // 5: If Join
 
-        assert_eq!(*dom.doms.get(&0).unwrap(), 0);
-        assert_eq!(*dom.doms.get(&1).unwrap(), 0);
-        assert_eq!(*dom.doms.get(&2).unwrap(), 0);
         assert_eq!(*dom.doms.get(&3).unwrap(), 0);
+        assert_eq!(*dom.doms.get(&4).unwrap(), 0);
+        assert_eq!(*dom.doms.get(&5).unwrap(), 0);
+        assert_eq!(*dom.doms.get(&2).unwrap(), 5);
 
         // Frontiers:
-        // DF(1) = {3} (1 dominates predecessor of 3, but not 3)
-        // DF(2) = {3}
+        // DF(3) = {5} (3 dominates predecessor of 5, but not 5)
+        // DF(4) = {5}
 
         let empty = HashSet::new();
-        let df1 = dom.frontiers.get(&1).unwrap_or(&empty);
-        assert!(df1.contains(&3));
+        let df3 = dom.frontiers.get(&3).unwrap_or(&empty);
+        assert!(df3.contains(&5));
 
-        let df2 = dom.frontiers.get(&2).unwrap_or(&empty);
-        assert!(df2.contains(&3));
+        let df4 = dom.frontiers.get(&4).unwrap_or(&empty);
+        assert!(df4.contains(&5));
     }
 
     #[test]
@@ -232,41 +332,36 @@ mod tests {
 
         // Expected block IDs based on traversal order:
         // 0: Entry
-        // 1: Outer Then
-        // 2: Outer Else
-        // 3: Outer Join
-        // 4: Inner Then
-        // 5: Inner Else
-        // 6: Inner Join
+        // 1: Exit
+        // 2: Outer Then
+        // 3: Outer Else
+        // 4: Outer Join
+        // 5: Inner Then
+        // 6: Inner Else
+        // 7: Inner Join
 
         // Structure:
-        // 0 -> 1, 2
-        // 1 -> 4, 5
-        // 4 -> 6
-        // 5 -> 6
-        // 6 -> 3
-        // 2 -> 3
-
-        // Dominators:
-        // 0 dominates all.
-        // 1 dominates 4, 5, 6.
-        // 2 dominates nothing else (except itself).
-        // 3 dominated by 0.
-        // 6 dominated by 1.
+        // 0 -> 2, 3
+        // 2 -> 5, 6
+        // 5 -> 7
+        // 6 -> 7
+        // 7 -> 4
+        // 3 -> 4
+        // 4 -> 1
 
         // Check immediate dominators:
-        // idom(1) = 0
-        assert_eq!(*dom.doms.get(&1).unwrap(), 0);
         // idom(2) = 0
         assert_eq!(*dom.doms.get(&2).unwrap(), 0);
-        // idom(3) = 0 (merge of 2 and 6->...->1->0)
+        // idom(3) = 0
         assert_eq!(*dom.doms.get(&3).unwrap(), 0);
+        // idom(4) = 0
+        assert_eq!(*dom.doms.get(&4).unwrap(), 0);
 
-        // idom(4) = 1
-        assert_eq!(*dom.doms.get(&4).unwrap(), 1);
-        // idom(5) = 1
-        assert_eq!(*dom.doms.get(&5).unwrap(), 1);
-        // idom(6) = 1
-        assert_eq!(*dom.doms.get(&6).unwrap(), 1);
+        // idom(5) = 2
+        assert_eq!(*dom.doms.get(&5).unwrap(), 2);
+        // idom(6) = 2
+        assert_eq!(*dom.doms.get(&6).unwrap(), 2);
+        // idom(7) = 2
+        assert_eq!(*dom.doms.get(&7).unwrap(), 2);
     }
 }

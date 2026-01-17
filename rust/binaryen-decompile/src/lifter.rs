@@ -1,4 +1,6 @@
-use crate::passes::{ExpressionRecombination, IdentifyBooleans, IdentifyLoops, IdentifyPointers};
+use crate::passes::{
+    ExpressionRecombination, IdentifyBooleans, IdentifyIfElse, IdentifyLoops, IdentifyPointers,
+};
 use binaryen_ir::Module;
 
 /// The Lifter is responsible for running passes that "lift" low-level WASM IR
@@ -17,6 +19,7 @@ impl Lifter {
 
         // 2. Identify control flow structures
         IdentifyLoops::new().run(module);
+        IdentifyIfElse::new().run(module);
 
         // 3. Recombine expressions (inlining single-use locals)
         ExpressionRecombination::run(module);
