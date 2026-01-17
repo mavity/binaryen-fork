@@ -10,6 +10,7 @@ pub struct Cost {
     pub instruction_count: u32,
     pub call_count: u32,
     pub loop_count: u32,
+    pub has_try_delegate: bool,
 }
 
 impl CostEstimator {
@@ -34,6 +35,7 @@ impl CostCalculator {
                 instruction_count: 0,
                 call_count: 0,
                 loop_count: 0,
+                has_try_delegate: false,
             },
         }
     }
@@ -49,6 +51,11 @@ impl<'a> ReadOnlyVisitor<'a> for CostCalculator {
             }
             ExpressionKind::Loop { .. } => {
                 self.cost.loop_count += 1;
+            }
+            ExpressionKind::Try { delegate, .. } => {
+                if delegate.is_some() {
+                    self.cost.has_try_delegate = true;
+                }
             }
             _ => {}
         }

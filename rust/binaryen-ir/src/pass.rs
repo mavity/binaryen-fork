@@ -20,6 +20,30 @@ pub struct OptimizationOptions {
     pub zero_filled_memory: bool,
     pub closed_world: bool,
     pub debug_info: bool,
+    pub inlining: InliningOptions,
+}
+
+#[derive(Debug, Clone)]
+pub struct InliningOptions {
+    pub always_inline_max_size: u32,
+    pub one_caller_inline_max_size: u32,
+    pub default_inline_max_size: u32,
+    pub flexible_inline_max_size: u32,
+    pub allow_functions_with_loops: bool,
+    pub partial_inlining_ifs: u32,
+}
+
+impl Default for InliningOptions {
+    fn default() -> Self {
+        Self {
+            always_inline_max_size: 2,
+            one_caller_inline_max_size: u32::MAX,
+            default_inline_max_size: 15,
+            flexible_inline_max_size: 20,
+            allow_functions_with_loops: false,
+            partial_inlining_ifs: 0,
+        }
+    }
 }
 
 impl Default for OptimizationOptions {
@@ -36,6 +60,7 @@ impl Default for OptimizationOptions {
             zero_filled_memory: false,
             closed_world: false,
             debug_info: false,
+            inlining: InliningOptions::default(),
         }
     }
 }
@@ -247,7 +272,11 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
     PassInfo {
         name: "inlining",
         description: "inlines functions",
-        create: |_| Box::new(crate::passes::inlining::Inlining),
+        create: |runner| {
+            Box::new(crate::passes::inlining::Inlining::with_options(
+                runner.options.inlining.clone(),
+            ))
+        },
     },
     PassInfo {
         name: "dae-optimizing",
@@ -459,6 +488,7 @@ pub struct PassRunner {
     passes: Vec<Box<dyn Pass>>,
     validate_after_pass: bool,
     pub pass_args: HashMap<String, String>,
+    pub options: OptimizationOptions,
 }
 
 impl Default for PassRunner {
@@ -473,6 +503,16 @@ impl PassRunner {
             passes: Vec::new(),
             validate_after_pass: false,
             pass_args: HashMap::new(),
+            options: OptimizationOptions::default(),
+        }
+    }
+
+    pub fn with_options(options: OptimizationOptions) -> Self {
+        Self {
+            passes: Vec::new(),
+            validate_after_pass: options.validate_globally,
+            pass_args: HashMap::new(),
+            options,
         }
     }
 
@@ -550,7 +590,9 @@ impl PassRunner {
             self.add(crate::passes::dae_optimizing::DaeOptimizing);
         }
         if options.optimize_level >= 2 || options.shrink_level >= 2 {
-            self.add(crate::passes::inlining::Inlining);
+            self.add(crate::passes::inlining::Inlining::with_options(
+                options.inlining.clone(),
+            ));
         }
         self.add(crate::passes::duplicate_function_elimination::DuplicateFunctionElimination);
     }
