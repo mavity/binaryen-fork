@@ -1,16 +1,16 @@
 use crate::analysis::stats::ModuleStats;
 use crate::expression::{ExprRef, ExpressionKind};
-use crate::module::Module;
+use crate::module::{ImportKind, Module};
 use crate::pass::Pass;
 use crate::visitor::Visitor;
 use std::collections::HashMap;
 
-/// Reorders types in the type section based on usage frequency.
-pub struct ReorderTypes;
+/// Removes types that are never used in the module.
+pub struct RemoveUnusedTypes;
 
-impl Pass for ReorderTypes {
+impl Pass for RemoveUnusedTypes {
     fn name(&self) -> &str {
-        "ReorderTypes"
+        "RemoveUnusedTypes"
     }
 
     fn run<'a>(&mut self, module: &mut Module<'a>) {
@@ -19,36 +19,36 @@ impl Pass for ReorderTypes {
         }
 
         let stats = ModuleStats::collect(module);
-        let type_counts = stats.type_counts;
-
-        let mut sorted_indices: Vec<usize> = (0..module.types.len()).collect();
-        sorted_indices.sort_by(|&a, &b| {
-            let count_a = type_counts.get(&(a as u32)).copied().unwrap_or(0);
-            let count_b = type_counts.get(&(b as u32)).copied().unwrap_or(0);
-            count_b.cmp(&count_a)
-        });
 
         let mut remap = HashMap::new();
-        let mut new_types = Vec::with_capacity(module.types.len());
+        let mut new_types = Vec::new();
 
-        for (new_idx, &old_idx) in sorted_indices.iter().enumerate() {
-            remap.insert(old_idx as u32, new_idx as u32);
-            new_types.push(module.types[old_idx].clone());
+        for (i, ty_def) in module.types.iter().enumerate() {
+            let idx = i as u32;
+            if stats.type_counts.get(&idx).copied().unwrap_or(0) > 0 {
+                let new_idx = new_types.len() as u32;
+                remap.insert(idx, new_idx);
+                new_types.push(ty_def.clone());
+            }
+        }
+
+        if new_types.len() == module.types.len() {
+            return;
         }
 
         module.types = new_types;
 
-        // Update references
+        // Update references (same logic as ReorderTypes)
         for import in &mut module.imports {
             match &mut import.kind {
-                crate::module::ImportKind::Function(params, results) => {
+                ImportKind::Function(params, results) => {
                     *params = self.remap_type(*params, &remap);
                     *results = self.remap_type(*results, &remap);
                 }
-                crate::module::ImportKind::Global(ty, _) => {
+                ImportKind::Global(ty, _) => {
                     *ty = self.remap_type(*ty, &remap);
                 }
-                crate::module::ImportKind::Table(ty, _, _) => {
+                ImportKind::Table(ty, _, _) => {
                     *ty = self.remap_type(*ty, &remap);
                 }
                 _ => {}
@@ -59,6 +59,8 @@ impl Pass for ReorderTypes {
             if let Some(idx) = &mut func.type_idx {
                 if let Some(&new_id) = remap.get(idx) {
                     *idx = new_id;
+                } else {
+                    // This type was removed! Should not happen if stats are correct.
                 }
             }
             func.params = self.remap_type(func.params, &remap);
@@ -78,18 +80,21 @@ impl Pass for ReorderTypes {
 
         for global in &mut module.globals {
             global.type_ = self.remap_type(global.type_, &remap);
-            if let Some(mut init) = Some(global.init) {
-                let mut updater = TypeUpdater {
-                    remap: &remap,
-                    pass: self,
-                };
-                updater.visit(&mut init);
-            }
+            updater_visit_init(&mut global.init, &remap, self);
         }
     }
 }
 
-impl ReorderTypes {
+fn updater_visit_init<'a, 'b>(
+    expr: &mut ExprRef<'b>,
+    remap: &HashMap<u32, u32>,
+    pass: &RemoveUnusedTypes,
+) {
+    let mut updater = TypeUpdater { remap, pass };
+    updater.visit(expr);
+}
+
+impl RemoveUnusedTypes {
     fn remap_type(
         &self,
         ty: binaryen_core::Type,
@@ -106,7 +111,7 @@ impl ReorderTypes {
 
 struct TypeUpdater<'a> {
     remap: &'a HashMap<u32, u32>,
-    pass: &'a ReorderTypes,
+    pass: &'a RemoveUnusedTypes,
 }
 
 impl<'a, 'b> Visitor<'b> for TypeUpdater<'a> {

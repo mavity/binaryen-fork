@@ -133,6 +133,11 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
         },
     },
     PassInfo {
+        name: "remove-unused-types",
+        description: "removes unused types",
+        create: |_| Box::new(crate::passes::remove_unused_types::RemoveUnusedTypes),
+    },
+    PassInfo {
         name: "simplify-locals",
         description: "miscellaneous locals-related optimizations",
         create: |runner| {
@@ -185,12 +190,32 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
     PassInfo {
         name: "reorder-locals",
         description: "sorts locals by usage",
+        create: |_| Box::new(crate::passes::reorder_locals::ReorderLocals),
+    },
+    PassInfo {
+        name: "reorder-types",
+        description: "sorts types by usage",
+        create: |_| Box::new(crate::passes::reorder_types::ReorderTypes),
+    },
+    PassInfo {
+        name: "reorder-globals",
+        description: "sorts globals by usage",
+        create: |_| Box::new(crate::passes::reorder_globals::ReorderGlobals),
+    },
+    PassInfo {
+        name: "merge-locals",
+        description: "merges locals with the same type",
         create: |_| Box::new(crate::passes::merge_locals::MergeLocals),
     },
     PassInfo {
         name: "merge-blocks",
         description: "merges blocks to their parents",
         create: |_| Box::new(crate::passes::merge_blocks::MergeBlocks),
+    },
+    PassInfo {
+        name: "print",
+        description: "prints the module in WAT format",
+        create: |_| Box::new(crate::passes::print::Print),
     },
     PassInfo {
         name: "precompute",
@@ -303,6 +328,16 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
         name: "memory-optimization",
         description: "optimizes memory accesses",
         create: |_| Box::new(crate::passes::memory_optimization::MemoryOptimization::new()),
+    },
+    PassInfo {
+        name: "minify-names",
+        description: "minifies names of functions, etc.",
+        create: |_| Box::new(crate::passes::names::MinifyNames),
+    },
+    PassInfo {
+        name: "strip-names",
+        description: "removes names of functions, etc.",
+        create: |_| Box::new(crate::passes::names::StripNames),
     },
     PassInfo {
         name: "optimize-added-constants",

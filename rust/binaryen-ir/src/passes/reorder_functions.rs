@@ -48,8 +48,6 @@ impl Pass for ReorderFunctions {
         }
 
         // 2. Perform the reordering
-        let mut new_functions: Vec<crate::module::Function<'a>> =
-            Vec::with_capacity(module.functions.len());
         let mut old_to_new = HashMap::new();
 
         let import_count = module
@@ -63,15 +61,13 @@ impl Pass for ReorderFunctions {
         }
 
         // Reorder
-        let mut old_functions = std::mem::take(&mut module.functions);
-        let mut new_functions = Vec::with_capacity(old_functions.len());
+        let old_functions = std::mem::take(&mut module.functions);
 
         let mut options: Vec<Option<crate::module::Function<'a>>> =
             old_functions.into_iter().map(Some).collect();
         for &idx in &sorted_indices {
-            new_functions.push(options[idx].take().unwrap());
+            module.functions.push(options[idx].take().unwrap());
         }
-        module.functions = new_functions;
 
         // 3. Update all references to function indices
         // Exports

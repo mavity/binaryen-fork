@@ -22,22 +22,19 @@ impl Pass for ReorderLocals {
             // WASM parameters cannot be reordered without changing signature,
             // so we only reorder 'vars'.
 
-            let num_params = match func.params.is_tuple() {
-                // Simplified param count logic - in a real impl we'd query TypeStore
-                true => 2, // Placeholder
-                false => {
-                    if func.params == binaryen_core::Type::NONE {
-                        0
-                    } else {
-                        1
-                    }
-                }
+            let num_params = if func.params == binaryen_core::Type::NONE {
+                0
+            } else if let Some(components) = binaryen_core::type_store::lookup_tuple(func.params) {
+                components.len()
+            } else {
+                1
             };
 
             // In our Module IR, vars is a Vec<Type>.
             // We want to sort them by type.
             let mut indexed_vars: Vec<(usize, binaryen_core::Type)> =
                 func.vars.iter().cloned().enumerate().collect();
+            // Group by type for better compression
             indexed_vars.sort_by_key(|&(_, ty)| ty);
 
             let mut remap = HashMap::new();
@@ -67,7 +64,6 @@ struct LocalRemapper<'a> {
 
 impl<'a, 'b> Visitor<'b> for LocalRemapper<'a> {
     fn visit_expression(&mut self, expr: &mut ExprRef<'b>) {
-        self.visit_children(expr);
         match &mut expr.kind {
             ExpressionKind::LocalGet { index }
             | ExpressionKind::LocalSet { index, .. }
@@ -78,5 +74,6 @@ impl<'a, 'b> Visitor<'b> for LocalRemapper<'a> {
             }
             _ => {}
         }
+        self.visit_children(expr);
     }
 }

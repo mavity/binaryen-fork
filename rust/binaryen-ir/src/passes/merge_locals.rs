@@ -1,9 +1,12 @@
-use crate::expression::ExprRef;
+use crate::analysis::stats::ModuleStats;
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;
+use std::collections::HashMap;
 
-/// Merge Locals pass: Combines similar local variable patterns
+/// Merge Locals pass: Combines similar local variable patterns.
+/// In this implementation, it also performs unused local removal.
 pub struct MergeLocals;
 
 impl Pass for MergeLocals {
@@ -12,19 +15,68 @@ impl Pass for MergeLocals {
     }
 
     fn run<'a>(&mut self, module: &mut Module<'a>) {
+        let stats = ModuleStats::collect(module);
+
         for func in &mut module.functions {
-            if let Some(body) = &mut func.body {
-                let mut merger = LocalMerger;
-                merger.visit(body);
+            if func.vars.is_empty() {
+                continue;
+            }
+
+            let num_params = if func.params == binaryen_core::Type::NONE {
+                0
+            } else if let Some(components) = binaryen_core::type_store::lookup_tuple(func.params) {
+                components.len()
+            } else {
+                1
+            };
+
+            let local_usage = stats.local_counts.get(&func.name);
+
+            let mut new_vars = Vec::new();
+            let mut remap = HashMap::new();
+
+            for (i, &ty) in func.vars.iter().enumerate() {
+                let old_idx = (num_params + i) as u32;
+                let used = local_usage
+                    .map(|u| u.get(&old_idx).copied().unwrap_or(0) > 0)
+                    .unwrap_or(false);
+
+                if used {
+                    let new_idx = (num_params + new_vars.len()) as u32;
+                    remap.insert(old_idx, new_idx);
+                    new_vars.push(ty);
+                }
+            }
+
+            if new_vars.len() < func.vars.len() {
+                func.vars = new_vars;
+                if let Some(mut body) = func.body {
+                    let mut updater = LocalRemapper { remap: &remap };
+                    updater.visit(&mut body);
+                }
             }
         }
     }
 }
 
-struct LocalMerger;
+struct LocalRemapper<'a> {
+    remap: &'a HashMap<u32, u32>,
+}
 
-impl<'a> Visitor<'a> for LocalMerger {
-    fn visit_expression(&mut self, _expr: &mut ExprRef<'a>) {}
+impl<'a, 'b> Visitor<'b> for LocalRemapper<'a> {
+    fn visit_expression(&mut self, expr: &mut ExprRef<'b>) {
+        match &mut expr.kind {
+            ExpressionKind::LocalGet { index }
+            | ExpressionKind::LocalSet { index, .. }
+            | ExpressionKind::LocalTee { index, .. } => {
+                if let Some(&new_idx) = self.remap.get(index) {
+                    *index = new_idx;
+                }
+            }
+            _ => {}
+        }
+        self.visit_children(expr);
+    }
 }
 
 #[cfg(test)]

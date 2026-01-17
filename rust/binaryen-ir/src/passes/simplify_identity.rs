@@ -57,6 +57,43 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
     fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
         self.visit_children(expr);
 
+        // Recursive identity pull-up
+        match &mut expr.kind {
+            ExpressionKind::Unary {
+                op: UnaryOp::PopcntInt32,
+                value,
+            }
+            | ExpressionKind::Unary {
+                op: UnaryOp::ClzInt32,
+                value,
+            }
+            | ExpressionKind::Unary {
+                op: UnaryOp::CtzInt32,
+                value,
+            } => {
+                if let ExpressionKind::Const(Literal::I32(v)) = value.kind {
+                    let result = match expr.kind {
+                        ExpressionKind::Unary {
+                            op: UnaryOp::PopcntInt32,
+                            ..
+                        } => v.count_ones() as i32,
+                        ExpressionKind::Unary {
+                            op: UnaryOp::ClzInt32,
+                            ..
+                        } => v.leading_zeros() as i32,
+                        ExpressionKind::Unary {
+                            op: UnaryOp::CtzInt32,
+                            ..
+                        } => v.trailing_zeros() as i32,
+                        _ => unreachable!(),
+                    };
+                    expr.kind = ExpressionKind::Const(Literal::I32(result));
+                    return;
+                }
+            }
+            _ => {}
+        }
+
         // Optimization for EqZ(EqZ(EqZ(x))) -> EqZ(x)
         if let ExpressionKind::Unary { op: op1, value: v1 } = &mut expr.kind {
             if matches!(op1, UnaryOp::EqZInt32 | UnaryOp::EqZInt64) {
@@ -83,6 +120,21 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
                 }
 
                 let side = match op {
+                    // x & 0 -> 0, 0 & x -> 0
+                    BinaryOp::AndInt32 | BinaryOp::AndInt64 if is_zero(left) || is_zero(right) => {
+                        let is_64 = matches!(op, BinaryOp::AndInt64);
+                        expr.kind = ExpressionKind::Const(if is_64 { Literal::I64(0) } else { Literal::I32(0) });
+                        return;
+                    }
+                    // x | -1 -> -1, -1 | x -> -1
+                    BinaryOp::OrInt32 if is_all_ones(left) || is_all_ones(right) => {
+                        expr.kind = ExpressionKind::Const(Literal::I32(-1));
+                        return;
+                    }
+                    BinaryOp::OrInt64 if is_all_ones(left) || is_all_ones(right) => {
+                        expr.kind = ExpressionKind::Const(Literal::I64(-1));
+                        return;
+                    }
                     // x + 0 -> x, 0 + x -> x
                     BinaryOp::AddInt32 | BinaryOp::AddInt64 |
                     // x | 0 -> x, 0 | x -> x
@@ -131,6 +183,27 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
                         } else {
                             IdentitySide::None
                         }
+                    }
+                    // x == x -> 1, x != x -> 0
+            BinaryOp::EqInt32 | BinaryOp::EqInt64 |
+                    BinaryOp::EqFloat32 | BinaryOp::EqFloat64 => {
+                        if are_expressions_equal(left, right) {
+                            if !matches!(op, BinaryOp::EqFloat32 | BinaryOp::EqFloat64) {
+                                expr.kind = ExpressionKind::Const(Literal::I32(1));
+                                return;
+                            }
+                        }
+                        IdentitySide::None
+                    }
+                    BinaryOp::NeInt32 | BinaryOp::NeInt64 |
+                    BinaryOp::NeFloat32 | BinaryOp::NeFloat64 => {
+                        if are_expressions_equal(left, right) {
+                            if !matches!(op, BinaryOp::NeFloat32 | BinaryOp::NeFloat64) {
+                                expr.kind = ExpressionKind::Const(Literal::I32(0));
+                                return;
+                            }
+                        }
+                        IdentitySide::None
                     }
                     _ => IdentitySide::None,
                 };
@@ -182,6 +255,11 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
                         expr.type_ = value.type_;
                         expr.kind = std::mem::replace(&mut value.kind, ExpressionKind::Nop);
                     }
+                }
+            }
+            ExpressionKind::RefEq { left, right } => {
+                if are_expressions_equal(left, right) {
+                    expr.kind = ExpressionKind::Const(Literal::I32(1));
                 }
             }
             _ => {}
