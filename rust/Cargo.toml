@@ -7,4 +7,5 @@ members = [
   "binaryen-core", "binaryen-ir",
   "binaryen-decompile",
   "binaryen-tools",
+  "binaryen-macros",
 ]

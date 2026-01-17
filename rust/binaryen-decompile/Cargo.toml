@@ -4,6 +4,15 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Binaryen Developers"]
 description = "A Binaryen-idiomatic decompiler for WebAssembly"
+autotests = false
+
+[[test]]
+name = "decompile_tests"
+path = "tests/decompile_tests.rs"
+
+[[test]]
+name = "triad_tests"
+path = "tests/triad_tests.rs"
 
 [dependencies]
 binaryen-ir = { path = "../binaryen-ir" }
@@ -14,3 +23,6 @@ log = "0.4"
 
 [dev-dependencies]
 env_logger = "0.10"
+binaryen-macros = { path = "../binaryen-macros" }
+tempfile = "3.8"
+similar = { version = "2.2", features = ["inline"] }
