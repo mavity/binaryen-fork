@@ -17,16 +17,21 @@ impl Pass for RemoveUnusedModuleElements {
 
         // 1. Determine which elements to keep and compute remapping
 
-        // Functions
+        // Functions (Imports + Defined)
         let mut func_remap = HashMap::new();
         let mut new_functions = Vec::new();
+        let mut new_imports = Vec::new();
 
         let mut current_func_idx = 0;
         let mut next_func_idx = 0;
 
-        // Use a temporary list for imports to handle them separately
-        let mut new_imports = Vec::new();
         let old_imports = std::mem::take(&mut module.imports);
+
+        // Track indices for remapping
+        let mut global_remap = HashMap::new();
+        let mut current_global_idx = 0;
+        let mut next_global_idx = 0;
+
         for import in old_imports {
             match import.kind {
                 ImportKind::Function(_, _) => {
@@ -37,8 +42,23 @@ impl Pass for RemoveUnusedModuleElements {
                     }
                     current_func_idx += 1;
                 }
-                _ => {
-                    new_imports.push(import);
+                ImportKind::Global(_, _) => {
+                    if tracker.globals.contains(&current_global_idx) {
+                        global_remap.insert(current_global_idx, next_global_idx);
+                        next_global_idx += 1;
+                        new_imports.push(import);
+                    }
+                    current_global_idx += 1;
+                }
+                ImportKind::Memory(..) => {
+                    if tracker.memories {
+                        new_imports.push(import);
+                    }
+                }
+                ImportKind::Table(..) => {
+                    if tracker.tables {
+                        new_imports.push(import);
+                    }
                 }
             }
         }
@@ -52,41 +72,19 @@ impl Pass for RemoveUnusedModuleElements {
             }
             current_func_idx += 1;
         }
-
         module.functions = new_functions;
 
-        // Globals
-        let mut global_remap = HashMap::new();
-        let mut new_globals = Vec::new();
-        let mut final_imports = Vec::new();
-
-        let mut current_global_idx = 0;
-        let mut next_global_idx = 0;
-
-        for import in new_imports {
-            if let ImportKind::Global(_, _) = import.kind {
-                if tracker.globals.contains(&current_global_idx) {
-                    global_remap.insert(current_global_idx, next_global_idx);
-                    next_global_idx += 1;
-                    final_imports.push(import);
-                }
-                current_global_idx += 1;
-            } else {
-                final_imports.push(import);
-            }
-        }
-        module.imports = final_imports;
-
+        // Globals (defined)
         let old_globals = std::mem::take(&mut module.globals);
         for global in old_globals {
             if tracker.globals.contains(&current_global_idx) {
                 global_remap.insert(current_global_idx, next_global_idx);
                 next_global_idx += 1;
-                new_globals.push(global);
+                module.globals.push(global);
             }
             current_global_idx += 1;
         }
-        module.globals = new_globals;
+        module.imports = new_imports;
 
         // Memories & Tables
         if !tracker.memories {
@@ -98,7 +96,7 @@ impl Pass for RemoveUnusedModuleElements {
             module.elements.clear();
         }
 
-        // Segments remapping
+        // Segments remapping (Data)
         let mut data_remap = HashMap::new();
         if tracker.memories {
             let old_data = std::mem::take(&mut module.data);
@@ -112,6 +110,7 @@ impl Pass for RemoveUnusedModuleElements {
             }
         }
 
+        // Segments remapping (Elements)
         let mut elem_remap = HashMap::new();
         if tracker.tables {
             let old_elements = std::mem::take(&mut module.elements);
@@ -121,6 +120,26 @@ impl Pass for RemoveUnusedModuleElements {
                     elem_remap.insert(i as u32, next_elem_idx);
                     next_elem_idx += 1;
                     module.elements.push(elem);
+                }
+            }
+        }
+
+        // --- Types Pruning and Remapping ---
+        let mut new_types = Vec::new();
+        let mut type_remap = HashMap::new();
+        let old_types = std::mem::take(&mut module.types);
+        for (i, ty) in old_types.into_iter().enumerate() {
+            if tracker.types.contains(&(i as u32)) {
+                type_remap.insert(i as u32, new_types.len() as u32);
+                new_types.push(ty);
+            }
+        }
+        module.types = new_types;
+
+        for func in &mut module.functions {
+            if let Some(type_idx) = &mut func.type_idx {
+                if let Some(&new_idx) = type_remap.get(type_idx) {
+                    *type_idx = new_idx;
                 }
             }
         }
@@ -214,7 +233,7 @@ impl<'a, 'b> Visitor<'b> for IndexUpdater<'a> {
                     *segment = new_idx;
                 }
             }
-            ExpressionKind::TableInit { segment, .. } => {
+            ExpressionKind::TableInit { segment, .. } | ExpressionKind::ElemDrop { segment } => {
                 if let Some(&new_idx) = self.elem_remap.get(segment) {
                     *segment = new_idx;
                 }
@@ -338,5 +357,105 @@ mod tests {
         } else {
             panic!("Expected GlobalGet");
         }
+    }
+
+    #[test]
+    fn test_remove_unused_types() {
+        let bump = Bump::new();
+        let mut module = Module::new(&bump);
+
+        // Add 3 types
+        module.types.push(crate::module::FuncType {
+            params: Type::I32,
+            results: Type::I32,
+        }); // Type 0
+        module.types.push(crate::module::FuncType {
+            params: Type::F64,
+            results: Type::F64,
+        }); // Type 1
+        module.types.push(crate::module::FuncType {
+            params: Type::I64,
+            results: Type::I64,
+        }); // Type 2
+
+        // Function 0 (Exported) uses Type 1
+        let mut func = Function::new("f0".to_string(), Type::F64, Type::F64, vec![], None);
+        func.type_idx = Some(1);
+        module.add_function(func);
+        module.export_function(0, "f0".to_string());
+
+        // Function 1 (Unused) uses Type 2
+        let mut func2 = Function::new("f1".to_string(), Type::I64, Type::I64, vec![], None);
+        func2.type_idx = Some(2);
+        module.add_function(func2);
+
+        let mut pass = RemoveUnusedModuleElements;
+        pass.run(&mut module);
+
+        // Function 1 removed. Only Function 0 remains.
+        assert_eq!(module.functions.len(), 1);
+
+        // Type 0 and Type 2 should be gone. Only Type 1 remains.
+        assert_eq!(module.types.len(), 1);
+        assert_eq!(module.types[0].params, Type::F64);
+
+        // Function 0's type_idx should be remapped from 1 to 0.
+        assert_eq!(module.functions[0].type_idx, Some(0));
+    }
+
+    #[test]
+    fn test_remove_unused_imports_gtm() {
+        let bump = Bump::new();
+        let mut module = Module::new(&bump);
+        let builder = IrBuilder::new(&bump);
+
+        // Import 0: Function (Used)
+        module.add_import(crate::module::Import {
+            module: "m".to_string(),
+            name: "f".to_string(),
+            kind: ImportKind::Function(Type::NONE, Type::NONE),
+        });
+
+        // Import 1: Global (Unused)
+        module.add_import(crate::module::Import {
+            module: "m".to_string(),
+            name: "g_unused".to_string(),
+            kind: ImportKind::Global(Type::I32, false),
+        });
+
+        // Import 2: Global (Used)
+        module.add_import(crate::module::Import {
+            module: "m".to_string(),
+            name: "g_used".to_string(),
+            kind: ImportKind::Global(Type::I32, false),
+        });
+
+        // Add code that uses Function Import and Global Import
+        let call = builder.call("f", BumpVec::new_in(&bump), Type::NONE, false);
+        let get = builder.global_get(1, Type::I32); // Global 1 is Import 2 (because Import 1 is removed, but we refer to old index 1)
+                                                    // Wait, current indices: Globals 0 is Import 1, Global 1 is Import 2.
+
+        let mut block_list = BumpVec::new_in(&bump);
+        block_list.push(call);
+        block_list.push(get);
+        let body = builder.block(None, block_list, Type::I32);
+
+        let func = Function::new(
+            "main".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(body),
+        );
+        module.add_function(func);
+        module.export_function(1, "main".to_string()); // Func 1 is defined func
+
+        let mut pass = RemoveUnusedModuleElements;
+        pass.run(&mut module);
+
+        // Import 1 should be gone.
+        // new_imports: [Import 0 (f), Import 2 (g_used)]
+        assert_eq!(module.imports.len(), 2);
+        assert_eq!(module.imports[1].name, "g_used");
     }
 }

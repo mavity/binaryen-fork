@@ -12,6 +12,7 @@ pub struct UsageTracker {
     pub tables: bool,
     pub element_segments: HashSet<u32>,
     pub data_segments: HashSet<u32>,
+    pub types: HashSet<u32>,
 
     pub(crate) func_queue: VecDeque<String>,
     pub(crate) global_queue: VecDeque<u32>,
@@ -46,35 +47,13 @@ impl UsageTracker {
             }
         }
 
-        // Segments
-        for (i, data) in module.data.iter().enumerate() {
-            let mut visitor = UsageVisitor {
-                tracker: &mut tracker,
-            };
-            visitor.visit(data.offset);
-            // If the segment is active, it's a seed if the memory is used?
-            // Actually, in Binaryen, we keep all active segments once memory is used.
-            // For now, let's just mark the globals/functions they use.
-            tracker.data_segments.insert(i as u32);
-        }
-
-        for (i, elem) in module.elements.iter().enumerate() {
-            let mut visitor = UsageVisitor {
-                tracker: &mut tracker,
-            };
-            visitor.visit(elem.offset);
-            for &func_idx in &elem.func_indices {
-                if let Some(name) = module_get_func_name(module, func_idx) {
-                    tracker.mark_func(&name);
-                }
-            }
-            tracker.element_segments.insert(i as u32);
-        }
-
         // 2. Transitive closure (worklist)
         while !tracker.func_queue.is_empty() || !tracker.global_queue.is_empty() {
             while let Some(func_name) = tracker.func_queue.pop_front() {
                 if let Some(func) = module.get_function(&func_name) {
+                    if let Some(type_idx) = func.type_idx {
+                        tracker.types.insert(type_idx);
+                    }
                     if let Some(body) = func.body {
                         let mut visitor = UsageVisitor {
                             tracker: &mut tracker,
@@ -90,6 +69,28 @@ impl UsageTracker {
                         tracker: &mut tracker,
                     };
                     visitor.visit(global.init);
+                }
+            }
+        }
+
+        // 3. Finalize segments based on memory/table preservation
+        // Active segments are only kept if their target is kept.
+        // Passive segments were already marked in ExposureVisitor if used.
+        if tracker.memories {
+            for (i, _data) in module.data.iter().enumerate() {
+                // In this IR, DataSegment always has an offset. If it had no offset, it would be passive.
+                // Assuming all segments in module.data are active for now (as per parser).
+                tracker.data_segments.insert(i as u32);
+            }
+        }
+        if tracker.tables {
+            for (i, elem) in module.elements.iter().enumerate() {
+                tracker.element_segments.insert(i as u32);
+                // Functions in active segments are used.
+                for &func_idx in &elem.func_indices {
+                    if let Some(name) = module_get_func_name(module, func_idx) {
+                        tracker.mark_func(&name);
+                    }
                 }
             }
         }
