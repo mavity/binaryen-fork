@@ -62,8 +62,8 @@ mod tests {
             params: Type::NONE,
             results: Type::I32,
             vars: Vec::new(),
-            local_names: Vec::new(),
             body: Some(binary_expr),
+            local_names: vec![],
         }];
 
         let module = Module {
@@ -2927,9 +2927,9 @@ mod tests {
             params: Type::NONE,
             results: Type::I32,
             vars: vec![],
-            local_names: vec![],
             body: None,
             type_idx: Some(99), // Invalid: no types exist
+            local_names: vec![],
         };
         module.add_function(func);
 
@@ -2959,9 +2959,9 @@ mod tests {
             params: Type::I32,
             results: Type::F32, // Mismatch: type says I64
             vars: vec![],
-            local_names: vec![],
             body: None,
             type_idx: Some(0),
+            local_names: vec![String::new(); 1],
         };
         module.add_function(func);
 
@@ -2988,9 +2988,9 @@ mod tests {
             params: Type::I32,
             results: Type::I64,
             vars: vec![],
-            local_names: vec![],
             body: None,
             type_idx: Some(0),
+            local_names: vec![String::new(); 1],
         };
         module.add_function(func);
 
@@ -3113,9 +3113,9 @@ mod tests {
             params: Type::I32,
             results: Type::I64,
             vars: vec![],
-            local_names: vec![],
             body: None,
             type_idx: Some(0),
+            local_names: vec![String::new(); 1],
         });
 
         // Function without type_idx (will be inferred)

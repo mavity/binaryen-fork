@@ -588,6 +588,63 @@ impl<'a> ExpressionKind<'a> {
     }
 }
 impl<'a> Expression<'a> {
+    /// Recompute the type of the expression based on its children
+    pub fn finalize(&mut self) {
+        match &mut self.kind {
+            ExpressionKind::Block { list, .. } => {
+                if let Some(last) = list.last() {
+                    self.type_ = last.type_;
+                } else {
+                    self.type_ = Type::NONE;
+                }
+            }
+            ExpressionKind::If {
+                if_true, if_false, ..
+            } => {
+                if let Some(false_branch) = if_false {
+                    if if_true.type_ == false_branch.type_ {
+                        self.type_ = if_true.type_;
+                    } else if if_true.type_ == Type::UNREACHABLE {
+                        self.type_ = false_branch.type_;
+                    } else if false_branch.type_ == Type::UNREACHABLE {
+                        self.type_ = if_true.type_;
+                    } else {
+                        self.type_ = Type::NONE;
+                    }
+                } else {
+                    self.type_ = Type::NONE;
+                }
+            }
+            ExpressionKind::Loop { body, .. } => {
+                self.type_ = body.type_;
+            }
+            ExpressionKind::LocalSet { .. }
+            | ExpressionKind::GlobalSet { .. }
+            | ExpressionKind::Store { .. }
+            | ExpressionKind::Drop { .. }
+            | ExpressionKind::Nop => {
+                self.type_ = Type::NONE;
+            }
+            ExpressionKind::Const(lit) => {
+                self.type_ = lit.get_type();
+            }
+            ExpressionKind::LocalTee { value, .. } => {
+                self.type_ = value.type_;
+            }
+            ExpressionKind::LocalGet { .. } | ExpressionKind::GlobalGet { .. } => {
+                // type_ should already be correct, or set at creation
+            }
+            ExpressionKind::Return { .. } | ExpressionKind::Unreachable => {
+                self.type_ = Type::UNREACHABLE;
+            }
+            _ => {
+                // For other expressions, keep the current type or refine if possible
+            }
+        }
+    }
+}
+
+impl<'a> Expression<'a> {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(bump: &'a Bump, kind: ExpressionKind<'a>, type_: Type) -> ExprRef<'a> {
         ExprRef(NonNull::from(bump.alloc(Expression { kind, type_ })))
