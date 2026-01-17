@@ -209,6 +209,69 @@ impl PassRunner {
         self.add(crate::passes::remove_unused_brs::RemoveUnusedBrs);
     }
 
+    pub fn get_all_pass_names() -> Vec<&'static str> {
+        vec![
+            "dce",
+            "vacuum",
+            "remove-unused-names",
+            "remove-unused-brs",
+            "remove-unused-module-elements",
+            "simplify-locals",
+            "simplify-locals-notee",
+            "simplify-locals-nostructure",
+            "simplify-locals-notee-nostructure",
+            "coalesce-locals",
+            "reorder-locals",
+            "merge-blocks",
+            "precompute",
+            "optimize-instructions",
+            "pick-load-signs",
+            "code-pushing",
+            "duplicate-function-elimination",
+            "inlining",
+            "dae-optimizing",
+        ]
+    }
+
+    pub fn add_by_name(&mut self, name: &str) -> bool {
+        match name {
+            "dce" => self.add(crate::passes::dce::DCE),
+            "vacuum" => self.add(crate::passes::vacuum::Vacuum),
+            "remove-unused-names" => {
+                self.add(crate::passes::remove_unused_names::RemoveUnusedNames)
+            }
+            "remove-unused-brs" => self.add(crate::passes::remove_unused_brs::RemoveUnusedBrs),
+            "remove-unused-module-elements" => {
+                self.add(crate::passes::remove_unused_module_elements::RemoveUnusedModuleElements)
+            }
+            "simplify-locals" => self.add(crate::passes::simplify_locals::SimplifyLocals::new()),
+            "simplify-locals-notee" => self.add(
+                crate::passes::simplify_locals::SimplifyLocals::with_options(false, true, true),
+            ),
+            "simplify-locals-nostructure" => self.add(
+                crate::passes::simplify_locals::SimplifyLocals::with_options(true, false, true),
+            ),
+            "simplify-locals-notee-nostructure" => self.add(
+                crate::passes::simplify_locals::SimplifyLocals::with_options(false, false, true),
+            ),
+            "coalesce-locals" => self.add(crate::passes::coalesce_locals::CoalesceLocals),
+            "reorder-locals" => self.add(crate::passes::merge_locals::MergeLocals), // Using MergeLocals as placeholder if reorder-locals is not yet implemented or same
+            "merge-blocks" => self.add(crate::passes::merge_blocks::MergeBlocks),
+            "precompute" => self.add(crate::passes::precompute::Precompute),
+            "optimize-instructions" => {
+                self.add(crate::passes::optimize_instructions::OptimizeInstructions::new())
+            }
+            "pick-load-signs" => self.add(crate::passes::pick_load_signs::PickLoadSigns),
+            "code-pushing" => self.add(crate::passes::code_pushing::CodePushing),
+            "duplicate-function-elimination" => self
+                .add(crate::passes::duplicate_function_elimination::DuplicateFunctionElimination),
+            "inlining" => self.add(crate::passes::inlining::Inlining),
+            "dae-optimizing" => self.add(crate::passes::dae_optimizing::DaeOptimizing),
+            _ => return false,
+        }
+        true
+    }
+
     pub fn run<'a>(&mut self, module: &mut Module<'a>) {
         for pass in &mut self.passes {
             pass.run(module);

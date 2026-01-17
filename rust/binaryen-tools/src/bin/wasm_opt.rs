@@ -1,94 +1,163 @@
+use anyhow::{anyhow, Context};
 use binaryen_ir::binary_reader::BinaryReader;
 use binaryen_ir::binary_writer::BinaryWriter;
 use binaryen_ir::module::Module;
 use binaryen_ir::pass::{OptimizationOptions, PassRunner};
-use clap::{ArgAction, Parser};
+use clap::{Arg, ArgAction, Command};
 use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
-#[command(name = "wasm-opt")]
-#[command(about = "Optimizes WebAssembly binary/text files", long_about = None)]
-struct Args {
-    /// Input file (.wasm or .wat)
-    input: PathBuf,
-
-    /// Output file
-    #[arg(short, long)]
-    output: Option<PathBuf>,
-
-    /// Optimization level (0, 1, 2, 3, 4)
-    #[arg(short = 'O', default_value = "0")]
-    optimize_level: u32,
-
-    /// Shrink level (0, 1, 2)
-    #[arg(short = 's', action = ArgAction::Count)]
-    shrink_level: u8,
-
-    /// Optimize for size (-Os)
-    #[arg(long)]
-    os: bool,
-
-    /// Optimize aggressively for size (-Oz)
-    #[arg(long)]
-    oz: bool,
-
-    /// Run passes in debug mode
-    #[arg(short, long)]
-    debug: bool,
-}
-
 fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let mut cmd = Command::new("wasm-opt")
+        .about("Optimizes WebAssembly files")
+        .arg(
+            Arg::new("input")
+                .help("Input file (.wasm or .wat)")
+                .required(true),
+        )
+        .arg(
+            Arg::new("output")
+                .short('o')
+                .long("output")
+                .value_name("FILE")
+                .help("Output file (.wasm)"),
+        )
+        .arg(
+            Arg::new("debuginfo")
+                .short('g')
+                .long("debuginfo")
+                .action(ArgAction::SetTrue)
+                .help("Preserve debug info"),
+        )
+        .arg(
+            Arg::new("debug")
+                .short('d')
+                .long("debug")
+                .action(ArgAction::SetTrue)
+                .help("Print debug information"),
+        )
+        .arg(
+            Arg::new("validate")
+                .long("validate")
+                .action(ArgAction::SetTrue)
+                .help("Validate the module"),
+        )
+        .arg(
+            Arg::new("opt-level")
+                .short('O')
+                .action(ArgAction::Append)
+                .num_args(0..=1)
+                .require_equals(true) // Force -O=3 or -O 3? No, we want -O3 too.
+                .help("Optimization level (0, 1, 2, 3, 4, s, z)"),
+        );
+
+    // Register all passes as long flags
+    for name in PassRunner::get_all_pass_names() {
+        cmd = cmd.arg(
+            Arg::new(name)
+                .long(name)
+                .action(ArgAction::Append)
+                .num_args(0)
+                .help(format!("Run the {} pass", name)),
+        );
+    }
+
+    let matches = cmd.get_matches();
+
+    let input_path: PathBuf = matches
+        .get_one::<String>("input")
+        .map(PathBuf::from)
+        .unwrap();
+    let output_path: Option<PathBuf> = matches.get_one::<String>("output").map(PathBuf::from);
+    let debug_mode = matches.get_flag("debug");
+    let validate = matches.get_flag("validate");
+
+    let mut runner = PassRunner::new();
+    runner.set_validate_globally(validate);
+
+    // Collect all pass-related argument indices to preserve order
+    let mut actions = Vec::new();
+
+    // Collect Optimization Levels
+    if let Some(indices) = matches.indices_of("opt-level") {
+        let values: Vec<_> = matches
+            .get_many::<String>("opt-level")
+            .map(|v| v.collect())
+            .unwrap_or_else(Vec::new);
+
+        let mut val_iter = values.into_iter();
+        for idx in indices {
+            let level = val_iter.next().cloned().unwrap_or_else(|| "2".to_string());
+            actions.push((idx, Action::Opt(level)));
+        }
+    }
+
+    // Collect specific passes
+    for name in PassRunner::get_all_pass_names() {
+        if let Some(indices) = matches.indices_of(name) {
+            for idx in indices {
+                actions.push((idx, Action::Pass(name.to_string())));
+            }
+        }
+    }
+
+    // Sort by index to preserve order
+    actions.sort_by_key(|(idx, _)| *idx);
+
+    for (_, action) in actions {
+        match action {
+            Action::Opt(level) => {
+                let opt = match level.as_str() {
+                    "0" => OptimizationOptions::o0(),
+                    "1" => OptimizationOptions::o1(),
+                    "2" => OptimizationOptions::o2(),
+                    "3" => OptimizationOptions::o3(),
+                    "4" => OptimizationOptions::o4(),
+                    "s" => OptimizationOptions::os(),
+                    "z" => OptimizationOptions::oz(),
+                    _ => anyhow::bail!("Unknown optimization level: {}", level),
+                };
+                runner.add_default_optimization_passes(&opt);
+            }
+            Action::Pass(name) => {
+                if !runner.add_by_name(&name) {
+                    anyhow::bail!("Unknown pass: --{}", name);
+                }
+            }
+        }
+    }
 
     let allocator = bumpalo::Bump::new();
-    let data = std::fs::read(&args.input)?;
+    let data = std::fs::read(&input_path)
+        .with_context(|| format!("Failed to read input file: {:?}", input_path))?;
 
-    // Try reading as binary first, then as WAT
     let mut module = if data.starts_with(b"\0asm") {
         let mut reader = BinaryReader::new(&allocator, data);
         reader
             .parse_module()
-            .map_err(|e| anyhow::anyhow!("Binary parse error: {:?}", e))?
+            .map_err(|e| anyhow!("Binary parse error: {:?}", e))?
     } else {
-        let text = std::str::from_utf8(&data)?;
-        Module::read_wat(&allocator, text).map_err(|e| anyhow::anyhow!("WAT parse error: {}", e))?
+        let text = std::str::from_utf8(&data).context("WAT input is not valid UTF-8")?;
+        Module::read_wat(&allocator, text).map_err(|e| anyhow!("WAT parse error: {}", e))?
     };
 
-    let mut options = if args.oz {
-        OptimizationOptions::oz()
-    } else if args.os {
-        OptimizationOptions::os()
-    } else {
-        match args.optimize_level {
-            0 => OptimizationOptions::o0(),
-            1 => OptimizationOptions::o1(),
-            2 => OptimizationOptions::o2(),
-            3 => OptimizationOptions::o3(),
-            4 => OptimizationOptions::o4(),
-            _ => OptimizationOptions::o0(),
-        }
-    };
-
-    // Manual overrides from numeric flags
-    if args.optimize_level > 0 {
-        options.optimize_level = args.optimize_level;
+    if debug_mode {
+        println!("Running passes...");
     }
-    if args.shrink_level > 0 {
-        options.shrink_level = args.shrink_level as u32;
-    }
-    options.debug = args.debug;
 
-    let mut runner = PassRunner::new();
-    runner.add_default_optimization_passes(&options);
     runner.run(&mut module);
 
-    if let Some(output_path) = args.output {
+    if let Some(path) = output_path {
         let mut writer = BinaryWriter::new();
         let bytes = writer
             .write_module(&module)
-            .map_err(|e| anyhow::anyhow!("Write error: {:?}", e))?;
-        std::fs::write(output_path, bytes)?;
+            .map_err(|e| anyhow!("Write error: {:?}", e))?;
+        std::fs::write(path, bytes).context("Failed to write output file")?;
     }
 
     Ok(())
+}
+
+enum Action {
+    Opt(String),
+    Pass(String),
 }
