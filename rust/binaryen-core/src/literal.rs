@@ -1,7 +1,7 @@
 use crate::Type;
 use std::fmt;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Literal {
     I32(i32),
     I64(i64),
@@ -18,6 +18,54 @@ impl Literal {
             Literal::F32(_) => Type::F32,
             Literal::F64(_) => Type::F64,
             Literal::V128(_) => Type::V128,
+        }
+    }
+
+    pub fn get_i32(&self) -> i32 {
+        if let Literal::I32(v) = self {
+            *v
+        } else {
+            panic!("not an i32 literal");
+        }
+    }
+
+    pub fn get_u32(&self) -> u32 {
+        if let Literal::I32(v) = self {
+            *v as u32
+        } else {
+            panic!("not an i32 literal");
+        }
+    }
+
+    pub fn get_i64(&self) -> i64 {
+        if let Literal::I64(v) = self {
+            *v
+        } else {
+            panic!("not an i64 literal");
+        }
+    }
+
+    pub fn get_u64(&self) -> u64 {
+        if let Literal::I64(v) = self {
+            *v as u64
+        } else {
+            panic!("not an i64 literal");
+        }
+    }
+
+    pub fn get_f32(&self) -> f32 {
+        if let Literal::F32(v) = self {
+            *v
+        } else {
+            panic!("not an f32 literal");
+        }
+    }
+
+    pub fn get_f64(&self) -> f64 {
+        if let Literal::F64(v) = self {
+            *v
+        } else {
+            panic!("not an f64 literal");
         }
     }
 }

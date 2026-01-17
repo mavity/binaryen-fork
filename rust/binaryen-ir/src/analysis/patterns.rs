@@ -6,7 +6,63 @@ use std::collections::HashMap;
 
 /// Captured environment during pattern matching
 /// Maps variable names (from Pattern::Var) to the matched sub-expressions
-pub type Env<'a> = HashMap<&'static str, ExprRef<'a>>;
+pub struct MatchEnv<'a> {
+    vars: HashMap<&'static str, ExprRef<'a>>,
+    op: Option<BinaryOp>,
+    left: Option<ExprRef<'a>>,
+    right: Option<ExprRef<'a>>,
+}
+
+impl<'a> MatchEnv<'a> {
+    pub fn new() -> Self {
+        Self {
+            vars: HashMap::new(),
+            op: None,
+            left: None,
+            right: None,
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<&ExprRef<'a>> {
+        self.vars.get(name)
+    }
+
+    pub fn get_const(&self, name: &str) -> Option<Literal> {
+        if let Some(expr) = self.vars.get(name) {
+            if let ExpressionKind::Const(lit) = expr.kind {
+                return Some(lit);
+            }
+        }
+        None
+    }
+
+    pub fn get_op(&self) -> Option<BinaryOp> {
+        self.op
+    }
+
+    pub fn insert(&mut self, name: &'static str, expr: ExprRef<'a>) {
+        self.vars.insert(name, expr);
+    }
+
+    pub fn set_op(&mut self, op: BinaryOp) {
+        self.op = Some(op);
+    }
+
+    pub fn set_left(&mut self, expr: ExprRef<'a>) {
+        self.left = Some(expr);
+    }
+
+    pub fn set_right(&mut self, expr: ExprRef<'a>) {
+        self.right = Some(expr);
+    }
+
+    pub fn clear(&mut self) {
+        self.vars.clear();
+        self.op = None;
+        self.left = None;
+        self.right = None;
+    }
+}
 
 /// Pattern matching DSL for simplification rules
 #[derive(Debug, Clone)]
@@ -21,7 +77,7 @@ pub enum Pattern {
     Var(&'static str),
     /// Match binary operation
     Binary {
-        op: BinaryOp,
+        op: PatternOp,
         left: Box<Pattern>,
         right: Box<Pattern>,
     },
@@ -29,11 +85,17 @@ pub enum Pattern {
     Unary { op: UnaryOp, value: Box<Pattern> },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatternOp {
+    Op(BinaryOp),
+    AnyOp,
+}
+
 impl Pattern {
     /// Helper to create a binary pattern
-    pub fn binary(op: BinaryOp, left: Pattern, right: Pattern) -> Self {
+    pub fn binary(op: impl Into<PatternOp>, left: Pattern, right: Pattern) -> Self {
         Pattern::Binary {
-            op,
+            op: op.into(),
             left: Box::new(left),
             right: Box::new(right),
         }
@@ -48,22 +110,29 @@ impl Pattern {
     }
 
     /// Try to match expression against this pattern
-    pub fn matches<'a>(&self, expr: ExprRef<'a>, env: &mut Env<'a>) -> bool {
+    pub fn matches<'a>(&self, expr: ExprRef<'a>, env: &mut MatchEnv<'a>) -> bool {
         match (self, &expr.kind) {
             (Pattern::Any, _) => true,
 
             (Pattern::Const(target), ExpressionKind::Const(actual)) => target == actual,
 
-            (Pattern::AnyConst, ExpressionKind::Const(_)) => true,
+            (Pattern::AnyConst, ExpressionKind::Const(_actual)) => {
+                // To make the constant available in the replacement function, we can
+                // store it in the env with a conventional name. This is a bit of a
+                // hack, but it works.
+                if env.left.is_none() {
+                    env.set_left(expr);
+                    env.insert("left", expr);
+                } else if env.right.is_none() {
+                    env.set_right(expr);
+                    env.insert("right", expr);
+                }
+                true
+            }
 
             (Pattern::Var(name), _) => {
                 if let Some(existing) = env.get(name) {
-                    // If variable already captured, must match structural equality?
-                    // For now, simpler implementation: just check pointer equality or assume strict binding order
-                    // In many pattern matchers, repeated vars enforce equality.
-                    // Let's implement reference equality check for now (safe/fast),
-                    // but TODO: implement deep structural equality if needed.
-                    (*existing).as_ptr() == expr.as_ptr()
+                    existing.as_ptr() == expr.as_ptr()
                 } else {
                     env.insert(name, expr);
                     true
@@ -81,7 +150,16 @@ impl Pattern {
                     left: e_left,
                     right: e_right,
                 },
-            ) => p_op == e_op && p_left.matches(*e_left, env) && p_right.matches(*e_right, env),
+            ) => {
+                let op_matches = match p_op {
+                    PatternOp::Op(op) => op == e_op,
+                    PatternOp::AnyOp => {
+                        env.set_op(*e_op);
+                        true
+                    }
+                };
+                op_matches && p_left.matches(*e_left, env) && p_right.matches(*e_right, env)
+            }
 
             (
                 Pattern::Unary {
@@ -99,13 +177,20 @@ impl Pattern {
     }
 }
 
+impl From<BinaryOp> for PatternOp {
+    fn from(op: BinaryOp) -> Self {
+        PatternOp::Op(op)
+    }
+}
+
 use bumpalo::Bump;
 
 /// A simplification rule
 pub struct Rule {
     pub pattern: Pattern,
     // The replacement function takes an Env and an Arena, and returns a new expression
-    pub replacement: Box<dyn for<'a> Fn(&Env<'a>, &'a Bump) -> Option<ExprRef<'a>> + Sync + Send>,
+    pub replacement:
+        Box<dyn for<'a> Fn(&MatchEnv<'a>, &'a Bump) -> Option<ExprRef<'a>> + Sync + Send>,
 }
 
 /// Engine to apply simplification rules
@@ -126,7 +211,7 @@ impl PatternMatcher {
 
     pub fn add_rule<F>(&mut self, pattern: Pattern, replacement: F)
     where
-        F: for<'a> Fn(&Env<'a>, &'a Bump) -> Option<ExprRef<'a>> + 'static + Sync + Send,
+        F: for<'a> Fn(&MatchEnv<'a>, &'a Bump) -> Option<ExprRef<'a>> + 'static + Sync + Send,
     {
         self.rules.push(Rule {
             pattern,
@@ -136,7 +221,7 @@ impl PatternMatcher {
 
     /// Try to simplify an expression using registered rules.
     pub fn simplify<'a>(&self, expr: ExprRef<'a>, arena: &'a Bump) -> Option<ExprRef<'a>> {
-        let mut env = Env::new();
+        let mut env = MatchEnv::new();
 
         for rule in &self.rules {
             env.clear();
@@ -169,7 +254,7 @@ mod tests {
         let p42 = Pattern::Const(Literal::I32(42));
         let p_any_const = Pattern::AnyConst;
 
-        let mut env = Env::new();
+        let mut env = MatchEnv::new();
 
         assert!(p42.matches(c42, &mut env));
         env.clear();
@@ -189,7 +274,7 @@ mod tests {
         let c42 = builder.const_(Literal::I32(42));
         let p_x = Pattern::Var("x");
 
-        let mut env = Env::new();
+        let mut env = MatchEnv::new();
 
         assert!(p_x.matches(c42, &mut env));
         assert_eq!(env.get("x").unwrap().as_ptr(), c42.as_ptr());
@@ -208,7 +293,7 @@ mod tests {
         // Pattern: (AnyConst + AnyConst)
         let p = Pattern::binary(BinaryOp::AddInt32, Pattern::AnyConst, Pattern::AnyConst);
 
-        let mut env = Env::new();
+        let mut env = MatchEnv::new();
         assert!(p.matches(add, &mut env));
 
         // Pattern: (x + y)
@@ -236,7 +321,7 @@ mod tests {
         // Pattern: x + x
         let p = Pattern::binary(BinaryOp::AddInt32, Pattern::Var("x"), Pattern::Var("x"));
 
-        let mut env = Env::new();
+        let mut env = MatchEnv::new();
         assert!(p.matches(add_same, &mut env));
 
         env.clear();

@@ -119,13 +119,15 @@ mod tests {
             let val = builder.const_(Literal::I32(42));
             let set_immutable = builder.global_set(0, val);
 
-            let func = Function::new(
-                "fail_immut".to_string(),
-                Type::NONE,
-                Type::NONE,
-                vec![],
-                Some(set_immutable),
-            );
+            let func = Function {
+                name: "fail_immut".to_string(),
+                type_idx: None,
+                params: Type::NONE,
+                results: Type::NONE,
+                vars: vec![],
+                body: Some(set_immutable),
+                local_names: vec![],
+            };
 
             let module = Module {
                 allocator: &bump,
@@ -155,13 +157,15 @@ mod tests {
             let val = builder.const_(Literal::I32(42)); // i32
             let set_mismatch = builder.global_set(1, val); // trying to set to g1 (f32)
 
-            let func = Function::new(
-                "fail_type".to_string(),
-                Type::NONE,
-                Type::NONE,
-                vec![],
-                Some(set_mismatch),
-            );
+            let func = Function {
+                name: "fail_type".to_string(),
+                type_idx: None,
+                params: Type::NONE,
+                results: Type::NONE,
+                vars: vec![],
+                body: Some(set_mismatch),
+                local_names: vec![],
+            };
 
             let module = Module {
                 allocator: &bump,
@@ -192,13 +196,15 @@ mod tests {
         {
             let get_oob = builder.global_get(99, Type::I32);
 
-            let func = Function::new(
-                "fail_oob".to_string(),
-                Type::NONE,
-                Type::I32,
-                vec![],
-                Some(get_oob),
-            );
+            let func = Function {
+                name: "fail_oob".to_string(),
+                type_idx: None,
+                params: Type::NONE,
+                results: Type::I32,
+                vars: vec![],
+                body: Some(get_oob),
+                local_names: vec![],
+            };
 
             let module = Module {
                 allocator: &bump,
@@ -309,13 +315,15 @@ mod tests {
         let const_1 = builder.const_(Literal::I32(1));
         let add = builder.binary(BinaryOp::AddInt32, local_get, const_1, Type::I32);
 
-        let func = Function::new(
-            "add_one".to_string(),
-            Type::I32,
-            Type::I32,
-            vec![],
-            Some(add),
-        );
+        let func = Function {
+            name: "add_one".to_string(),
+            type_idx: None,
+            params: Type::I32,
+            results: Type::I32,
+            vars: vec![],
+            body: Some(add),
+            local_names: vec![],
+        };
 
         let bump = bumpalo::Bump::new();
         let mut module = Module::new(&bump);
@@ -341,7 +349,15 @@ mod tests {
         let builder = IrBuilder::new(&bump);
 
         // Setup a basic valid module components
-        let _func = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+        let _func = Function {
+            name: "f0".to_string(),
+            type_idx: None,
+            params: Type::NONE,
+            results: Type::NONE,
+            vars: vec![],
+            body: None,
+            local_names: vec![],
+        };
 
         let global_init = builder.const_(Literal::I32(0));
         let global = Global {
@@ -358,8 +374,15 @@ mod tests {
 
         // 1. Valid exports
         {
-            // func needs to be cloned or recreated because Function doesn't implement Clone
-            let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+            let func_valid = Function {
+                name: "f0".to_string(),
+                type_idx: None,
+                params: Type::NONE,
+                results: Type::NONE,
+                vars: vec![],
+                body: None,
+                local_names: vec![],
+            };
 
             let module = Module {
                 allocator: &bump,
@@ -436,7 +459,15 @@ mod tests {
 
         // 3. Function OOB
         {
-            let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
+            let func_valid = Function {
+                name: "f0".to_string(),
+                type_idx: None,
+                params: Type::NONE,
+                results: Type::NONE,
+                vars: vec![],
+                body: None,
+                local_names: vec![],
+            };
             let module = Module {
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,

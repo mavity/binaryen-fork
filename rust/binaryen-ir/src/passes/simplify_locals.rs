@@ -716,8 +716,8 @@ mod tests {
             params: Type::NONE,
             results: Type::NONE,
             vars: vec![Type::I32],
-            local_names: vec![],
             body: Some(block),
+            local_names: vec![],
         });
 
         let mut pass = SimplifyLocals::new();
@@ -768,8 +768,8 @@ mod tests {
             params: Type::NONE,
             results: Type::NONE,
             vars: vec![Type::I32, Type::I32],
-            local_names: vec![],
             body: Some(if_expr),
+            local_names: vec![],
         });
 
         let mut pass = SimplifyLocals::new();
