@@ -1,5 +1,6 @@
 use crate::annotation::AnnotationStore;
 use crate::expression::ExprRef;
+use crate::wasm_features::FeatureSet;
 use binaryen_core::Type;
 
 #[derive(Debug)]
@@ -123,6 +124,7 @@ pub struct ElementSegment<'a> {
 #[derive(Debug)]
 pub struct Module<'a> {
     pub allocator: &'a bumpalo::Bump,
+    pub features: FeatureSet,
     pub types: Vec<FuncType>, // Type section
     pub imports: Vec<Import>,
     pub functions: Vec<Function<'a>>,
@@ -140,6 +142,7 @@ impl<'a> Module<'a> {
     pub fn new(allocator: &'a bumpalo::Bump) -> Self {
         Self {
             allocator,
+            features: FeatureSet::DEFAULT,
             types: Vec::new(),
             imports: Vec::new(),
             functions: Vec::new(),

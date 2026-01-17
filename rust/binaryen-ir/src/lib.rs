@@ -11,6 +11,7 @@ pub mod pass;
 pub mod passes;
 pub mod validation;
 pub mod visitor;
+pub mod wasm_features;
 
 pub use annotation::{Annotation, AnnotationStore, HighLevelType, LoopType, VariableRole};
 pub use binary_reader::BinaryReader;
@@ -22,6 +23,7 @@ pub use ops::{BinaryOp, UnaryOp};
 pub use pass::{Pass, PassRunner};
 pub use validation::Validator;
 pub use visitor::{ReadOnlyVisitor, Visitor};
+pub use wasm_features::FeatureSet;
 
 #[cfg(test)]
 mod tests {
@@ -65,6 +67,7 @@ mod tests {
 
         let module = Module {
             allocator: &bump,
+            features: FeatureSet::DEFAULT,
 
             types: vec![],
             imports: vec![],
@@ -125,6 +128,7 @@ mod tests {
 
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -160,6 +164,7 @@ mod tests {
 
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -196,6 +201,7 @@ mod tests {
 
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -356,6 +362,7 @@ mod tests {
 
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -395,6 +402,7 @@ mod tests {
         {
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -430,6 +438,7 @@ mod tests {
             let func_valid = Function::new("f0".to_string(), Type::NONE, Type::NONE, vec![], None);
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -459,6 +468,7 @@ mod tests {
         {
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -488,6 +498,7 @@ mod tests {
         {
             let module = Module {
                 allocator: &bump,
+                features: FeatureSet::DEFAULT,
 
                 types: vec![],
                 imports: vec![],
@@ -537,6 +548,7 @@ mod tests {
 
         let module = Module {
             allocator: &bump,
+            features: FeatureSet::DEFAULT,
 
             types: vec![],
             imports: vec![],
