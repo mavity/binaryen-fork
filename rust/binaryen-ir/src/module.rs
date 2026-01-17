@@ -156,6 +156,7 @@ pub struct Module<'a> {
     pub exports: Vec<Export>,
     pub elements: Vec<ElementSegment<'a>>, // Element section
     pub data: Vec<DataSegment<'a>>,
+    pub type_names: Vec<String>, // Names for types (debug)
     pub annotations: AnnotationStore<'a>,
 }
 
@@ -174,6 +175,7 @@ impl<'a> Module<'a> {
             exports: Vec::new(),
             elements: Vec::new(),
             data: Vec::new(),
+            type_names: Vec::new(),
             annotations: AnnotationStore::new(),
         }
     }

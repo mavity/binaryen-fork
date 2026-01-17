@@ -1,6 +1,9 @@
 use crate::analysis::stats::ModuleStats;
-use crate::module::Module;
+use crate::expression::{ExprRef, ExpressionKind};
+use crate::module::{ExportKind, Module};
 use crate::pass::Pass;
+use crate::visitor::ReadOnlyVisitor;
+use std::collections::HashSet;
 
 /// Prints the call graph of the module.
 pub struct PrintCallGraph;
@@ -13,10 +16,72 @@ impl Pass for PrintCallGraph {
     fn run<'a>(&mut self, module: &mut Module<'a>) {
         println!("Call Graph:");
         for func in &module.functions {
+            let mut collector = CallCollector::default();
+            if let Some(body) = func.body {
+                collector.visit(body);
+            }
+
+            let mut targets: Vec<_> = collector.targets.into_iter().collect();
+            targets.sort();
+
             print!("  {} ->", func.name);
-            // We can use ModuleStats or a dedicated visitor to find calls
-            // For now, a simple placeholder output
-            println!(" [not implemented]");
+            if targets.is_empty() {
+                println!(" (none)");
+            } else {
+                for target in targets {
+                    print!(" {}", target);
+                }
+                println!();
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct CallCollector {
+    targets: HashSet<String>,
+}
+
+impl<'a> ReadOnlyVisitor<'a> for CallCollector {
+    fn visit_expression(&mut self, expr: ExprRef<'a>) {
+        if let ExpressionKind::Call { target, .. } = &expr.kind {
+            self.targets.insert(target.to_string());
+        }
+    }
+}
+
+/// Prints a map of functions and their exports.
+pub struct PrintFunctionMap;
+
+impl Pass for PrintFunctionMap {
+    fn name(&self) -> &str {
+        "PrintFunctionMap"
+    }
+
+    fn run<'a>(&mut self, module: &mut Module<'a>) {
+        println!("Function Map:");
+        for (i, func) in module.functions.iter().enumerate() {
+            let mut exports = Vec::new();
+            for export in &module.exports {
+                if export.kind == ExportKind::Function
+                    && export.index == (module.imports.len() + i) as u32
+                {
+                    exports.push(&export.name);
+                }
+            }
+
+            print!("  [{}] {}", i, func.name);
+            if !exports.is_empty() {
+                print!(
+                    " (exports: {})",
+                    exports
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            println!();
         }
     }
 }

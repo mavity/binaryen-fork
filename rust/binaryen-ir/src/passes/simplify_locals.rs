@@ -1233,7 +1233,10 @@ where
         | ExpressionKind::RefTest { .. }
         | ExpressionKind::RefCast { .. }
         | ExpressionKind::BrOn { .. }
-        | ExpressionKind::Pop { .. } => {}
+        | ExpressionKind::Pop { .. }
+        | ExpressionKind::RefTest { .. }
+        | ExpressionKind::RefCast { .. }
+        | ExpressionKind::BrOn { .. } => {}
     }
 }
 
@@ -1507,10 +1510,10 @@ where
         | ExpressionKind::DataDrop { .. }
         | ExpressionKind::ElemDrop { .. }
         | ExpressionKind::Pop { .. }
+        | ExpressionKind::Rethrow { .. }
         | ExpressionKind::RefTest { .. }
         | ExpressionKind::RefCast { .. }
-        | ExpressionKind::BrOn { .. }
-        | ExpressionKind::Rethrow { .. } => {}
+        | ExpressionKind::BrOn { .. } => {}
     }
 }
 

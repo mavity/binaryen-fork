@@ -250,6 +250,24 @@ impl<'a, 'm> Validator<'a, 'm> {
         self.valid = false;
         self.errors.push(msg.to_string());
     }
+
+    fn get_local_type(&self, func: &Function, index: u32) -> Option<Type> {
+        let idx = index as usize;
+        let param_len = func.params.tuple_len();
+        if idx < param_len {
+            if param_len == 1 {
+                return Some(func.params);
+            }
+            // Multi-value params
+            if let Some(types) = binaryen_core::type_store::lookup_tuple(func.params) {
+                return types.get(idx).cloned();
+            }
+            return None;
+        }
+
+        let var_idx = idx - param_len;
+        func.vars.get(var_idx).cloned()
+    }
 }
 
 impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
@@ -266,8 +284,34 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
                     ));
                 }
             }
-            ExpressionKind::LocalGet { index: _ } => {
-                // TODO: Validate index bounds (need Type tuple support)
+            ExpressionKind::LocalGet { index } => {
+                if let Some(current) = self.current_function {
+                    if let Some(expected_ty) = self.get_local_type(current, *index) {
+                        if expr.type_ != expected_ty && expr.type_ != Type::UNREACHABLE {
+                            self.fail(&format!(
+                                "LocalGet: Expression type {:?} does not match local {} type {:?}",
+                                expr.type_, index, expected_ty
+                            ));
+                        }
+                    } else {
+                        self.fail(&format!("LocalGet: Index {} out of bounds", index));
+                    }
+                }
+            }
+            ExpressionKind::LocalSet { index, value }
+            | ExpressionKind::LocalTee { index, value } => {
+                if let Some(current) = self.current_function {
+                    if let Some(expected_ty) = self.get_local_type(current, *index) {
+                        if value.type_ != expected_ty && value.type_ != Type::UNREACHABLE {
+                            self.fail(&format!(
+                                "LocalSet/Tee: Value type {:?} does not match local {} type {:?}",
+                                value.type_, index, expected_ty
+                            ));
+                        }
+                    } else {
+                        self.fail(&format!("LocalSet/Tee: Index {} out of bounds", index));
+                    }
+                }
             }
             ExpressionKind::GlobalGet { index } => {
                 let idx = *index as usize;
@@ -369,8 +413,6 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             | ExpressionKind::Load { .. }
             | ExpressionKind::Store { .. }
             | ExpressionKind::Const(_)
-            | ExpressionKind::LocalSet { .. }
-            | ExpressionKind::LocalTee { .. }
             | ExpressionKind::Unary { .. }
             | ExpressionKind::Block { .. }
             | ExpressionKind::If { .. }

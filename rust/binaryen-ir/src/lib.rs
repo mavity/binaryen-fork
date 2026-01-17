@@ -67,6 +67,7 @@ mod tests {
         }];
 
         let module = Module {
+            type_names: Vec::new(),
             allocator: &bump,
             features: FeatureSet::DEFAULT,
 
@@ -130,6 +131,7 @@ mod tests {
             };
 
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -168,6 +170,7 @@ mod tests {
             };
 
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -207,6 +210,7 @@ mod tests {
             };
 
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -385,6 +389,7 @@ mod tests {
             };
 
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -425,6 +430,7 @@ mod tests {
         // 2. Duplicate export name
         {
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -469,6 +475,7 @@ mod tests {
                 local_names: vec![],
             };
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -499,6 +506,7 @@ mod tests {
         // 4. Global OOB
         {
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -529,6 +537,7 @@ mod tests {
         // 5. Memory OOB / No Memory
         {
             let module = Module {
+                type_names: Vec::new(),
                 allocator: &bump,
                 features: FeatureSet::DEFAULT,
 
@@ -579,6 +588,7 @@ mod tests {
         };
 
         let module = Module {
+            type_names: Vec::new(),
             allocator: &bump,
             features: FeatureSet::DEFAULT,
 
