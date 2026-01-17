@@ -56,7 +56,7 @@ impl<'a> Visitor<'a> for LoopVisitor<'a> {
             // (loop $L (block (if (cond) (nop) (br $OUT)) ... (br $L)))
             // Or simpler: (loop $L (if (cond) (block ... (br $L))))
             if !detected {
-                if let ExpressionKind::If { if_false, .. } = &body.kind {
+                if let ExpressionKind::If { if_false: _, .. } = &body.kind {
                     // If it's an if-then without else, and the then-branch ends in a jump to loop start
                     // OR if it's an if-then-else where one branch jumps out.
                     // This is a bit complex for a first pass, let's stick to a simpler heuristic for now.

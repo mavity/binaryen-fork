@@ -10,7 +10,8 @@ impl IdentifyIfElse {
     }
 
     pub fn run<'a>(&self, module: &mut Module<'a>) {
-        let mut annotations = std::collections::HashMap::new();
+        use binaryen_ir::annotation::AnnotationStore;
+        let mut annotations = AnnotationStore::new();
 
         for func in module.functions.iter() {
             if let Some(body) = func.body {

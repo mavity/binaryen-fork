@@ -1,4 +1,4 @@
-use binaryen_ir::{visitor::Visitor, Annotation, ExprRef, ExpressionKind, HighLevelType, Module};
+use binaryen_ir::{Annotation, ExprRef, ExpressionKind, HighLevelType, Module};
 
 /// A pass that identifies expressions that are likely memory pointers.
 pub struct IdentifyPointers;
@@ -77,7 +77,7 @@ impl IdentifyPointers {
         module.set_annotation(expr, Annotation::Type(HighLevelType::Pointer));
 
         match &expr.kind {
-            ExpressionKind::Binary { op, left, right } => {
+            ExpressionKind::Binary { op, left, right: _ } => {
                 use binaryen_ir::BinaryOp;
                 if *op == BinaryOp::AddInt32 || *op == BinaryOp::SubInt32 {
                     // In pointer arithmetic, usually the first operand is the pointer

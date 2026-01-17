@@ -153,7 +153,7 @@ impl<'a> Module<'a> {
             exports: Vec::new(),
             elements: Vec::new(),
             data: Vec::new(),
-            annotations: std::collections::HashMap::new(),
+            annotations: AnnotationStore::new(),
         }
     }
 
@@ -236,7 +236,7 @@ impl<'a> Module<'a> {
     }
 
     pub fn get_annotation(&self, expr: ExprRef<'a>) -> Option<&crate::annotation::Annotation<'a>> {
-        self.annotations.get(&expr)
+        self.annotations.get(expr)
     }
 
     /// Read a WebAssembly module from WAT format using the "binary bridge".

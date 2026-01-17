@@ -8,7 +8,8 @@ pub fn read_input(path: &std::path::Path) -> anyhow::Result<Vec<u8>> {
         std::io::stdin().read_to_end(&mut buffer)?;
         Ok(buffer)
     } else {
-        std::fs::read(path).map_err(|e| anyhow::anyhow!("Failed to read input file {:?}: {}", path, e))
+        std::fs::read(path)
+            .map_err(|e| anyhow::anyhow!("Failed to read input file {:?}: {}", path, e))
     }
 }
 
@@ -18,7 +19,8 @@ pub fn read_input_string(path: &std::path::Path) -> anyhow::Result<String> {
         std::io::stdin().read_to_string(&mut buffer)?;
         Ok(buffer)
     } else {
-        std::fs::read_to_string(path).map_err(|e| anyhow::anyhow!("Failed to read input file {:?}: {}", path, e))
+        std::fs::read_to_string(path)
+            .map_err(|e| anyhow::anyhow!("Failed to read input file {:?}: {}", path, e))
     }
 }
 
@@ -28,11 +30,14 @@ pub fn write_output(path: &std::path::Path, data: &[u8]) -> anyhow::Result<()> {
         std::io::stdout().write_all(data)?;
         Ok(())
     } else {
-        std::fs::write(path, data).map_err(|e| anyhow::anyhow!("Failed to write output file {:?}: {}", path, e))
+        std::fs::write(path, data)
+            .map_err(|e| anyhow::anyhow!("Failed to write output file {:?}: {}", path, e))
     }
 }
 
-pub fn add_feature_flags(mut cmd: Command) -> (Command, Vec<(FeatureSet, &'static str, &'static str)>) {
+pub fn add_feature_flags(
+    mut cmd: Command,
+) -> (Command, Vec<(FeatureSet, &'static str, &'static str)>) {
     let mut feature_flag_ids = Vec::new();
     for feature in FeatureSet::iter_all() {
         let name = FeatureSet::to_string(feature);

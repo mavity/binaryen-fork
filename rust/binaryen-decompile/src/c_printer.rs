@@ -1,13 +1,13 @@
 use binaryen_ir::Module;
 
-/// The DecompilerPrinter converts the annotated IR into human-readable C-like code.
-pub struct DecompilerPrinter<'m, 'a> {
+/// The CPrinter converts the annotated IR into human-readable C-like code.
+pub struct CPrinter<'m, 'a> {
     pub module: &'m Module<'a>,
     output: String,
     indent: usize,
 }
 
-impl<'m, 'a> DecompilerPrinter<'m, 'a> {
+impl<'m, 'a> CPrinter<'m, 'a> {
     pub fn new(module: &'m Module<'a>) -> Self {
         Self {
             module,
@@ -59,10 +59,8 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
     }
 
     fn walk_expression(&mut self, expr: binaryen_ir::ExprRef<'a>) {
-        use binaryen_ir::annotation::Annotation;
-
         // Skip if marked as inlined (as a statement)
-        if matches!(self.module.get_annotation(expr), Some(Annotation::Inlined)) {
+        if self.module.annotations.is_inlined(expr) {
             return;
         }
 
@@ -71,17 +69,13 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
         match &expr.kind {
             binaryen_ir::ExpressionKind::Block { name, list, .. } => {
                 let mut is_if = false;
-                if let Some(Annotation::If {
-                    condition,
-                    inverted,
-                }) = self.module.get_annotation(expr)
-                {
+                if let Some((condition, inverted)) = self.module.annotations.get_if_info(expr) {
                     is_if = true;
                     self.output.push_str("if (");
-                    if *inverted {
+                    if inverted {
                         self.output.push_str("!");
                     }
-                    self.walk_inline_expression(*condition);
+                    self.walk_inline_expression(condition);
                     self.output.push_str(") ");
                 } else if let Some(n) = name {
                     self.output.push_str(&format!("{}: ", n));
@@ -122,18 +116,11 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
             }
             binaryen_ir::ExpressionKind::Loop { name, body } => {
                 let mut loop_keyword = "loop";
-                if let Some(ann) = self.module.get_annotation(expr) {
-                    if matches!(
-                        ann,
-                        Annotation::Loop(binaryen_ir::annotation::LoopType::DoWhile)
-                    ) {
-                        loop_keyword = "do-while";
-                    } else if matches!(
-                        ann,
-                        Annotation::Loop(binaryen_ir::annotation::LoopType::While)
-                    ) {
-                        loop_keyword = "while";
-                    }
+                use binaryen_ir::annotation::LoopType;
+                match self.module.annotations.get_loop_type(expr) {
+                    Some(LoopType::DoWhile) => loop_keyword = "do-while",
+                    Some(LoopType::While) => loop_keyword = "while",
+                    _ => {}
                 }
                 self.output
                     .push_str(&format!("{} {} ", loop_keyword, name.unwrap_or("unnamed")));
@@ -149,12 +136,11 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
     }
 
     fn walk_inline_expression(&mut self, expr: binaryen_ir::ExprRef<'a>) {
-        use binaryen_ir::annotation::Annotation;
         use binaryen_ir::ExpressionKind;
 
         // Check for inlined value
-        if let Some(Annotation::InlinedValue(val)) = self.module.get_annotation(expr) {
-            self.walk_inline_expression(*val);
+        if let Some(val) = self.module.annotations.get_inlined_value(expr) {
+            self.walk_inline_expression(val);
             return;
         }
 
@@ -216,8 +202,8 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
                 self.output.push_str(&s);
             }
             ExpressionKind::Load { ptr, .. } => {
-                if let Some(Annotation::Type(binaryen_ir::annotation::HighLevelType::Pointer)) =
-                    self.module.get_annotation(*ptr)
+                use binaryen_ir::annotation::HighLevelType;
+                if self.module.annotations.get_high_level_type(*ptr) == Some(HighLevelType::Pointer)
                 {
                     self.output.push_str("*(");
                 } else {

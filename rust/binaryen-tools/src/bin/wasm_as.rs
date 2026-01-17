@@ -8,11 +8,7 @@ use std::path::PathBuf;
 fn main() -> anyhow::Result<()> {
     let cmd = Command::new("wasm-as")
         .about("Assembles WebAssembly text (.wat) into binary (.wasm)")
-        .arg(
-            Arg::new("input")
-                .help("Input .wat file")
-                .required(true),
-        )
+        .arg(Arg::new("input").help("Input .wat file").required(true))
         .arg(
             Arg::new("output")
                 .short('o')
@@ -43,8 +39,14 @@ fn main() -> anyhow::Result<()> {
     let (cmd, feature_flag_ids) = add_feature_flags(cmd);
     let matches = cmd.get_matches();
 
-    let input_path: PathBuf = matches.get_one::<String>("input").map(PathBuf::from).unwrap();
-    let output_path: PathBuf = matches.get_one::<String>("output").map(PathBuf::from).unwrap();
+    let input_path: PathBuf = matches
+        .get_one::<String>("input")
+        .map(PathBuf::from)
+        .unwrap();
+    let output_path: PathBuf = matches
+        .get_one::<String>("output")
+        .map(PathBuf::from)
+        .unwrap();
     let validate = !matches.get_flag("no-validate");
 
     let allocator = bumpalo::Bump::new();

@@ -1,5 +1,5 @@
 use binaryen_core::{Literal, Type};
-use binaryen_decompile::Decompiler;
+use binaryen_decompile::{CPrinter, Lifter};
 use binaryen_ir::{Annotation, BinaryOp, HighLevelType, IrBuilder, LoopType, Module};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
@@ -19,27 +19,21 @@ fn test_boolean_lifting() {
         binaryen_ir::Function::new("test".to_string(), Type::NONE, Type::I32, vec![], Some(eq));
     module.functions.push(func);
 
-    // Use a scope to manage the mutable borrow of 'module' by 'decompiler'
-    {
-        let mut decompiler = Decompiler::new(&mut module);
+    // 1. Run the lifter
+    let mut lifter = Lifter::new();
+    lifter.run(&mut module);
 
-        // Lift booleans
-        decompiler.lift();
+    // Should have a Bool annotation now
+    let ann = module.get_annotation(eq).expect("Should have annotation");
+    assert_eq!(*ann, Annotation::Type(HighLevelType::Bool));
 
-        // Should have a Bool annotation now
-        let ann = decompiler
-            .module
-            .get_annotation(eq)
-            .expect("Should have annotation");
-        assert_eq!(*ann, Annotation::Type(HighLevelType::Bool));
+    // 2. Decompile
+    let mut printer = CPrinter::new(&module);
+    let output = printer.print();
+    println!("Output:\n{}", output);
 
-        // Decompile
-        let output = decompiler.decompile();
-        println!("Output:\n{}", output);
-
-        // Should contain the relational op in a high-level way
-        assert!(output.contains(" == "));
-    }
+    // Should contain the relational op in a high-level way
+    assert!(output.contains(" == "));
 }
 
 #[test]
@@ -69,16 +63,16 @@ fn test_loop_lifting_do_while() {
     module.functions.push(func);
 
     {
-        let mut decompiler = Decompiler::new(&mut module);
-        decompiler.lift();
+        let mut lifter = Lifter::new();
+        lifter.run(&mut module);
 
-        let ann = decompiler
-            .module
+        let ann = module
             .get_annotation(loop_expr)
             .expect("Should have annotation");
         assert_eq!(*ann, Annotation::Loop(LoopType::DoWhile));
 
-        let output = decompiler.decompile();
+        let mut printer = CPrinter::new(&module);
+        let output = printer.print();
         println!("Output:\n{}", output);
         assert!(output.contains("do-while L"));
     }
@@ -99,16 +93,16 @@ fn test_pointer_lifting() {
     module.functions.push(func);
 
     {
-        let mut decompiler = Decompiler::new(&mut module);
-        decompiler.lift();
+        let mut lifter = Lifter::new();
+        lifter.run(&mut module);
 
-        let ann = decompiler
-            .module
+        let ann = module
             .get_annotation(ptr_expr)
             .expect("Should have annotation");
         assert_eq!(*ann, Annotation::Type(HighLevelType::Pointer));
 
-        let output = decompiler.decompile();
+        let mut printer = CPrinter::new(&module);
+        let output = printer.print();
         println!("Output:\n{}", output);
         // Pointer lifting should turn Load(p0) into *(p0)
         assert!(output.contains("*(p0)"));
@@ -147,10 +141,11 @@ fn test_expression_recombination() {
     module.functions.push(func);
 
     {
-        let mut decompiler = Decompiler::new(&mut module);
-        decompiler.lift();
+        let mut lifter = Lifter::new();
+        lifter.run(&mut module);
 
-        let output = decompiler.decompile();
+        let mut printer = CPrinter::new(&module);
+        let output = printer.print();
         println!("Output:\n{}", output);
 
         // Should NOT contain 'p1 = ...'

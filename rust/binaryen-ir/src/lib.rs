@@ -79,7 +79,7 @@ mod tests {
             exports: Vec::new(),
             elements: Vec::new(),
             data: Vec::new(),
-            annotations: std::collections::HashMap::new(),
+            annotations: AnnotationStore::new(),
         };
 
         let validator = Validator::new(&module);
@@ -140,7 +140,7 @@ mod tests {
                 elements: Vec::new(),
                 exports: vec![],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
 
             let validator = Validator::new(&module);
@@ -176,7 +176,7 @@ mod tests {
                 elements: Vec::new(),
                 exports: vec![],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
 
             let validator = Validator::new(&module);
@@ -213,7 +213,7 @@ mod tests {
                 elements: Vec::new(),
                 exports: vec![],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
 
             let validator = Validator::new(&module);
@@ -390,7 +390,7 @@ mod tests {
                     },
                 ],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
 
             let validator = Validator::new(&module);
@@ -425,7 +425,7 @@ mod tests {
                     },
                 ],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -454,7 +454,7 @@ mod tests {
                     index: 1,
                 }],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -484,7 +484,7 @@ mod tests {
                     index: 0,
                 }],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -514,7 +514,7 @@ mod tests {
                     index: 0,
                 }],
                 data: Vec::new(),
-                annotations: std::collections::HashMap::new(),
+                annotations: AnnotationStore::new(),
             };
             let validator = Validator::new(&module);
             let (valid, errors) = validator.validate();
@@ -576,7 +576,7 @@ mod tests {
                 },
             ],
             data: Vec::new(),
-            annotations: std::collections::HashMap::new(),
+            annotations: AnnotationStore::new(),
         };
 
         // Write

@@ -1,32 +1,11 @@
+pub mod c_printer;
 pub mod lifter;
 pub mod passes;
-pub mod printer;
+pub mod rust_printer;
 
+pub use c_printer::CPrinter;
 pub use lifter::Lifter;
-pub use printer::DecompilerPrinter;
-
-/// High-level entry point for decompilation.
-pub struct Decompiler<'a> {
-    pub module: &'a mut binaryen_ir::Module<'a>,
-}
-
-impl<'a> Decompiler<'a> {
-    pub fn new(module: &'a mut binaryen_ir::Module<'a>) -> Self {
-        Self { module }
-    }
-
-    /// Run the lifting passes to identify high-level constructs.
-    pub fn lift(&mut self) {
-        let mut lifter = Lifter::new();
-        lifter.run(self.module);
-    }
-
-    /// Print the decompiled code.
-    pub fn decompile(&self) -> String {
-        let mut printer = DecompilerPrinter::new(self.module);
-        printer.print()
-    }
-}
+pub use rust_printer::RustPrinter;
 
 #[cfg(test)]
 mod tests {
@@ -74,9 +53,13 @@ mod tests {
             Some(block),
         ));
 
-        let mut decompiler = Decompiler::new(&mut module);
-        decompiler.lift();
-        let code = decompiler.decompile();
+        // 1. Run the lifter
+        let mut lifter = Lifter::new();
+        lifter.run(&mut module);
+
+        // 2. Print using a specific printer
+        let mut printer = CPrinter::new(&module);
+        let code = printer.print();
 
         println!("{}", code);
         assert!(code.contains("if (!"));
