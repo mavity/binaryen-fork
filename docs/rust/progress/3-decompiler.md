@@ -8,10 +8,10 @@ To move from a partial port to a functional decompiler, focus on these three lay
 
 ### 1. The "Lifting" Layer (High Priority)
 
-This layer translates Binaryen's S-expression-like IR into a C-style Abstract Syntax Tree (AST).
+This layer augments Binaryen's S-expression-like IR with semantic annotations.
 
-* **Expression Reconstruction**: Map Binaryen's tree nodes (e.g., `Binary`, `Unary`, `Load`) into a C-style expression format.
-* **Structured Control Flow**: Convert `Block` and `Loop` nodes into `if/else`, `while`, and `for` blocks. Since Binaryen IR already enforces structure, you don't need complex graph analysis.
+* **Expression Reconstruction**: Tag Binaryen's tree nodes (e.g., `Binary`, `Unary`, `Load`) with high-level semantic hints.
+* **Structured Control Flow**: Identify `Block` and `Loop` nodes that function as `if/else`, `while`, and `for` blocks. Since Binaryen IR already enforces structure, you don't need complex graph analysis.
 * **Local Coalescing**: Implement a pass that merges multiple WebAssembly locals into a single logical "high-level" variable. Use Binaryen’s existing `CoalesceLocals` and `SimplifyLocals` passes as your baseline.
 
 ### 2. The Type Inference Engine (Medium Priority)
@@ -23,7 +23,7 @@ Wasm only has four basic types. A "functional" decompiler must infer more:
 
 ### 3. The Backend Printer (Low Priority)
 
-This is the final stage that takes your internal C-style AST and emits text.
+This is the final stage that takes the annotated IR and emits text.
 
 * **Target Rust vs. C**: For Rust output, this printer must handle specific syntax like `mut` declarations and `loop` blocks instead of `while`.
 
@@ -70,7 +70,7 @@ Instead of just printing the IR, you should implement a series of **Decompiler-S
 | Pass Name | Goal | Pattern to Extract |
 | --- | --- | --- |
 | **`IdentifyIdiomaticLoops`** | Readability | Convert `loop` + `br_if` patterns back into `while` or `for` loops. Standard Binaryen often leaves these as raw branch-to-top structures. |
-| **`StructRecovery`** | Semantic | Detect sequences of `i32.load` with increasing offsets from the same base pointer. Replace them with a single `struct` access in the decompiler's AST. |
+| **`StructRecovery`** | Semantic | Detect sequences of `i32.load` with increasing offsets from the same base pointer. Tag them for lifting into a logical `struct` access during printing. |
 | **`VariableNamingHeuristics`** | Fluency | Use heuristics to rename `local_0` based on its usage. (e.g., if used in `i32.add` with `1` in a loop, name it `i` or `counter`). |
 | **`BooleanRecovery`** | Type Lifting | Find `i32` values that are only ever compared to `0` or `1` and cast them to `bool` in the output code. |
 
@@ -80,9 +80,9 @@ To ensure this is both a library and a tool, structure your Rust crates to separ
 
 * **`binaryen-core` (Crate 1)**: Your current port (IR, Binary Parser).
 * **`binaryen-decompiler` (Crate 2)**:
-* **The Decompiler AST**: A simpler, higher-level tree than Binaryen IR that supports "Sugar" (like `for` loops and `struct` definitions).
-* **The Transpiler**: A set of passes that transform `binaryen-core::Module` into `DecompilerAST`.
-* **The Printer**: Logic to turn the `DecompilerAST` into Rust or C strings.
+* **The Annotation Store**: A side-table mechanism to attach semantic metadata (like `ForLoop` or `BoolType`) to existing IR nodes.
+* **The Transpiler**: A set of passes that enrich `binaryen-core::Module` with semantic annotations.
+* **The Printer**: Logic to turn the annotated `Module` into Rust or C strings.
 
 
 
