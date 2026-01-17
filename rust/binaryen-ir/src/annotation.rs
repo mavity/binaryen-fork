@@ -2,10 +2,12 @@ use crate::expression::ExprRef;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Annotation {
+pub enum Annotation<'a> {
     Loop(LoopType),
     Type(HighLevelType),
     Variable(VariableRole),
+    Inlined,                   // Tag for local.set that should be omitted
+    InlinedValue(ExprRef<'a>), // Tag for local.get that should be replaced by this expression
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,4 +29,4 @@ pub enum VariableRole {
     BasePointer,
 }
 
-pub type AnnotationStore<'a> = HashMap<ExprRef<'a>, Annotation>;
+pub type AnnotationStore<'a> = HashMap<ExprRef<'a>, Annotation<'a>>;

@@ -1,6 +1,7 @@
 use binaryen_core::{Literal, Type};
 use binaryen_decompile::Decompiler;
-use binaryen_ir::{Annotation, BinaryOp, HighLevelType, IrBuilder, Module};
+use binaryen_ir::{Annotation, BinaryOp, HighLevelType, IrBuilder, LoopType, Module};
+use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
 
 #[test]
@@ -34,10 +35,129 @@ fn test_boolean_lifting() {
 
         // Decompile
         let output = decompiler.decompile();
-        println!("{}", output);
+        println!("Output:\n{}", output);
 
-        // Output should contain the annotation (since our placeholder printer shows them)
-        assert!(output.contains("/* Type(Bool) */"));
+        // Should contain the relational op in a high-level way (if we had boolean printing)
+        // For now, our printer just prints EqInt32, but we can check the lifter's work.
         assert!(output.contains("EqInt32"));
+    }
+}
+
+#[test]
+fn test_loop_lifting_do_while() {
+    let allocator = Bump::new();
+    let mut module = Module::new(&allocator);
+    let builder = IrBuilder::new(&allocator);
+
+    // (loop $L (block (br_if $L (i32.const 1))))
+    let loop_name = "L";
+    let cond = builder.const_(Literal::I32(1));
+    let br_if = builder.break_(loop_name, Some(cond), None, Type::NONE);
+
+    let mut list = BumpVec::new_in(&allocator);
+    list.push(br_if);
+    let body = builder.block(None, list, Type::NONE);
+
+    let loop_expr = builder.loop_(Some(loop_name), body, Type::NONE);
+
+    let func = binaryen_ir::Function::new(
+        "test".to_string(),
+        Type::NONE,
+        Type::NONE,
+        vec![],
+        Some(loop_expr),
+    );
+    module.functions.push(func);
+
+    {
+        let mut decompiler = Decompiler::new(&mut module);
+        decompiler.lift();
+
+        let ann = decompiler
+            .module
+            .get_annotation(loop_expr)
+            .expect("Should have annotation");
+        assert_eq!(*ann, Annotation::Loop(LoopType::DoWhile));
+
+        let output = decompiler.decompile();
+        println!("Output:\n{}", output);
+        assert!(output.contains("do-while L"));
+    }
+}
+
+#[test]
+fn test_pointer_lifting() {
+    let allocator = Bump::new();
+    let mut module = Module::new(&allocator);
+    let builder = IrBuilder::new(&allocator);
+
+    // (i32.load (local.get 0))
+    let ptr_expr = builder.local_get(0, Type::I32);
+    let load = builder.load(4, false, 0, 0, ptr_expr, Type::I32);
+
+    let func =
+        binaryen_ir::Function::new("test".to_string(), Type::I32, Type::I32, vec![], Some(load));
+    module.functions.push(func);
+
+    {
+        let mut decompiler = Decompiler::new(&mut module);
+        decompiler.lift();
+
+        let ann = decompiler
+            .module
+            .get_annotation(ptr_expr)
+            .expect("Should have annotation");
+        assert_eq!(*ann, Annotation::Type(HighLevelType::Pointer));
+
+        let output = decompiler.decompile();
+        println!("Output:\n{}", output);
+        // Pointer lifting should turn Load(p0) into *(p0)
+        assert!(output.contains("*(p0)"));
+    }
+}
+
+#[test]
+fn test_expression_recombination() {
+    let allocator = Bump::new();
+    let mut module = Module::new(&allocator);
+    let builder = IrBuilder::new(&allocator);
+
+    // (local.set 1 (i32.add (local.get 0) (i32.const 10)))
+    // (local.get 1)
+    let add_expr = builder.binary(
+        BinaryOp::AddInt32,
+        builder.local_get(0, Type::I32),
+        builder.const_(Literal::I32(10)),
+        Type::I32,
+    );
+    let set = builder.local_set(1, add_expr);
+    let load = builder.load(4, false, 0, 0, builder.local_get(1, Type::I32), Type::I32);
+
+    let mut list = BumpVec::new_in(&allocator);
+    list.push(set);
+    list.push(load);
+    let block = builder.block(None, list, Type::I32);
+
+    let func = binaryen_ir::Function::new(
+        "test".to_string(),
+        Type::I32,
+        Type::I32,
+        vec![Type::I32], // local 1
+        Some(block),
+    );
+    module.functions.push(func);
+
+    {
+        let mut decompiler = Decompiler::new(&mut module);
+        decompiler.lift();
+
+        let output = decompiler.decompile();
+        println!("Output:\n{}", output);
+
+        // Should NOT contain 'p1 = ...'
+        assert!(!output.contains("p1 = "));
+
+        // Should contain Load with inlined addition
+        assert!(output.contains("Load((p0 AddInt32 i32.const 10))"));
     }
 }

@@ -1,4 +1,4 @@
-use crate::passes::IdentifyBooleans;
+use crate::passes::{ExpressionRecombination, IdentifyBooleans, IdentifyLoops, IdentifyPointers};
 use binaryen_ir::Module;
 
 /// The Lifter is responsible for running passes that "lift" low-level WASM IR
@@ -11,12 +11,17 @@ impl Lifter {
     }
 
     pub fn run<'a>(&mut self, module: &mut Module<'a>) {
-        // Run boolean identification
-        let mut id_bools = IdentifyBooleans::new();
-        id_bools.run(module);
+        // 1. Identify types first
+        IdentifyPointers::new().run(module);
+        IdentifyBooleans::new().run(module);
+
+        // 2. Identify control flow structures
+        IdentifyLoops::new().run(module);
+
+        // 3. Recombine expressions (inlining single-use locals)
+        ExpressionRecombination::run(module);
 
         // TODO: Register and run other lifting passes here.
-        // 2. Loop structure identification (for/while/do)
         // 3. Variable role identification (induction variables, etc.)
         // 4. Condition lifting
     }

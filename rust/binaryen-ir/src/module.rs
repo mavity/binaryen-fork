@@ -224,11 +224,15 @@ impl<'a> Module<'a> {
         type_idx
     }
 
-    pub fn set_annotation(&mut self, expr: ExprRef<'a>, annotation: crate::annotation::Annotation) {
+    pub fn set_annotation(
+        &mut self,
+        expr: ExprRef<'a>,
+        annotation: crate::annotation::Annotation<'a>,
+    ) {
         self.annotations.insert(expr, annotation);
     }
 
-    pub fn get_annotation(&self, expr: ExprRef<'a>) -> Option<&crate::annotation::Annotation> {
+    pub fn get_annotation(&self, expr: ExprRef<'a>) -> Option<&crate::annotation::Annotation<'a>> {
         self.annotations.get(&expr)
     }
 

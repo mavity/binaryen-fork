@@ -398,9 +398,9 @@ mod tests {
     fn test_ffi_ahash() {
         unsafe {
             let s = CString::new("hello").unwrap();
-            let out = BinaryenAhashBytes(s.as_ptr(), 5);
+            let out = BinaryenAhashBytes(s.as_ptr() as *const u8, 5);
             assert_ne!(out, 0);
-            let out2 = BinaryenAhashBytes(s.as_ptr(), 5);
+            let out2 = BinaryenAhashBytes(s.as_ptr() as *const u8, 5);
             assert_eq!(out, out2);
         }
     }
