@@ -4,12 +4,12 @@ use binaryen_ir::binary_writer::BinaryWriter;
 use binaryen_ir::module::Module;
 use binaryen_ir::pass::{OptimizationOptions, PassRunner, PASS_REGISTRY};
 use binaryen_ir::validation::Validator;
-use binaryen_ir::wasm_features::FeatureSet;
+use binaryen_tools::{add_feature_flags, apply_feature_flags, read_input, write_output};
 use clap::{Arg, ArgAction, Command};
 use std::path::PathBuf;
 
 fn main() -> anyhow::Result<()> {
-    let mut cmd = Command::new("wasm-opt")
+    let cmd = Command::new("wasm-opt")
         .about("Optimizes WebAssembly files")
         .arg(
             Arg::new("input")
@@ -76,29 +76,54 @@ fn main() -> anyhow::Result<()> {
                 .long("all-features")
                 .action(ArgAction::SetTrue)
                 .help("Enable all features"),
+        )
+        .arg(
+            Arg::new("fast-math")
+                .long("fast-math")
+                .action(ArgAction::SetTrue)
+                .help("Enable fast math optimizations"),
+        )
+        .arg(
+            Arg::new("closed-world")
+                .long("closed-world")
+                .action(ArgAction::SetTrue)
+                .help("Assume closed world (no external calls/imports can see internals)"),
+        )
+        .arg(
+            Arg::new("traps-never-happen")
+                .long("traps-never-happen")
+                .action(ArgAction::SetTrue)
+                .help("Assume traps never happen at runtime"),
+        )
+        .arg(
+            Arg::new("low-memory-unused")
+                .long("low-memory-unused")
+                .action(ArgAction::SetTrue)
+                .help("Assume low memory is unused"),
+        )
+        .arg(
+            Arg::new("zero-filled-memory")
+                .long("zero-filled-memory")
+                .action(ArgAction::SetTrue)
+                .help("Assume memory is zero-filled"),
+        )
+        .arg(
+            Arg::new("emit-text")
+                .short('S')
+                .long("emit-text")
+                .action(ArgAction::SetTrue)
+                .help("Output text format (.wat)"),
+        )
+        .arg(
+            Arg::new("print")
+                .short('p')
+                .long("print")
+                .action(ArgAction::SetTrue)
+                .help("Print the module to stdout"),
         );
 
     // Register all feature flags
-    let mut feature_flag_ids = Vec::new();
-    for feature in FeatureSet::iter_all() {
-        let name = FeatureSet::to_string(feature);
-        let enable_name: &'static str = Box::leak(format!("enable-{}", name).into_boxed_str());
-        let disable_name: &'static str = Box::leak(format!("disable-{}", name).into_boxed_str());
-        feature_flag_ids.push((feature, enable_name, disable_name));
-
-        cmd = cmd.arg(
-            Arg::new(enable_name)
-                .long(enable_name)
-                .action(ArgAction::SetTrue)
-                .help(format!("Enable {} feature", name)),
-        );
-        cmd = cmd.arg(
-            Arg::new(disable_name)
-                .long(disable_name)
-                .action(ArgAction::SetTrue)
-                .help(format!("Disable {} feature", name)),
-        );
-    }
+    let (mut cmd, feature_flag_ids) = add_feature_flags(cmd);
 
     // Register all passes as long flags using registry descriptions
     for info in PASS_REGISTRY {
@@ -166,7 +191,7 @@ fn main() -> anyhow::Result<()> {
     for (_, action) in actions {
         match action {
             Action::Opt(level) => {
-                let opt = match level.as_str() {
+                let mut opt = match level.as_str() {
                     "0" => OptimizationOptions::o0(),
                     "1" => OptimizationOptions::o1(),
                     "2" => OptimizationOptions::o2(),
@@ -176,6 +201,15 @@ fn main() -> anyhow::Result<()> {
                     "z" => OptimizationOptions::oz(),
                     _ => anyhow::bail!("Unknown optimization level: {}", level),
                 };
+
+                // Apply global flags to this preset
+                opt.fast_math = matches.get_flag("fast-math");
+                opt.closed_world = matches.get_flag("closed-world");
+                opt.traps_never_happen = matches.get_flag("traps-never-happen");
+                opt.low_memory_unused = matches.get_flag("low-memory-unused");
+                opt.zero_filled_memory = matches.get_flag("zero-filled-memory");
+                opt.debug_info = matches.get_flag("debuginfo");
+
                 runner.add_default_optimization_passes(&opt);
             }
             Action::Pass(name) => {
@@ -187,8 +221,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let allocator = bumpalo::Bump::new();
-    let data = std::fs::read(&input_path)
-        .with_context(|| format!("Failed to read input file: {:?}", input_path))?;
+    let data = read_input(&input_path)?;
 
     let mut module = if data.starts_with(b"\0asm") {
         let mut reader = BinaryReader::new(&allocator, data);
@@ -201,18 +234,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     // Apply features from flags
-    if matches.get_flag("all-features") {
-        module.features = FeatureSet::ALL;
-    }
-
-    for (feature, enable_id, disable_id) in feature_flag_ids {
-        if matches.get_flag(enable_id) {
-            module.features.enable(feature);
-        }
-        if matches.get_flag(disable_id) {
-            module.features.disable(feature);
-        }
-    }
+    apply_feature_flags(&mut module.features, &matches, &feature_flag_ids);
 
     if debug_mode {
         println!("Running passes...");
@@ -227,12 +249,26 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    if matches.get_flag("print") {
+        let wat = module
+            .to_wat()
+            .map_err(|e| anyhow!("WAT generation failed: {}", e))?;
+        println!("{}", wat);
+    }
+
     if let Some(path) = output_path {
-        let mut writer = BinaryWriter::new();
-        let bytes = writer
-            .write_module(&module)
-            .map_err(|e| anyhow!("Write error: {:?}", e))?;
-        std::fs::write(path, bytes).context("Failed to write output file")?;
+        if matches.get_flag("emit-text") {
+            let wat = module
+                .to_wat()
+                .map_err(|e| anyhow!("WAT generation failed: {}", e))?;
+            write_output(&path, wat.as_bytes())?;
+        } else {
+            let mut writer = BinaryWriter::new();
+            let bytes = writer
+                .write_module(&module)
+                .map_err(|e| anyhow!("Write error: {:?}", e))?;
+            write_output(&path, &bytes)?;
+        }
     }
 
     Ok(())

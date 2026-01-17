@@ -5,6 +5,9 @@ edition = "2021"
 authors = ["Binaryen Maintainers"]
 description = "CLI tools for Binaryen"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 binaryen-ir = { path = "../binaryen-ir" }
 binaryen-core = { path = "../binaryen-core" }
