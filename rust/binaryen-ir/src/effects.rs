@@ -555,6 +555,9 @@ impl EffectAnalyzer {
             ExpressionKind::Pop { .. } => Effect::NONE,
             ExpressionKind::I31New { value } => Self::analyze(*value),
             ExpressionKind::I31Get { i31, .. } => Self::analyze(*i31),
+            ExpressionKind::RefTest { value, .. }
+            | ExpressionKind::RefCast { value, .. }
+            | ExpressionKind::BrOn { value, .. } => Self::analyze(*value),
         }
     }
 

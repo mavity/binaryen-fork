@@ -350,6 +350,22 @@ pub enum ExpressionKind<'a> {
     Rethrow {
         target: &'a str,
     },
+    RefTest {
+        op: crate::ops::RefTestOp,
+        value: ExprRef<'a>,
+        type_: binaryen_core::Type,
+    },
+    RefCast {
+        op: crate::ops::RefCastOp,
+        value: ExprRef<'a>,
+        type_: binaryen_core::Type,
+    },
+    BrOn {
+        name: &'a str,
+        op: crate::ops::BrOnOp,
+        value: ExprRef<'a>,
+        type_: binaryen_core::Type,
+    },
 }
 
 impl<'a> ExpressionKind<'a> {
@@ -367,6 +383,9 @@ impl<'a> ExpressionKind<'a> {
             | ExpressionKind::MemoryGrow { delta: value }
             | ExpressionKind::RefIsNull { value }
             | ExpressionKind::RefAs { value, .. }
+            | ExpressionKind::RefTest { value, .. }
+            | ExpressionKind::RefCast { value, .. }
+            | ExpressionKind::BrOn { value, .. }
             | ExpressionKind::I31New { value }
             | ExpressionKind::I31Get { i31: value, .. }
             | ExpressionKind::TupleExtract { tuple: value, .. }
@@ -1709,6 +1728,27 @@ impl<'a> IrBuilder<'a> {
             ExpressionKind::I31Get { i31, signed } => ExpressionKind::I31Get {
                 i31: self.deep_clone(*i31),
                 signed: *signed,
+            },
+            ExpressionKind::RefTest { op, value, type_ } => ExpressionKind::RefTest {
+                op: *op,
+                value: self.deep_clone(*value),
+                type_: *type_,
+            },
+            ExpressionKind::RefCast { op, value, type_ } => ExpressionKind::RefCast {
+                op: *op,
+                value: self.deep_clone(*value),
+                type_: *type_,
+            },
+            ExpressionKind::BrOn {
+                name,
+                op,
+                value,
+                type_,
+            } => ExpressionKind::BrOn {
+                name,
+                op: *op,
+                value: self.deep_clone(*value),
+                type_: *type_,
             },
         };
 

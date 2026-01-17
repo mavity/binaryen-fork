@@ -284,9 +284,14 @@ pub trait Visitor<'a> {
             | ExpressionKind::RefFunc { .. }
             | ExpressionKind::ElemDrop { .. }
             | ExpressionKind::Rethrow { .. }
-            | ExpressionKind::Pop { .. }
-            | ExpressionKind::I31New { .. }
-            | ExpressionKind::I31Get { .. } => {}
+            | ExpressionKind::Pop { .. } => {}
+            ExpressionKind::RefTest { value, .. }
+            | ExpressionKind::RefCast { value, .. }
+            | ExpressionKind::BrOn { value, .. }
+            | ExpressionKind::I31New { value }
+            | ExpressionKind::I31Get { i31: value, .. } => {
+                self.visit(value);
+            }
         }
     }
 }
@@ -575,9 +580,14 @@ pub trait ReadOnlyVisitor<'a> {
             | ExpressionKind::RefFunc { .. }
             | ExpressionKind::ElemDrop { .. }
             | ExpressionKind::Rethrow { .. }
-            | ExpressionKind::Pop { .. }
-            | ExpressionKind::I31New { .. }
-            | ExpressionKind::I31Get { .. } => {}
+            | ExpressionKind::Pop { .. } => {}
+            ExpressionKind::RefTest { value, .. }
+            | ExpressionKind::RefCast { value, .. }
+            | ExpressionKind::BrOn { value, .. }
+            | ExpressionKind::I31New { value }
+            | ExpressionKind::I31Get { i31: value, .. } => {
+                self.visit(*value);
+            }
         }
     }
 }

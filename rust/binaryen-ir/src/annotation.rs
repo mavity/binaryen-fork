@@ -2,6 +2,13 @@ use crate::expression::ExprRef;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DebugLocation {
+    pub file_index: u32,
+    pub line: u32,
+    pub column: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Annotation<'a> {
     Loop(LoopType),
     Type(HighLevelType),
@@ -13,6 +20,7 @@ pub enum Annotation<'a> {
     },
     Inlined,                   // Tag for local.set that should be omitted
     InlinedValue(ExprRef<'a>), // Tag for local.get that should be replaced by this expression
+    Location(DebugLocation),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +51,7 @@ pub struct Annotations<'a> {
     pub if_info: Option<(ExprRef<'a>, bool)>,
     pub inlined: bool,
     pub inlined_value: Option<ExprRef<'a>>,
+    pub location: Option<DebugLocation>,
 }
 
 #[derive(Debug, Default)]
@@ -79,6 +88,25 @@ impl<'a> AnnotationStore<'a> {
             } => entry.if_info = Some((condition, inverted)),
             Annotation::Inlined => entry.inlined = true,
             Annotation::InlinedValue(val) => entry.inlined_value = Some(val),
+            Annotation::Location(loc) => entry.location = Some(loc),
+        }
+    }
+
+    pub fn set_location(&mut self, expr: ExprRef<'a>, location: DebugLocation) {
+        self.inner.entry(expr).or_default().location = Some(location);
+    }
+
+    pub fn get_location(&self, expr: ExprRef<'a>) -> Option<DebugLocation> {
+        self.inner.get(&expr).and_then(|a| a.location)
+    }
+
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    pub fn clear_locations(&mut self) {
+        for info in self.inner.values_mut() {
+            info.location = None;
         }
     }
 

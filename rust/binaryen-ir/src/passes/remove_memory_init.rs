@@ -9,18 +9,61 @@ impl Pass for RemoveMemoryInit {
     }
 
     fn run<'a>(&mut self, module: &mut Module<'a>) {
-        // Remove all data segments
+        let start_idx = module.start;
+
+        // 1. Remove all data segments
         module.data.clear();
 
-        // Remove start function
-        // Note: In C++ implementation it removes the function itself from the module.
-        // Here we just unset the start pointer.
-        // If we want to remove the function, we need its index/name.
-        // The start field is Option<u32> (function index).
-        // Removing the function would shift indices, which is complex.
-        // For now, just unsetting start is safe and achieves "disable start function".
-        // The function code remains but is not invoked as start.
+        // 2. Clear start function
         module.start = None;
+
+        // 3. Remove the start function itself if it exists
+        if let Some(idx) = start_idx {
+            // Check if it's exported
+            let is_exported = module.exports.iter().any(|e| {
+                e.kind == crate::module::ExportKind::Function && e.index == idx
+            });
+
+            if !is_exported {
+                // Remove function and remap
+                self.remove_function(module, idx);
+            }
+        }
+    }
+}
+
+impl RemoveMemoryInit {
+    fn remove_function(&self, module: &mut crate::module::Module, index: u32) {
+        if (index as usize) < module.functions.len() {
+            module.functions.remove(index as usize);
+
+            // Remap exports
+            for export in &mut module.exports {
+                if export.kind == crate::module::ExportKind::Function {
+                    if export.index > index {
+                        export.index -= 1;
+                    }
+                }
+            }
+
+            // Remap elements
+            for segment in &mut module.elements {
+                for func_idx in &mut segment.func_indices {
+                    if *func_idx > index {
+                        *func_idx -= 1;
+                    }
+                }
+            }
+
+            // Remap start (not needed here since we just set it to None, but for completeness)
+            if let Some(start) = &mut module.start {
+                if *start > index {
+                    *start -= 1;
+                } else if *start == index {
+                    module.start = None;
+                }
+            }
+        }
     }
 }
 
@@ -63,7 +106,7 @@ mod tests {
         assert!(module.data.is_empty(), "Data segments should be removed");
         assert!(module.start.is_none(), "Start function should be unset");
 
-        // Function should still exist (we only removed the start reference)
-        assert_eq!(module.functions.len(), 1);
+        // Function should be removed (since it's not exported)
+        assert_eq!(module.functions.len(), 0, "Non-exported start function should be removed");
     }
 }

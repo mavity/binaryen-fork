@@ -1,6 +1,6 @@
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
-use crate::ops::{BinaryOp, RefAsOp, UnaryOp};
+use crate::ops::{BinaryOp, RefAsOp, RefCastOp, UnaryOp};
 use crate::pass::Pass;
 use crate::visitor::Visitor;
 use binaryen_core::Literal;
@@ -54,9 +54,13 @@ fn are_expressions_equal(a: &ExprRef, b: &ExprRef) -> bool {
 }
 
 impl<'a> Visitor<'a> for SimplifyIdentity {
-    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
+    fn visit(&mut self, expr: &mut ExprRef<'a>) {
+        // Post-order: children first, then parent
         self.visit_children(expr);
+        self.visit_expression(expr);
+    }
 
+    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
         // Recursive identity pull-up
         match &mut expr.kind {
             ExpressionKind::Unary {
@@ -260,6 +264,16 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
             ExpressionKind::RefEq { left, right } => {
                 if are_expressions_equal(left, right) {
                     expr.kind = ExpressionKind::Const(Literal::I32(1));
+                }
+            }
+            ExpressionKind::RefCast { op, value, type_ } => {
+                if *op == RefCastOp::Cast && value.type_ == *type_ {
+                    // Constant-time identity: casting to the same type
+                    let kind = std::mem::replace(&mut expr.kind, ExpressionKind::Nop);
+                    if let ExpressionKind::RefCast { mut value, .. } = kind {
+                        expr.type_ = value.type_;
+                        expr.kind = std::mem::replace(&mut value.kind, ExpressionKind::Nop);
+                    }
                 }
             }
             _ => {}

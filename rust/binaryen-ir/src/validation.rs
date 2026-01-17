@@ -424,7 +424,10 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             | ExpressionKind::TupleExtract { .. }
             | ExpressionKind::Pop { .. }
             | ExpressionKind::I31New { .. }
-            | ExpressionKind::I31Get { .. } => {
+            | ExpressionKind::I31Get { .. }
+            | ExpressionKind::RefTest { .. }
+            | ExpressionKind::RefCast { .. }
+            | ExpressionKind::BrOn { .. } => {
                 // These expression kinds don't require special validation yet
             }
         }

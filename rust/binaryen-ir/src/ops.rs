@@ -319,3 +319,11 @@ pub enum RefCastOp {
     Cast,
     NotCast,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BrOnOp {
+    Null,
+    NonNull,
+    Cast,
+    NotCast,
+}
