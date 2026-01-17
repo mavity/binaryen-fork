@@ -283,7 +283,10 @@ pub trait Visitor<'a> {
             | ExpressionKind::RefNull { .. }
             | ExpressionKind::RefFunc { .. }
             | ExpressionKind::ElemDrop { .. }
-            | ExpressionKind::Rethrow { .. } => {}
+            | ExpressionKind::Rethrow { .. }
+            | ExpressionKind::Pop { .. }
+            | ExpressionKind::I31New { .. }
+            | ExpressionKind::I31Get { .. } => {}
         }
     }
 }
@@ -571,7 +574,10 @@ pub trait ReadOnlyVisitor<'a> {
             | ExpressionKind::RefNull { .. }
             | ExpressionKind::RefFunc { .. }
             | ExpressionKind::ElemDrop { .. }
-            | ExpressionKind::Rethrow { .. } => {}
+            | ExpressionKind::Rethrow { .. }
+            | ExpressionKind::Pop { .. }
+            | ExpressionKind::I31New { .. }
+            | ExpressionKind::I31Get { .. } => {}
         }
     }
 }

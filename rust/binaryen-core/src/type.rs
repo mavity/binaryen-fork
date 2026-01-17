@@ -77,7 +77,7 @@ impl Type {
     }
 
     /// Extract signature ID if this is an interned signature.
-    pub(crate) fn signature_id(self) -> Option<u32> {
+    pub fn signature_id(self) -> Option<u32> {
         if self.is_signature() {
             Some((self.0 & Self::ID_MASK) as u32)
         } else {
@@ -86,7 +86,7 @@ impl Type {
     }
 
     /// Create a Type handle from an interned signature ID.
-    pub(crate) fn from_signature_id(id: u32) -> Self {
+    pub fn from_signature_id(id: u32) -> Self {
         Type(Self::SIGNATURE_FLAG | (id as u64))
     }
 

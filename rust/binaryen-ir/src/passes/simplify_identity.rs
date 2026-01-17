@@ -42,8 +42,21 @@ fn is_all_ones(expr: &ExprRef) -> bool {
     )
 }
 
+fn are_expressions_equal(a: &ExprRef, b: &ExprRef) -> bool {
+    // Very basic equality check for constants
+    match (&a.kind, &b.kind) {
+        (ExpressionKind::Const(la), ExpressionKind::Const(lb)) => la == lb,
+        (ExpressionKind::LocalGet { index: ia }, ExpressionKind::LocalGet { index: ib }) => {
+            ia == ib
+        }
+        _ => false, // Fallback
+    }
+}
+
 impl<'a> Visitor<'a> for SimplifyIdentity {
     fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
+        self.visit_children(expr);
+
         // Optimization for EqZ(EqZ(EqZ(x))) -> EqZ(x)
         if let ExpressionKind::Unary { op: op1, value: v1 } = &mut expr.kind {
             if matches!(op1, UnaryOp::EqZInt32 | UnaryOp::EqZInt64) {
@@ -61,9 +74,11 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
 
         match &mut expr.kind {
             ExpressionKind::Binary { op, left, right } => {
+                #[derive(Clone, Copy, PartialEq, Eq)]
                 enum IdentitySide {
                     Left,
                     Right,
+                    Both, // For x op x
                     None,
                 }
 
@@ -83,8 +98,6 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
                         }
                     }
                     // x - 0 -> x
-                    // x << 0 -> x, x >> 0 -> x, x >>> 0 -> x
-                    // x rotl 0 -> x, x rotr 0 -> x
                     BinaryOp::SubInt32 | BinaryOp::SubInt64 |
                     BinaryOp::ShlInt32 | BinaryOp::ShlInt64 |
                     BinaryOp::ShrSInt32 | BinaryOp::ShrSInt64 |
@@ -98,7 +111,6 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
                         }
                     }
                     // x * 1 -> x, 1 * x -> x
-                    // x / 1 -> x
                     BinaryOp::MulInt32 | BinaryOp::MulInt64 |
                     BinaryOp::DivSInt32 | BinaryOp::DivSInt64 |
                     BinaryOp::DivUInt32 | BinaryOp::DivUInt64 => {
@@ -123,8 +135,29 @@ impl<'a> Visitor<'a> for SimplifyIdentity {
                     _ => IdentitySide::None,
                 };
 
+                // Add x op x checks
+                let side = if side == IdentitySide::None {
+                    if are_expressions_equal(left, right) {
+                        match op {
+                            BinaryOp::AndInt32
+                            | BinaryOp::AndInt64
+                            | BinaryOp::OrInt32
+                            | BinaryOp::OrInt64 => IdentitySide::Both,
+                            BinaryOp::XorInt32 | BinaryOp::XorInt64 => {
+                                expr.kind = ExpressionKind::Const(Literal::I32(0));
+                                return;
+                            }
+                            _ => IdentitySide::None,
+                        }
+                    } else {
+                        IdentitySide::None
+                    }
+                } else {
+                    side
+                };
+
                 match side {
-                    IdentitySide::Right => {
+                    IdentitySide::Right | IdentitySide::Both => {
                         let kind = std::mem::replace(&mut expr.kind, ExpressionKind::Nop);
                         if let ExpressionKind::Binary { mut left, .. } = kind {
                             expr.type_ = left.type_;

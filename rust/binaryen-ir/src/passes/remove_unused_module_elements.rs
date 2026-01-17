@@ -3,6 +3,7 @@ use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::{ExportKind, ImportKind, Module};
 use crate::pass::Pass;
 use crate::visitor::Visitor;
+use binaryen_core::Type;
 use std::collections::HashMap;
 
 pub struct RemoveUnusedModuleElements;
@@ -182,6 +183,7 @@ impl Pass for RemoveUnusedModuleElements {
             global_remap: &global_remap,
             data_remap: &data_remap,
             elem_remap: &elem_remap,
+            type_remap: &type_remap,
         };
 
         for func in &mut module.functions {
@@ -216,11 +218,15 @@ struct IndexUpdater<'a> {
     global_remap: &'a HashMap<u32, u32>,
     data_remap: &'a HashMap<u32, u32>,
     elem_remap: &'a HashMap<u32, u32>,
+    type_remap: &'a HashMap<u32, u32>,
 }
 
 impl<'a, 'b> Visitor<'b> for IndexUpdater<'a> {
     fn visit_expression(&mut self, expr: &mut ExprRef<'b>) {
         self.visit_children(expr);
+
+        // Update the expression's own type
+        self.remap_type(&mut expr.type_);
 
         match &mut expr.kind {
             ExpressionKind::GlobalGet { index } | ExpressionKind::GlobalSet { index, .. } => {
@@ -238,7 +244,20 @@ impl<'a, 'b> Visitor<'b> for IndexUpdater<'a> {
                     *segment = new_idx;
                 }
             }
+            ExpressionKind::CallIndirect { type_, .. } => {
+                self.remap_type(type_);
+            }
             _ => {}
+        }
+    }
+}
+
+impl<'a> IndexUpdater<'a> {
+    fn remap_type(&self, ty: &mut Type) {
+        if let Some(id) = ty.signature_id() {
+            if let Some(&new_id) = self.type_remap.get(&id) {
+                *ty = Type::from_signature_id(new_id);
+            }
         }
     }
 }

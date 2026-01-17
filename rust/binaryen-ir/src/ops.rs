@@ -190,7 +190,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
 pub enum AtomicOp {
     Add,
@@ -201,20 +201,96 @@ pub enum AtomicOp {
     Xchg,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
 pub enum SIMDOp {
     Splat,
-    ExtractLaneS,
-    ExtractLaneU,
-    ReplaceLane,
-    Add,
-    Sub,
-    Mul,
-    // Add more as needed for the 100s of variants
+    Extract,
+    Replace,
+    Shuffle,
+    Ternary,
+    Shift,
+    Load,
+    LoadStoreLane,
+    Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SIMDExtractOp {
+    ExtractLaneS8x16,
+    ExtractLaneU8x16,
+    ExtractLaneS16x8,
+    ExtractLaneU16x8,
+    ExtractLaneI32x4,
+    ExtractLaneI64x2,
+    ExtractLaneF32x4,
+    ExtractLaneF64x2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SIMDReplaceOp {
+    ReplaceLane8x16,
+    ReplaceLane16x8,
+    ReplaceLane32x4,
+    ReplaceLane64x2,
+    ReplaceLaneF32x4,
+    ReplaceLaneF64x2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SIMDTernaryOp {
+    Bitselect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SIMDShiftOp {
+    Shl8x16,
+    ShrS8x16,
+    ShrU8x16,
+    Shl16x8,
+    ShrS16x8,
+    ShrU16x8,
+    Shl32x4,
+    ShrS32x4,
+    ShrU32x4,
+    Shl64x2,
+    ShrS64x2,
+    ShrU64x2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SIMDLoadOp {
+    Load8x8S,
+    Load8x8U,
+    Load16x4S,
+    Load16x4U,
+    Load32x2S,
+    Load32x2U,
+    Load8Splat,
+    Load16Splat,
+    Load32Splat,
+    Load64Splat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SIMDLoadStoreLaneOp {
+    LoadLane8,
+    LoadLane16,
+    LoadLane32,
+    LoadLane64,
+    StoreLane8,
+    StoreLane16,
+    StoreLane32,
+    StoreLane64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
 pub enum MemoryOp {
     Init,
@@ -223,24 +299,22 @@ pub enum MemoryOp {
     Fill,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RefAsOp {
     Extern,
     Func,
     Any,
     NonNull,
+    I31,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RefTestOp {
     Ref,
     NotRef,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RefCastOp {
     Cast,
     NotCast,

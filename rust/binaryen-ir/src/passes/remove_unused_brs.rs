@@ -282,7 +282,7 @@ impl<'a> BrOptimizer<'a> {
                     let target = if idx_usize < names.len() {
                         names[idx_usize]
                     } else {
-                        *default
+                        default
                     };
                     expr.kind = ExpressionKind::Break {
                         name: target,

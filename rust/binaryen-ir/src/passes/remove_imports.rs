@@ -52,15 +52,70 @@ impl Pass for RemoveImports {
             }
         }
 
-        // 4. Remove imports that are not in indirect_names
-        module.imports.retain(|import| {
+        // 4. Remove imports that are not in indirect_names and build remapping
+        let mut func_remap = std::collections::HashMap::new();
+        let mut current_func_idx = 0;
+        let mut next_func_idx = 0;
+
+        let old_imports = std::mem::take(&mut module.imports);
+        for import in old_imports {
             if let ImportKind::Function(_, _) = import.kind {
-                if imported_functions.contains(&import.name) {
-                    return indirect_names.contains(&import.name);
+                let keep = if imported_functions.contains(&import.name) {
+                    indirect_names.contains(&import.name)
+                } else {
+                    true
+                };
+
+                if keep {
+                    func_remap.insert(current_func_idx, next_func_idx);
+                    next_func_idx += 1;
+                    module.imports.push(import);
                 }
+                current_func_idx += 1;
+            } else {
+                module.imports.push(import);
             }
-            true
+        }
+
+        // Add defined functions to the remap
+        for _ in 0..module.functions.len() {
+            func_remap.insert(current_func_idx, next_func_idx);
+            current_func_idx += 1;
+            next_func_idx += 1;
+        }
+
+        // 5. Update references that use indices (Elements, Exports, Start)
+        for segment in &mut module.elements {
+            segment.func_indices.retain_mut(|idx| {
+                if let Some(&new_idx) = func_remap.get(idx) {
+                    *idx = new_idx;
+                    true
+                } else {
+                    false
+                }
+            });
+        }
+
+        module.exports.retain_mut(|export| {
+            if export.kind == crate::module::ExportKind::Function {
+                if let Some(&new_idx) = func_remap.get(&export.index) {
+                    export.index = new_idx;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                true
+            }
         });
+
+        if let Some(start_idx) = module.start {
+            if let Some(&new_idx) = func_remap.get(&start_idx) {
+                module.start = Some(new_idx);
+            } else {
+                module.start = None;
+            }
+        }
     }
 }
 

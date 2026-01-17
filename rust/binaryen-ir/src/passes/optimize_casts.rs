@@ -1,4 +1,4 @@
-use crate::analysis::patterns::{Pattern, PatternMatcher};
+use crate::analysis::patterns::{Env, Pattern, PatternMatcher};
 use crate::expression::ExprRef;
 use crate::module::Module;
 use crate::ops::UnaryOp;
@@ -30,7 +30,7 @@ impl OptimizeCasts {
                 UnaryOp::WrapInt64,
                 Pattern::unary(UnaryOp::ExtendSInt32, Pattern::Var("x")),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // wrap(extend_u(x)) -> x
@@ -39,7 +39,7 @@ impl OptimizeCasts {
                 UnaryOp::WrapInt64,
                 Pattern::unary(UnaryOp::ExtendUInt32, Pattern::Var("x")),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
     }
 }

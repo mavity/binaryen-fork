@@ -63,7 +63,7 @@ impl Pattern {
                     // In many pattern matchers, repeated vars enforce equality.
                     // Let's implement reference equality check for now (safe/fast),
                     // but TODO: implement deep structural equality if needed.
-                    existing.as_ptr() == expr.as_ptr()
+                    (*existing).as_ptr() == expr.as_ptr()
                 } else {
                     env.insert(name, expr);
                     true

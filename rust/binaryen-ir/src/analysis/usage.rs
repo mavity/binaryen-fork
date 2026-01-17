@@ -183,8 +183,13 @@ impl<'a, 'b> ReadOnlyVisitor<'b> for UsageVisitor<'a> {
                 self.tracker.tables = true;
                 self.tracker.element_segments.insert(*segment);
             }
-            ExpressionKind::CallIndirect { .. }
-            | ExpressionKind::TableGet { .. }
+            ExpressionKind::CallIndirect { type_, .. } => {
+                self.tracker.tables = true;
+                if let Some(id) = type_.signature_id() {
+                    self.tracker.types.insert(id);
+                }
+            }
+            ExpressionKind::TableGet { .. }
             | ExpressionKind::TableSet { .. }
             | ExpressionKind::TableSize { .. }
             | ExpressionKind::TableGrow { .. }

@@ -552,6 +552,9 @@ impl EffectAnalyzer {
             ExpressionKind::TupleMake { operands } => Self::analyze_list(operands),
             ExpressionKind::TupleExtract { tuple, .. } => Self::analyze(*tuple),
             ExpressionKind::ElemDrop { .. } => Effect::NONE,
+            ExpressionKind::Pop { .. } => Effect::NONE,
+            ExpressionKind::I31New { value } => Self::analyze(*value),
+            ExpressionKind::I31Get { i31, .. } => Self::analyze(*i31),
         }
     }
 

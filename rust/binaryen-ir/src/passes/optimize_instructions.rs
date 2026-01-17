@@ -1,4 +1,4 @@
-use crate::analysis::patterns::{Pattern, PatternMatcher};
+use crate::analysis::patterns::{Env, Pattern, PatternMatcher};
 use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::Module;
 use crate::ops::BinaryOp;
@@ -36,7 +36,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.unary(UnaryOp::EqZInt32, *x, Type::I32))
@@ -50,7 +50,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I32(0)),
                 Pattern::Var("x"),
             ),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.unary(UnaryOp::EqZInt32, *x, Type::I32))
@@ -64,7 +64,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 let zero = builder.const_(Literal::I32(0));
@@ -79,7 +79,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.unary(UnaryOp::EqZInt32, *x, Type::I32))
@@ -97,7 +97,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // 0 + x -> x
@@ -107,7 +107,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I32(0)),
                 Pattern::Var("x"),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // --- MulInt32 ---
@@ -119,7 +119,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(1)),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // 1 * x -> x
@@ -129,7 +129,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I32(1)),
                 Pattern::Var("x"),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // --- SubInt32 ---
@@ -141,7 +141,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // --- AndInt32 ---
@@ -153,7 +153,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(-1)),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // -1 & x -> x
@@ -163,7 +163,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I32(-1)),
                 Pattern::Var("x"),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // --- OrInt32 ---
@@ -175,7 +175,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // 0 | x -> x
@@ -185,7 +185,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I32(0)),
                 Pattern::Var("x"),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // --- XorInt32 ---
@@ -197,7 +197,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
                 Pattern::Const(Literal::I32(0)),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
 
         // 0 ^ x -> x
@@ -207,7 +207,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I32(0)),
                 Pattern::Var("x"),
             ),
-            |env, _| env.get("x").copied(),
+            |env: &Env, _| env.get("x").copied(),
         );
     }
 
@@ -215,7 +215,7 @@ impl OptimizeInstructions {
         // x * 2^k -> x << k
         matcher.add_rule(
             Pattern::binary(BinaryOp::MulInt32, Pattern::Var("x"), Pattern::Var("c")),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let c = env.get("c")?;
                 if let ExpressionKind::Const(Literal::I32(val)) = c.kind {
@@ -237,7 +237,7 @@ impl OptimizeInstructions {
         // x / 2^k -> x >> k (Unsigned)
         matcher.add_rule(
             Pattern::binary(BinaryOp::DivUInt32, Pattern::Var("x"), Pattern::Var("c")),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let c = env.get("c")?;
                 if let ExpressionKind::Const(Literal::I32(val)) = c.kind {
@@ -255,7 +255,7 @@ impl OptimizeInstructions {
         // x % 2^k -> x & (2^k - 1) (Unsigned)
         matcher.add_rule(
             Pattern::binary(BinaryOp::RemUInt32, Pattern::Var("x"), Pattern::Var("c")),
-            |env, bump| {
+            |env: &Env, bump| {
                 let x = env.get("x")?;
                 let c = env.get("c")?;
                 if let ExpressionKind::Const(Literal::I32(val)) = c.kind {
