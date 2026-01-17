@@ -1,10 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use binaryen_ir::module::Module;
-use binaryen_ir::pass::{OptimizationOptions, PassRunner};
+use binaryen_ir::pass::PassRunner;
 use binaryen_tools::{add_feature_flags, apply_feature_flags, read_input_string};
 use clap::{Arg, Command};
 use std::path::PathBuf;
-use wast::core::ModuleKind;
 use wast::WastDirective;
 
 fn main() -> Result<()> {

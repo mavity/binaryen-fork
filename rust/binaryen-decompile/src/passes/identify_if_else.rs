@@ -10,7 +10,6 @@ impl IdentifyIfElse {
     }
 
     pub fn run<'a>(&self, module: &mut Module<'a>) {
-        use binaryen_ir::annotation::Annotations;
         let mut results = std::collections::HashMap::new();
 
         for func in module.functions.iter() {

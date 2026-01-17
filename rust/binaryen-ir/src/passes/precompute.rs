@@ -46,7 +46,7 @@ impl<'a> Visitor<'a> for PrecomputeVisitor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, Expression, ExpressionKind};
+    use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
     use crate::module::Function;
     use crate::ops::BinaryOp;
     use binaryen_core::{Literal, Type};
@@ -128,5 +128,26 @@ mod tests {
         pass.run(&mut module);
         let body = module.functions[0].body.as_ref().unwrap();
         assert!(matches!(body.kind, ExpressionKind::Const(Literal::I32(60))));
+    }
+
+    #[test]
+    fn test_precompute_i64() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // (i64.const 1) << (i64.const 33)
+        let c1 = builder.const_(Literal::I64(1));
+        let c33 = builder.const_(Literal::I64(33));
+        let shl = builder.binary(BinaryOp::ShlInt64, c1, c33, Type::I64);
+
+        let func = Function::new("test".to_string(), Type::NONE, Type::I64, vec![], Some(shl));
+
+        let mut module = Module::new(&bump);
+        module.add_function(func);
+        let mut pass = Precompute;
+        pass.run(&mut module);
+
+        let body = module.functions[0].body.as_ref().unwrap();
+        assert!(matches!(body.kind, ExpressionKind::Const(Literal::I64(v)) if v == (1i64 << 33)));
     }
 }

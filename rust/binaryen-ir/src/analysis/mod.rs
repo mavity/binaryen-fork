@@ -7,3 +7,4 @@ pub mod global_analysis;
 pub mod hasher;
 pub mod patterns;
 pub mod ssa;
+pub mod usage;

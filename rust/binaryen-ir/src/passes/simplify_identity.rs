@@ -1,6 +1,6 @@
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
-use crate::ops::BinaryOp;
+use crate::ops::{BinaryOp, RefAsOp, UnaryOp};
 use crate::pass::Pass;
 use crate::visitor::Visitor;
 use binaryen_core::Literal;
@@ -21,46 +21,137 @@ impl Pass for SimplifyIdentity {
     }
 }
 
+fn is_zero(expr: &ExprRef) -> bool {
+    matches!(
+        expr.kind,
+        ExpressionKind::Const(Literal::I32(0)) | ExpressionKind::Const(Literal::I64(0))
+    )
+}
+
+fn is_one(expr: &ExprRef) -> bool {
+    matches!(
+        expr.kind,
+        ExpressionKind::Const(Literal::I32(1)) | ExpressionKind::Const(Literal::I64(1))
+    )
+}
+
+fn is_all_ones(expr: &ExprRef) -> bool {
+    matches!(
+        expr.kind,
+        ExpressionKind::Const(Literal::I32(-1)) | ExpressionKind::Const(Literal::I64(-1))
+    )
+}
+
 impl<'a> Visitor<'a> for SimplifyIdentity {
     fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
-        // Optimization: x + 0 -> x
-        if let ExpressionKind::Binary {
-            op,
-            left: _left,
-            right,
-        } = &mut expr.kind
-        {
-            let is_identity = match op {
-                BinaryOp::AddInt32 | BinaryOp::SubInt32 => {
-                    matches!(right.kind, ExpressionKind::Const(Literal::I32(0)))
-                }
-                BinaryOp::AddInt64 | BinaryOp::SubInt64 => {
-                    matches!(right.kind, ExpressionKind::Const(Literal::I64(0)))
-                }
-                BinaryOp::MulInt32 => {
-                    matches!(right.kind, ExpressionKind::Const(Literal::I32(1)))
-                }
-                BinaryOp::MulInt64 => {
-                    matches!(right.kind, ExpressionKind::Const(Literal::I64(1)))
-                }
-                _ => false,
-            };
-
-            if is_identity {
-                // Perform the replacement: *expr = *left
-                // 1. Take ownership of the inner binary expression kind temporarily
-                let mut kind = std::mem::replace(&mut expr.kind, ExpressionKind::Nop);
-
-                // 2. Extract the left child
-                if let ExpressionKind::Binary { left, .. } = &mut kind {
-                    // 3. Move left's content into expr
-                    // We need to swap left.kind into expr.kind and left.type_ into expr.type_
-                    expr.type_ = left.type_;
-                    expr.kind = std::mem::replace(&mut left.kind, ExpressionKind::Nop);
-                } else {
-                    unreachable!("We just matched Binary");
+        // Optimization for EqZ(EqZ(EqZ(x))) -> EqZ(x)
+        if let ExpressionKind::Unary { op: op1, value: v1 } = &mut expr.kind {
+            if matches!(op1, UnaryOp::EqZInt32 | UnaryOp::EqZInt64) {
+                if let ExpressionKind::Unary { op: op2, value: v2 } = &mut v1.kind {
+                    if matches!(op2, UnaryOp::EqZInt32 | UnaryOp::EqZInt64) {
+                        if let ExpressionKind::Unary { op: op3, value: v3 } = &mut v2.kind {
+                            if matches!(op3, UnaryOp::EqZInt32 | UnaryOp::EqZInt64) {
+                                *v1 = *v3;
+                            }
+                        }
+                    }
                 }
             }
+        }
+
+        match &mut expr.kind {
+            ExpressionKind::Binary { op, left, right } => {
+                enum IdentitySide {
+                    Left,
+                    Right,
+                    None,
+                }
+
+                let side = match op {
+                    // x + 0 -> x, 0 + x -> x
+                    BinaryOp::AddInt32 | BinaryOp::AddInt64 |
+                    // x | 0 -> x, 0 | x -> x
+                    BinaryOp::OrInt32 | BinaryOp::OrInt64 |
+                    // x ^ 0 -> x, 0 ^ x -> x
+                    BinaryOp::XorInt32 | BinaryOp::XorInt64 => {
+                        if is_zero(right) {
+                            IdentitySide::Right
+                        } else if is_zero(left) {
+                            IdentitySide::Left
+                        } else {
+                            IdentitySide::None
+                        }
+                    }
+                    // x - 0 -> x
+                    // x << 0 -> x, x >> 0 -> x, x >>> 0 -> x
+                    // x rotl 0 -> x, x rotr 0 -> x
+                    BinaryOp::SubInt32 | BinaryOp::SubInt64 |
+                    BinaryOp::ShlInt32 | BinaryOp::ShlInt64 |
+                    BinaryOp::ShrSInt32 | BinaryOp::ShrSInt64 |
+                    BinaryOp::ShrUInt32 | BinaryOp::ShrUInt64 |
+                    BinaryOp::RotLInt32 | BinaryOp::RotLInt64 |
+                    BinaryOp::RotRInt32 | BinaryOp::RotRInt64 => {
+                        if is_zero(right) {
+                            IdentitySide::Right
+                        } else {
+                            IdentitySide::None
+                        }
+                    }
+                    // x * 1 -> x, 1 * x -> x
+                    // x / 1 -> x
+                    BinaryOp::MulInt32 | BinaryOp::MulInt64 |
+                    BinaryOp::DivSInt32 | BinaryOp::DivSInt64 |
+                    BinaryOp::DivUInt32 | BinaryOp::DivUInt64 => {
+                        if is_one(right) {
+                            IdentitySide::Right
+                        } else if matches!(op, BinaryOp::MulInt32 | BinaryOp::MulInt64) && is_one(left) {
+                            IdentitySide::Left
+                        } else {
+                            IdentitySide::None
+                        }
+                    }
+                    // x & -1 -> x, -1 & x -> x
+                    BinaryOp::AndInt32 | BinaryOp::AndInt64 => {
+                        if is_all_ones(right) {
+                            IdentitySide::Right
+                        } else if is_all_ones(left) {
+                            IdentitySide::Left
+                        } else {
+                            IdentitySide::None
+                        }
+                    }
+                    _ => IdentitySide::None,
+                };
+
+                match side {
+                    IdentitySide::Right => {
+                        let kind = std::mem::replace(&mut expr.kind, ExpressionKind::Nop);
+                        if let ExpressionKind::Binary { mut left, .. } = kind {
+                            expr.type_ = left.type_;
+                            expr.kind = std::mem::replace(&mut left.kind, ExpressionKind::Nop);
+                        }
+                    }
+                    IdentitySide::Left => {
+                        let kind = std::mem::replace(&mut expr.kind, ExpressionKind::Nop);
+                        if let ExpressionKind::Binary { mut right, .. } = kind {
+                            expr.type_ = right.type_;
+                            expr.kind = std::mem::replace(&mut right.kind, ExpressionKind::Nop);
+                        }
+                    }
+                    IdentitySide::None => {}
+                }
+            }
+            ExpressionKind::RefAs { op, value } => {
+                if *op == RefAsOp::NonNull && !value.type_.is_nullable() {
+                    // Identity
+                    let kind = std::mem::replace(&mut expr.kind, ExpressionKind::Nop);
+                    if let ExpressionKind::RefAs { mut value, .. } = kind {
+                        expr.type_ = value.type_;
+                        expr.kind = std::mem::replace(&mut value.kind, ExpressionKind::Nop);
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -70,26 +161,20 @@ mod tests {
     use super::*;
     use crate::expression::{ExprRef, Expression, ExpressionKind};
     use crate::module::Function;
-    use binaryen_core::{Literal, Type};
+    use binaryen_core::{HeapType, Literal, Type};
     use bumpalo::Bump;
 
     #[test]
     fn test_simplify_identity_add_zero() {
         let bump = Bump::new();
-
-        // Construct: (val + 0)
-        // Expected: val
-
         let val = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
         }));
-
         let zero = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(0)),
             type_: Type::I32,
         }));
-
         let binary = ExprRef::new(bump.alloc(Expression {
             kind: ExpressionKind::Binary {
                 op: BinaryOp::AddInt32,
@@ -99,28 +184,84 @@ mod tests {
             type_: Type::I32,
         }));
 
-        let func = Function::new(
-            "test".to_string(),
-            Type::NONE,
-            Type::I32,
-            vec![],
-            Some(binary),
-        );
-
-        let bump = bumpalo::Bump::new();
+        let func = Function::new("test".into(), Type::NONE, Type::I32, vec![], Some(binary));
         let mut module = Module::new(&bump);
         module.add_function(func);
 
-        let mut pass = SimplifyIdentity;
-        pass.run(&mut module);
+        SimplifyIdentity.run(&mut module);
 
         let body = module.functions[0].body.as_ref().unwrap();
+        assert!(matches!(body.kind, ExpressionKind::Const(Literal::I32(42))));
+    }
 
-        // Body should now be just Const(42)
-        match body.kind {
-            ExpressionKind::Const(Literal::I32(42)) => {} // OK
-            ExpressionKind::Binary { .. } => panic!("Optimization failed, binary op still present"),
-            _ => panic!("Unexpected expression kind: {:?}", body.kind),
+    #[test]
+    fn test_simplify_identity_ref_as_non_null() {
+        let bump = Bump::new();
+        let non_null_ref = ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Const(Literal::I32(0)),
+            type_: Type::new(HeapType::FUNC, false),
+        }));
+
+        let ref_as = ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::RefAs {
+                op: RefAsOp::NonNull,
+                value: non_null_ref,
+            },
+            type_: Type::new(HeapType::FUNC, false),
+        }));
+
+        let func = Function::new("test".into(), Type::NONE, Type::I32, vec![], Some(ref_as));
+        let mut module = Module::new(&bump);
+        module.add_function(func);
+
+        SimplifyIdentity.run(&mut module);
+
+        let body = module.functions[0].body.as_ref().unwrap();
+        assert!(matches!(body.kind, ExpressionKind::Const(Literal::I32(0))));
+    }
+
+    #[test]
+    fn test_simplify_identity_eqz_eqz_eqz() {
+        let bump = Bump::new();
+        let x = ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::LocalGet { index: 0 },
+            type_: Type::I32,
+        }));
+
+        let eqz1 = ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Unary {
+                op: UnaryOp::EqZInt32,
+                value: x,
+            },
+            type_: Type::I32,
+        }));
+        let eqz2 = ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Unary {
+                op: UnaryOp::EqZInt32,
+                value: eqz1,
+            },
+            type_: Type::I32,
+        }));
+        let eqz3 = ExprRef::new(bump.alloc(Expression {
+            kind: ExpressionKind::Unary {
+                op: UnaryOp::EqZInt32,
+                value: eqz2,
+            },
+            type_: Type::I32,
+        }));
+
+        let func = Function::new("test".into(), Type::NONE, Type::I32, vec![], Some(eqz3));
+        let mut module = Module::new(&bump);
+        module.add_function(func);
+
+        SimplifyIdentity.run(&mut module);
+
+        let body = module.functions[0].body.as_ref().unwrap();
+        if let ExpressionKind::Unary { op, value } = &body.kind {
+            assert_eq!(*op, UnaryOp::EqZInt32);
+            assert!(matches!(value.kind, ExpressionKind::LocalGet { .. }));
+        } else {
+            panic!("Expected Unary, got {:?}", body.kind);
         }
     }
 }

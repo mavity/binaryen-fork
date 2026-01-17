@@ -1,6 +1,6 @@
 use binaryen_core::{Literal, Type};
 use binaryen_decompile::{CPrinter, Lifter};
-use binaryen_ir::{Annotation, BinaryOp, HighLevelType, IrBuilder, LoopType, Module};
+use binaryen_ir::{BinaryOp, HighLevelType, IrBuilder, LoopType, Module};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
 
