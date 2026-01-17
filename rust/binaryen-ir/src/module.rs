@@ -235,8 +235,12 @@ impl<'a> Module<'a> {
         self.annotations.insert(expr, annotation);
     }
 
-    pub fn get_annotation(&self, expr: ExprRef<'a>) -> Option<&crate::annotation::Annotation<'a>> {
+    pub fn get_annotations(&self, expr: ExprRef<'a>) -> Option<crate::annotation::Annotations<'a>> {
         self.annotations.get(expr)
+    }
+
+    pub fn set_function_local_name(&mut self, _func_idx: usize, _local_idx: u32, _name: &'a str) {
+        // Implementation pending schema decision
     }
 
     /// Read a WebAssembly module from WAT format using the "binary bridge".

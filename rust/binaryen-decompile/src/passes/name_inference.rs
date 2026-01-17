@@ -92,47 +92,65 @@ impl NameInferencePass {
     }
 
     pub fn run<'a>(&mut self, module: &mut Module<'a>) {
-        for func in &mut module.functions {
+        for func_idx in 0..module.functions.len() {
+            let func = &module.functions[func_idx];
             let total_locals = self.get_total_locals(func);
             let mut stats = vec![VariableStats::default(); total_locals as usize];
             if let Some(mut body) = func.body {
-                let mut visitor = InferenceVisitor {
-                    stats: &mut stats,
-                    _phantom: std::marker::PhantomData,
+                let visitor_names = {
+                    let mut visitor = InferenceVisitor {
+                        stats: &mut stats,
+                        names: Vec::new(),
+                        _phantom: std::marker::PhantomData,
+                    };
+                    visitor.visit(&mut body);
+                    visitor.names
                 };
-                visitor.visit(&mut body);
-            }
 
-            // --- Phase 4: Synthesis ---
-            let mut _identities = Vec::with_capacity(stats.len());
-            for (_i, stat) in stats.iter().enumerate() {
-                let mut best_trait = TraitType::Index;
-                let mut max_score = 0;
-                for (t_idx, &score) in stat.trait_scores.iter().enumerate() {
-                    if score > max_score {
-                        max_score = score;
-                        best_trait = match t_idx {
-                            0 => TraitType::Index,
-                            1 => TraitType::Buffer,
-                            2 => TraitType::Offset,
-                            3 => TraitType::Boolean,
-                            4 => TraitType::Length,
-                            5 => TraitType::Bitmask,
-                            6 => TraitType::Handle,
-                            7 => TraitType::Accumulator,
-                            _ => TraitType::Index,
-                        };
+                // --- Phase 4: Synthesis ---
+                let formatter = CStyleFormatter;
+                let num_locals = stats.len();
+                let mut local_names = vec![String::new(); num_locals];
+                for (i, stat) in stats.iter().enumerate() {
+                    let mut best_trait = TraitType::Index;
+                    let mut max_score = 0;
+                    for (t_idx, &score) in stat.trait_scores.iter().enumerate() {
+                        if score > max_score {
+                            max_score = score;
+                            best_trait = match t_idx {
+                                0 => TraitType::Index,
+                                1 => TraitType::Buffer,
+                                2 => TraitType::Offset,
+                                3 => TraitType::Boolean,
+                                4 => TraitType::Length,
+                                5 => TraitType::Bitmask,
+                                6 => TraitType::Handle,
+                                7 => TraitType::Accumulator,
+                                _ => TraitType::Index,
+                            };
+                        }
                     }
+
+                    let id = SemanticID {
+                        base_hint_id: stat.name_hint_id,
+                        primary_trait: best_trait,
+                        confidence: max_score.max(stat.hint_confidence),
+                    };
+
+                    local_names[i] = formatter.format(&id, i as u32);
                 }
 
-                _identities.push(SemanticID {
-                    base_hint_id: stat.name_hint_id,
-                    primary_trait: best_trait,
-                    confidence: max_score.max(stat.hint_confidence),
-                });
-
-                // In the future, we would store these identities in the AnnotationStore
-                // so the printers can use them.
+                // Apply names to all usage points
+                for (idx, expr_ref) in visitor_names {
+                    if (idx as usize) < local_names.len() {
+                        let name = &local_names[idx as usize];
+                        let leaked_name: &'a str = Box::leak(name.clone().into_boxed_str());
+                        module.set_annotation(
+                            expr_ref,
+                            binaryen_ir::Annotation::LocalName(leaked_name),
+                        );
+                    }
+                }
             }
         }
     }
@@ -154,6 +172,7 @@ impl NameInferencePass {
 
 struct InferenceVisitor<'a, 'b> {
     stats: &'a mut [VariableStats],
+    names: Vec<(u32, ExprRef<'b>)>,
     _phantom: std::marker::PhantomData<&'b ()>,
 }
 
@@ -163,14 +182,14 @@ impl<'a, 'b> Visitor<'b> for InferenceVisitor<'a, 'b> {
             ExpressionKind::LocalGet { index } => {
                 let idx = *index as usize;
                 if idx < self.stats.len() {
-                    // Usage of a variable. Base analysis.
+                    self.names.push((*index, *expr));
                 }
             }
             ExpressionKind::LocalSet { index, value }
             | ExpressionKind::LocalTee { index, value } => {
                 let idx = *index as usize;
                 if idx < self.stats.len() {
-                    // Assignment to a variable.
+                    self.names.push((*index, *expr));
                     self.analyze_assignment(idx, value);
                 }
             }

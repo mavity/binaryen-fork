@@ -10,18 +10,18 @@ impl IdentifyIfElse {
     }
 
     pub fn run<'a>(&self, module: &mut Module<'a>) {
-        use binaryen_ir::annotation::AnnotationStore;
-        let mut annotations = AnnotationStore::new();
+        use binaryen_ir::annotation::Annotations;
+        let mut results = std::collections::HashMap::new();
 
         for func in module.functions.iter() {
             if let Some(body) = func.body {
                 let cfg = ControlFlowGraph::build(func, body);
-                self.visit_expression(body, &cfg, &mut annotations);
+                self.visit_expression(body, &cfg, &mut results);
             }
         }
 
         // Apply annotations
-        for (expr, ann) in annotations {
+        for (expr, ann) in results {
             module.set_annotation(expr, ann);
         }
     }
@@ -30,7 +30,7 @@ impl IdentifyIfElse {
         &self,
         expr: binaryen_ir::ExprRef<'a>,
         cfg: &ControlFlowGraph<'a>,
-        annotations: &mut binaryen_ir::annotation::AnnotationStore<'a>,
+        results: &mut std::collections::HashMap<binaryen_ir::ExprRef<'a>, Annotation<'a>>,
     ) {
         match &expr.kind {
             ExpressionKind::Block { name, list, .. } => {
@@ -50,7 +50,7 @@ impl IdentifyIfElse {
                                     // But since it's conditional, it has 2 succs.
                                     let bb = &cfg.blocks[block_id as usize];
                                     if bb.succs.len() == 2 {
-                                        annotations.insert(
+                                        results.insert(
                                             expr,
                                             Annotation::If {
                                                 condition: *cond,
@@ -64,7 +64,7 @@ impl IdentifyIfElse {
                     }
                 }
                 for child in list.iter() {
-                    self.visit_expression(*child, cfg, annotations);
+                    self.visit_expression(*child, cfg, results);
                 }
             }
             _ => {
@@ -73,13 +73,13 @@ impl IdentifyIfElse {
                     ExpressionKind::If {
                         if_true, if_false, ..
                     } => {
-                        self.visit_expression(*if_true, cfg, annotations);
+                        self.visit_expression(*if_true, cfg, results);
                         if let Some(f) = if_false {
-                            self.visit_expression(*f, cfg, annotations);
+                            self.visit_expression(*f, cfg, results);
                         }
                     }
                     ExpressionKind::Loop { body, .. } => {
-                        self.visit_expression(*body, cfg, annotations);
+                        self.visit_expression(*body, cfg, results);
                     }
                     _ => {}
                 }

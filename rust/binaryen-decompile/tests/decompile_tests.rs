@@ -24,8 +24,8 @@ fn test_boolean_lifting() {
     lifter.run(&mut module);
 
     // Should have a Bool annotation now
-    let ann = module.get_annotation(eq).expect("Should have annotation");
-    assert_eq!(*ann, Annotation::Type(HighLevelType::Bool));
+    let ann = module.get_annotations(eq).expect("Should have annotation");
+    assert_eq!(ann.high_level_type, Some(HighLevelType::Bool));
 
     // 2. Decompile
     let mut printer = CPrinter::new(&module);
@@ -67,9 +67,9 @@ fn test_loop_lifting_do_while() {
         lifter.run(&mut module);
 
         let ann = module
-            .get_annotation(loop_expr)
+            .get_annotations(loop_expr)
             .expect("Should have annotation");
-        assert_eq!(*ann, Annotation::Loop(LoopType::DoWhile));
+        assert_eq!(ann.loop_type, Some(LoopType::DoWhile));
 
         let mut printer = CPrinter::new(&module);
         let output = printer.print();
@@ -97,15 +97,15 @@ fn test_pointer_lifting() {
         lifter.run(&mut module);
 
         let ann = module
-            .get_annotation(ptr_expr)
+            .get_annotations(ptr_expr)
             .expect("Should have annotation");
-        assert_eq!(*ann, Annotation::Type(HighLevelType::Pointer));
+        assert_eq!(ann.high_level_type, Some(HighLevelType::Pointer));
 
         let mut printer = CPrinter::new(&module);
         let output = printer.print();
         println!("Output:\n{}", output);
         // Pointer lifting should turn Load(p0) into *(p0)
-        assert!(output.contains("*(p0)"));
+        assert!(output.contains("*(ptr_0)"));
     }
 }
 
@@ -149,9 +149,9 @@ fn test_expression_recombination() {
         println!("Output:\n{}", output);
 
         // Should NOT contain 'p1 = ...'
-        assert!(!output.contains("p1 = "));
+        assert!(!output.contains("ptr_1 = "));
 
         // Should contain Load with inlined addition
-        assert!(output.contains("Load((p0 + 10))"));
+        assert!(output.contains("*((i_0 + 10))"));
     }
 }

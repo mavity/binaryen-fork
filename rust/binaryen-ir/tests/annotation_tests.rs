@@ -11,19 +11,23 @@ fn test_basic_annotation_lifecycle() {
     let expr = builder.const_(Literal::I32(1));
 
     // Test initial state
-    assert!(module.get_annotation(expr).is_none());
+    assert!(module.get_annotations(expr).is_none());
 
     // Test setting and getting
     module.set_annotation(expr, Annotation::Type(HighLevelType::Bool));
-    let ann = module.get_annotation(expr).expect("Should have annotation");
-    assert_eq!(*ann, Annotation::Type(HighLevelType::Bool));
+    let anns = module
+        .get_annotations(expr)
+        .expect("Should have annotations");
+    assert_eq!(anns.high_level_type, Some(HighLevelType::Bool));
 
     // Test overwriting
     module.set_annotation(expr, Annotation::Variable(VariableRole::LoopIndex));
-    let ann2 = module
-        .get_annotation(expr)
-        .expect("Should have updated annotation");
-    assert_eq!(*ann2, Annotation::Variable(VariableRole::LoopIndex));
+    let anns2 = module
+        .get_annotations(expr)
+        .expect("Should have updated annotations");
+    assert_eq!(anns2.role, Some(VariableRole::LoopIndex));
+    // Verify it didn't clear the type (multi-annotation behavior)
+    assert_eq!(anns2.high_level_type, Some(HighLevelType::Bool));
 }
 
 #[test]
@@ -36,36 +40,36 @@ fn test_all_annotation_variants() {
     let l = builder.loop_(None, builder.nop(), Type::NONE);
     module.set_annotation(l, Annotation::Loop(LoopType::While));
     assert_eq!(
-        module.get_annotation(l),
-        Some(&Annotation::Loop(LoopType::While))
+        module.get_annotations(l).map(|a| a.loop_type),
+        Some(Some(LoopType::While))
     );
 
     module.set_annotation(l, Annotation::Loop(LoopType::For));
     assert_eq!(
-        module.get_annotation(l),
-        Some(&Annotation::Loop(LoopType::For))
+        module.get_annotations(l).map(|a| a.loop_type),
+        Some(Some(LoopType::For))
     );
 
     module.set_annotation(l, Annotation::Loop(LoopType::DoWhile));
     assert_eq!(
-        module.get_annotation(l),
-        Some(&Annotation::Loop(LoopType::DoWhile))
+        module.get_annotations(l).map(|a| a.loop_type),
+        Some(Some(LoopType::DoWhile))
     );
 
     // Type
     let t = builder.const_(Literal::I32(0));
     module.set_annotation(t, Annotation::Type(HighLevelType::Pointer));
     assert_eq!(
-        module.get_annotation(t),
-        Some(&Annotation::Type(HighLevelType::Pointer))
+        module.get_annotations(t).map(|a| a.high_level_type),
+        Some(Some(HighLevelType::Pointer))
     );
 
     // Variable
     let v = builder.local_get(0, Type::I32);
     module.set_annotation(v, Annotation::Variable(VariableRole::BasePointer));
     assert_eq!(
-        module.get_annotation(v),
-        Some(&Annotation::Variable(VariableRole::BasePointer))
+        module.get_annotations(v).map(|a| a.role),
+        Some(Some(VariableRole::BasePointer))
     );
 }
 
@@ -85,8 +89,8 @@ fn test_multiple_annotations_in_module() {
     // Verify all preserved
     for e in exprs {
         assert_eq!(
-            module.get_annotation(e),
-            Some(&Annotation::Type(HighLevelType::Bool))
+            module.get_annotations(e).map(|a| a.high_level_type),
+            Some(Some(HighLevelType::Bool))
         );
     }
 }
@@ -141,14 +145,11 @@ fn test_complex_ir_tagging() {
     module.set_annotation(i_init, Annotation::Variable(VariableRole::LoopIndex));
 
     // Verify retrieval in "lifting" simulation
-    let retrieved_loop = module.get_annotation(loop_expr).unwrap();
-    assert!(matches!(retrieved_loop, Annotation::Loop(LoopType::For)));
+    let retrieved_loop = module.get_annotations(loop_expr).unwrap();
+    assert_eq!(retrieved_loop.loop_type, Some(LoopType::For));
 
-    let retrieved_var = module.get_annotation(i_init).unwrap();
-    assert!(matches!(
-        retrieved_var,
-        Annotation::Variable(VariableRole::LoopIndex)
-    ));
+    let retrieved_var = module.get_annotations(i_init).unwrap();
+    assert_eq!(retrieved_var.role, Some(VariableRole::LoopIndex));
 }
 
 #[test]
@@ -195,14 +196,21 @@ fn test_traversal_tagging() {
 
     // Verify
     assert_eq!(
-        module.get_annotation(c1),
-        Some(&Annotation::Type(HighLevelType::Bool))
+        module.get_annotations(c1).map(|a| a.high_level_type),
+        Some(Some(HighLevelType::Bool))
     );
     assert_eq!(
-        module.get_annotation(c2),
-        Some(&Annotation::Type(HighLevelType::Bool))
+        module.get_annotations(c2).map(|a| a.high_level_type),
+        Some(Some(HighLevelType::Bool))
     );
-    assert_eq!(module.get_annotation(c3), None);
+    assert!(
+        module.get_annotations(c3).is_none()
+            || module
+                .get_annotations(c3)
+                .unwrap()
+                .high_level_type
+                .is_none()
+    );
 }
 
 #[test]
@@ -224,8 +232,8 @@ fn test_annotation_stress() {
     // Random check some
     for e in tagged_ids.iter().take(100) {
         assert_eq!(
-            module.get_annotation(*e),
-            Some(&Annotation::Type(HighLevelType::Pointer))
+            module.get_annotations(*e).map(|a| a.high_level_type),
+            Some(Some(HighLevelType::Pointer))
         );
     }
 }
@@ -246,10 +254,17 @@ fn test_expr_pointer_uniqueness() {
     module.set_annotation(e1, Annotation::Type(HighLevelType::Bool));
 
     assert_eq!(
-        module.get_annotation(e1),
-        Some(&Annotation::Type(HighLevelType::Bool))
+        module.get_annotations(e1).map(|a| a.high_level_type),
+        Some(Some(HighLevelType::Bool))
     );
-    assert_eq!(module.get_annotation(e2), None); // Should NOT be tagged
+    assert!(
+        module.get_annotations(e2).is_none()
+            || module
+                .get_annotations(e2)
+                .unwrap()
+                .high_level_type
+                .is_none()
+    );
 }
 
 #[test]
@@ -306,7 +321,7 @@ fn test_pass_integration() {
     runner.run(&mut module);
 
     assert_eq!(
-        module.get_annotation(c1),
-        Some(&Annotation::Type(HighLevelType::Bool))
+        module.get_annotations(c1).map(|a| a.high_level_type),
+        Some(Some(HighLevelType::Bool))
     );
 }

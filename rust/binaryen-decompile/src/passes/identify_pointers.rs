@@ -70,8 +70,10 @@ impl IdentifyPointers {
     }
 
     fn propagate_pointer<'a>(&self, expr: ExprRef<'a>, module: &mut Module<'a>) {
-        if let Some(Annotation::Type(HighLevelType::Pointer)) = module.get_annotation(expr) {
-            return;
+        if let Some(ann) = module.get_annotations(expr) {
+            if ann.high_level_type == Some(HighLevelType::Pointer) {
+                return;
+            }
         }
 
         module.set_annotation(expr, Annotation::Type(HighLevelType::Pointer));

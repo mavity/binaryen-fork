@@ -9,5 +9,5 @@ pub use identify_booleans::IdentifyBooleans;
 pub use identify_if_else::IdentifyIfElse;
 pub use identify_loops::IdentifyLoops;
 pub use identify_pointers::IdentifyPointers;
-pub use name_inference::{SemanticID, TraitType, VariableStats};
+pub use name_inference::{NameInferencePass, SemanticID, TraitType, VariableStats};
 pub use recombine_expressions::ExpressionRecombination;

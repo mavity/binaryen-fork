@@ -1,5 +1,6 @@
 use crate::passes::{
     ExpressionRecombination, IdentifyBooleans, IdentifyIfElse, IdentifyLoops, IdentifyPointers,
+    NameInferencePass,
 };
 use binaryen_ir::Module;
 
@@ -24,8 +25,10 @@ impl Lifter {
         // 3. Recombine expressions (inlining single-use locals)
         ExpressionRecombination::run(module);
 
+        // 4. Infer variable names
+        NameInferencePass::new().run(module);
+
         // TODO: Register and run other lifting passes here.
-        // 3. Variable role identification (induction variables, etc.)
         // 4. Condition lifting
     }
 }

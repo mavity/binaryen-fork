@@ -161,6 +161,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "binaryen-core",
+ "binaryen-decompile",
  "binaryen-ir",
  "bumpalo",
  "clap 4.5.54",

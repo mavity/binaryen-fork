@@ -16,6 +16,15 @@ impl<'m, 'a> CPrinter<'m, 'a> {
         }
     }
 
+    fn get_local_name(&self, index: u32, expr: Option<binaryen_ir::ExprRef<'a>>) -> String {
+        if let Some(e) = expr {
+            if let Some(name) = self.module.annotations.get_local_name(e) {
+                return name.to_string();
+            }
+        }
+        format!("p{}", index)
+    }
+
     pub fn print(&mut self) -> String {
         self.output.clear();
         self.output.push_str("// Decompiled from WebAssembly\n\n");
@@ -95,7 +104,8 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                 return;
             }
             binaryen_ir::ExpressionKind::LocalSet { index, value } => {
-                self.output.push_str(&format!("p{} = ", index));
+                let name = self.get_local_name(*index, Some(expr));
+                self.output.push_str(&format!("{} = ", name));
                 self.walk_inline_expression(*value);
             }
             binaryen_ir::ExpressionKind::If {
@@ -159,6 +169,12 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                     binaryen_ir::BinaryOp::LeSInt32 | binaryen_ir::BinaryOp::LeSInt64 => " <= ",
                     binaryen_ir::BinaryOp::GtSInt32 | binaryen_ir::BinaryOp::GtSInt64 => " > ",
                     binaryen_ir::BinaryOp::GeSInt32 | binaryen_ir::BinaryOp::GeSInt64 => " >= ",
+                    binaryen_ir::BinaryOp::AndInt32 | binaryen_ir::BinaryOp::AndInt64 => " & ",
+                    binaryen_ir::BinaryOp::OrInt32 | binaryen_ir::BinaryOp::OrInt64 => " | ",
+                    binaryen_ir::BinaryOp::XorInt32 | binaryen_ir::BinaryOp::XorInt64 => " ^ ",
+                    binaryen_ir::BinaryOp::ShlInt32 | binaryen_ir::BinaryOp::ShlInt64 => " << ",
+                    binaryen_ir::BinaryOp::ShrSInt32 | binaryen_ir::BinaryOp::ShrSInt64 => " >> ",
+                    binaryen_ir::BinaryOp::ShrUInt32 | binaryen_ir::BinaryOp::ShrUInt64 => " >>> ",
                     _ => " <OP> ",
                 };
                 self.output.push_str(op_str);
@@ -166,20 +182,40 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                 self.output.push_str(")");
             }
             ExpressionKind::Unary { op, value } => {
-                self.output.push_str(&format!("{:?}(", op));
-                self.walk_inline_expression(*value);
-                self.output.push_str(")");
+                let op_prefix = match op {
+                    binaryen_ir::UnaryOp::ExtendSInt32 => "(i64)(i32)",
+                    binaryen_ir::UnaryOp::ExtendUInt32 => "(i64)(u32)",
+                    binaryen_ir::UnaryOp::WrapInt64 => "(i32)",
+                    binaryen_ir::UnaryOp::ExtendS8Int32 => "(i32)(i8)",
+                    binaryen_ir::UnaryOp::ExtendS16Int32 => "(i32)(i16)",
+                    binaryen_ir::UnaryOp::ExtendS8Int64 => "(i64)(i8)",
+                    binaryen_ir::UnaryOp::ExtendS16Int64 => "(i64)(i16)",
+                    binaryen_ir::UnaryOp::ExtendS32Int64 => "(i64)(i32)",
+                    _ => "",
+                };
+
+                if !op_prefix.is_empty() {
+                    self.output.push_str(op_prefix);
+                    self.walk_inline_expression(*value);
+                } else {
+                    self.output.push_str(&format!("{:?}(", op));
+                    self.walk_inline_expression(*value);
+                    self.output.push_str(")");
+                }
             }
             ExpressionKind::LocalGet { index } => {
-                self.output.push_str(&format!("p{}", index));
+                let name = self.get_local_name(*index, Some(expr));
+                self.output.push_str(&name);
             }
             ExpressionKind::LocalSet { index, value } => {
-                self.output.push_str(&format!("(p{} = ", index));
+                let name = self.get_local_name(*index, Some(expr));
+                self.output.push_str(&format!("({} = ", name));
                 self.walk_inline_expression(*value);
                 self.output.push_str(")");
             }
             ExpressionKind::LocalTee { index, value } => {
-                self.output.push_str(&format!("(p{} = ", index));
+                let name = self.get_local_name(*index, Some(expr));
+                self.output.push_str(&format!("({} = ", name));
                 self.walk_inline_expression(*value);
                 self.output.push_str(")");
             }
