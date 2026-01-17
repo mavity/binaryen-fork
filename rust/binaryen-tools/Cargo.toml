@@ -15,6 +15,8 @@ binaryen-decompile = { path = "../binaryen-decompile" }
 bumpalo = "3.16.0"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
+wast = "220.0.0"
+wasmprinter = "0.2"
 
 [[bin]]
 name = "wasm-opt"
@@ -31,3 +33,7 @@ path = "src/bin/wasm_dis.rs"
 [[bin]]
 name = "wasm-decompile"
 path = "src/bin/wasm_decompile.rs"
+
+[[bin]]
+name = "rust-lit-adapter"
+path = "src/bin/lit_adapter.rs"

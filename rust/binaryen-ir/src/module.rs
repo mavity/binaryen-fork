@@ -243,6 +243,15 @@ impl<'a> Module<'a> {
         // Implementation pending schema decision
     }
 
+    /// Read a WebAssembly module from binary format.
+    pub fn read_binary(allocator: &'a bumpalo::Bump, binary: &[u8]) -> Result<Self, String> {
+        let mut reader = crate::binary_reader::BinaryReader::new(allocator, binary.to_vec());
+        reader
+            .parse_module()
+            .map_err(|e| format!("Binary parsing error: {:?}", e))
+    }
+    }
+
     /// Read a WebAssembly module from WAT format using the "binary bridge".
     pub fn read_wat(allocator: &'a bumpalo::Bump, wat: &str) -> Result<Self, String> {
         let binary = wat::parse_str(wat).map_err(|e| format!("WAT parsing error: {}", e))?;

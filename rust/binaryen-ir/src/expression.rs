@@ -226,6 +226,122 @@ pub enum ExpressionKind<'a> {
         value: ExprRef<'a>,
         size: ExprRef<'a>,
     },
+    // Tables
+    TableGet {
+        table: &'a str,
+        index: ExprRef<'a>,
+    },
+    TableSet {
+        table: &'a str,
+        index: ExprRef<'a>,
+        value: ExprRef<'a>,
+    },
+    TableSize {
+        table: &'a str,
+    },
+    TableGrow {
+        table: &'a str,
+        delta: ExprRef<'a>,
+        value: ExprRef<'a>,
+    },
+    TableFill {
+        table: &'a str,
+        dest: ExprRef<'a>,
+        value: ExprRef<'a>,
+        size: ExprRef<'a>,
+    },
+    TableCopy {
+        dest_table: &'a str,
+        src_table: &'a str,
+        dest: ExprRef<'a>,
+        src: ExprRef<'a>,
+        size: ExprRef<'a>,
+    },
+    TableInit {
+        table: &'a str,
+        segment: u32,
+        dest: ExprRef<'a>,
+        offset: ExprRef<'a>,
+        size: ExprRef<'a>,
+    },
+    // References & GC
+    RefNull {
+        type_: Type,
+    },
+    RefIsNull {
+        value: ExprRef<'a>,
+    },
+    RefAs {
+        op: crate::ops::RefAsOp,
+        value: ExprRef<'a>,
+    },
+    RefEq {
+        left: ExprRef<'a>,
+        right: ExprRef<'a>,
+    },
+    RefFunc {
+        func: &'a str,
+    },
+    StructNew {
+        type_: Type, // HeapType
+        operands: BumpVec<'a, ExprRef<'a>>,
+    },
+    StructGet {
+        index: u32,
+        ptr: ExprRef<'a>,
+        type_: Type,
+        signed: bool,
+    },
+    StructSet {
+        index: u32,
+        ptr: ExprRef<'a>,
+        value: ExprRef<'a>,
+    },
+    ArrayNew {
+        type_: Type,
+        size: ExprRef<'a>,
+        init: Option<ExprRef<'a>>,
+    },
+    ArrayGet {
+        ptr: ExprRef<'a>,
+        index: ExprRef<'a>,
+        type_: Type,
+        signed: bool,
+    },
+    ArraySet {
+        ptr: ExprRef<'a>,
+        index: ExprRef<'a>,
+        value: ExprRef<'a>,
+    },
+    ArrayLen {
+        ptr: ExprRef<'a>,
+    },
+    ElemDrop {
+        segment: u32,
+    },
+    // Exception Handling
+    Try {
+        name: Option<&'a str>,
+        body: ExprRef<'a>,
+        catch_tags: BumpVec<'a, &'a str>,
+        catch_bodies: BumpVec<'a, ExprRef<'a>>,
+        delegate_target: Option<&'a str>,
+    },
+    Throw {
+        tag: &'a str,
+        operands: BumpVec<'a, ExprRef<'a>>,
+    },
+    Rethrow {
+        target: &'a str,
+    },
+    // Tuples
+    TupleMake {
+        operands: BumpVec<'a, ExprRef<'a>>,
+    },
+    TupleExtract {
+        index: u32,
+        tuple: ExprRef<'a>,
+    },
 }
 
 impl<'a> Expression<'a> {
@@ -377,6 +493,25 @@ impl<'a> IrBuilder<'a> {
             self.bump,
             ExpressionKind::GlobalSet { index, value },
             Type::NONE,
+        )
+    }
+
+    pub fn switch(
+        &self,
+        names: BumpVec<'a, &'a str>,
+        default: &'a str,
+        condition: ExprRef<'a>,
+        value: Option<ExprRef<'a>>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::Switch {
+                names,
+                default,
+                condition,
+                value,
+            },
+            Type::UNREACHABLE,
         )
     }
 
@@ -619,6 +754,108 @@ impl<'a> IrBuilder<'a> {
             ExpressionKind::MemoryFill { dest, value, size },
             Type::NONE,
         )
+    }
+
+    pub fn table_get(&self, table: &'a str, index: ExprRef<'a>, type_: Type) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::TableGet { table, index }, type_)
+    }
+
+    pub fn table_set(&self, table: &'a str, index: ExprRef<'a>, value: ExprRef<'a>) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::TableSet {
+                table,
+                index,
+                value,
+            },
+            Type::NONE,
+        )
+    }
+
+    pub fn table_size(&self, table: &'a str) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::TableSize { table }, Type::I32)
+    }
+
+    pub fn table_grow(
+        &self,
+        table: &'a str,
+        delta: ExprRef<'a>,
+        value: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::TableGrow {
+                table,
+                delta,
+                value,
+            },
+            Type::I32,
+        )
+    }
+
+    pub fn table_fill(
+        &self,
+        table: &'a str,
+        dest: ExprRef<'a>,
+        value: ExprRef<'a>,
+        size: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::TableFill {
+                table,
+                dest,
+                value,
+                size,
+            },
+            Type::NONE,
+        )
+    }
+
+    pub fn table_copy(
+        &self,
+        dest_table: &'a str,
+        src_table: &'a str,
+        dest: ExprRef<'a>,
+        src: ExprRef<'a>,
+        size: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::TableCopy {
+                dest_table,
+                src_table,
+                dest,
+                src,
+                size,
+            },
+            Type::NONE,
+        )
+    }
+
+    pub fn table_init(
+        &self,
+        table: &'a str,
+        segment: u32,
+        dest: ExprRef<'a>,
+        offset: ExprRef<'a>,
+        size: ExprRef<'a>,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::TableInit {
+                table,
+                segment,
+                dest,
+                offset,
+                size,
+            },
+            Type::NONE,
+        )
+    }
+
+    pub fn elem_drop(&self, segment: u32) -> ExprRef<'a> {
+        Expression::new(self.bump, ExpressionKind::ElemDrop { segment }, Type::NONE)
     }
 
     pub fn simd_extract(
@@ -985,6 +1222,173 @@ impl<'a> IrBuilder<'a> {
                 dest: self.deep_clone(*dest),
                 value: self.deep_clone(*value),
                 size: self.deep_clone(*size),
+            },
+            ExpressionKind::TableGet { table, index } => ExpressionKind::TableGet {
+                table: *table,
+                index: self.deep_clone(*index),
+            },
+            ExpressionKind::TableSet {
+                table,
+                index,
+                value,
+            } => ExpressionKind::TableSet {
+                table: *table,
+                index: self.deep_clone(*index),
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::TableSize { table } => ExpressionKind::TableSize { table: *table },
+            ExpressionKind::TableGrow {
+                table,
+                delta,
+                value,
+            } => ExpressionKind::TableGrow {
+                table: *table,
+                delta: self.deep_clone(*delta),
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::TableFill {
+                table,
+                dest,
+                value,
+                size,
+            } => ExpressionKind::TableFill {
+                table: *table,
+                dest: self.deep_clone(*dest),
+                value: self.deep_clone(*value),
+                size: self.deep_clone(*size),
+            },
+            ExpressionKind::TableCopy {
+                dest_table,
+                src_table,
+                dest,
+                src,
+                size,
+            } => ExpressionKind::TableCopy {
+                dest_table: *dest_table,
+                src_table: *src_table,
+                dest: self.deep_clone(*dest),
+                src: self.deep_clone(*src),
+                size: self.deep_clone(*size),
+            },
+            ExpressionKind::TableInit {
+                table,
+                segment,
+                dest,
+                offset,
+                size,
+            } => ExpressionKind::TableInit {
+                table: *table,
+                segment: *segment,
+                dest: self.deep_clone(*dest),
+                offset: self.deep_clone(*offset),
+                size: self.deep_clone(*size),
+            },
+            ExpressionKind::RefNull { type_ } => ExpressionKind::RefNull { type_: *type_ },
+            ExpressionKind::RefIsNull { value } => ExpressionKind::RefIsNull {
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::RefAs { op, value } => ExpressionKind::RefAs {
+                op: *op,
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::RefEq { left, right } => ExpressionKind::RefEq {
+                left: self.deep_clone(*left),
+                right: self.deep_clone(*right),
+            },
+            ExpressionKind::RefFunc { func } => ExpressionKind::RefFunc { func: *func },
+            ExpressionKind::StructNew { type_, operands } => {
+                let mut new_operands = BumpVec::with_capacity_in(operands.len(), self.bump);
+                for op in operands.iter() {
+                    new_operands.push(self.deep_clone(*op));
+                }
+                ExpressionKind::StructNew {
+                    type_: *type_,
+                    operands: new_operands,
+                }
+            }
+            ExpressionKind::StructGet {
+                index,
+                ptr,
+                type_,
+                signed,
+            } => ExpressionKind::StructGet {
+                index: *index,
+                ptr: self.deep_clone(*ptr),
+                type_: *type_,
+                signed: *signed,
+            },
+            ExpressionKind::StructSet { index, ptr, value } => ExpressionKind::StructSet {
+                index: *index,
+                ptr: self.deep_clone(*ptr),
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::ArrayNew { type_, size, init } => ExpressionKind::ArrayNew {
+                type_: *type_,
+                size: self.deep_clone(*size),
+                init: init.map(|i| self.deep_clone(i)),
+            },
+            ExpressionKind::ArrayGet {
+                ptr,
+                index,
+                type_,
+                signed,
+            } => ExpressionKind::ArrayGet {
+                ptr: self.deep_clone(*ptr),
+                index: self.deep_clone(*index),
+                type_: *type_,
+                signed: *signed,
+            },
+            ExpressionKind::ArraySet { ptr, index, value } => ExpressionKind::ArraySet {
+                ptr: self.deep_clone(*ptr),
+                index: self.deep_clone(*index),
+                value: self.deep_clone(*value),
+            },
+            ExpressionKind::ArrayLen { ptr } => ExpressionKind::ArrayLen {
+                ptr: self.deep_clone(*ptr),
+            },
+            ExpressionKind::ElemDrop { segment } => ExpressionKind::ElemDrop { segment: *segment },
+            ExpressionKind::Try {
+                name,
+                body,
+                catch_tags,
+                catch_bodies,
+                delegate_target,
+            } => {
+                let mut new_catch_bodies = BumpVec::with_capacity_in(catch_bodies.len(), self.bump);
+                for b in catch_bodies.iter() {
+                    new_catch_bodies.push(self.deep_clone(*b));
+                }
+                ExpressionKind::Try {
+                    name: *name,
+                    body: self.deep_clone(*body),
+                    catch_tags: catch_tags.clone(),
+                    catch_bodies: new_catch_bodies,
+                    delegate_target: *delegate_target,
+                }
+            }
+            ExpressionKind::Throw { tag, operands } => {
+                let mut new_operands = BumpVec::with_capacity_in(operands.len(), self.bump);
+                for op in operands.iter() {
+                    new_operands.push(self.deep_clone(*op));
+                }
+                ExpressionKind::Throw {
+                    tag: *tag,
+                    operands: new_operands,
+                }
+            }
+            ExpressionKind::Rethrow { target } => ExpressionKind::Rethrow { target: *target },
+            ExpressionKind::TupleMake { operands } => {
+                let mut new_operands = BumpVec::with_capacity_in(operands.len(), self.bump);
+                for op in operands.iter() {
+                    new_operands.push(self.deep_clone(*op));
+                }
+                ExpressionKind::TupleMake {
+                    operands: new_operands,
+                }
+            }
+            ExpressionKind::TupleExtract { index, tuple } => ExpressionKind::TupleExtract {
+                index: *index,
+                tuple: self.deep_clone(*tuple),
             },
         };
 

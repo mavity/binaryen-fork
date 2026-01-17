@@ -1,6 +1,6 @@
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::{Function, Module};
-use crate::ops::{BinaryOp, UnaryOp};
+use crate::ops::{AtomicOp, BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
 use std::io;
 
@@ -39,6 +39,21 @@ impl BinaryWriter {
         }
     }
 
+    fn expand_type(ty: Type) -> Vec<Type> {
+        if ty == Type::NONE {
+            return Vec::new();
+        }
+        if let Some(types) = binaryen_core::type_store::lookup_tuple(ty) {
+            let mut result = Vec::new();
+            for t in types {
+                result.extend(Self::expand_type(t));
+            }
+            result
+        } else {
+            vec![ty]
+        }
+    }
+
     pub fn write_module(&mut self, module: &Module) -> Result<Vec<u8>> {
         // Magic number: 0x00 0x61 0x73 0x6D (\0asm)
         self.write_u32(0x6D736100)?;
@@ -51,32 +66,16 @@ impl BinaryWriter {
 
         // First, use any explicit types from module.types
         for func_type in &module.types {
-            let params_vec = if func_type.params == Type::NONE {
-                vec![]
-            } else {
-                vec![func_type.params]
-            };
-            let results_vec = if func_type.results == Type::NONE {
-                vec![]
-            } else {
-                vec![func_type.results]
-            };
+            let params_vec = Self::expand_type(func_type.params);
+            let results_vec = Self::expand_type(func_type.results);
             type_map.push((params_vec, results_vec));
         }
 
         // Collect types from imports (if not already in type_map)
         for import in &module.imports {
             if let crate::module::ImportKind::Function(params, results) = import.kind {
-                let params_vec = if params == Type::NONE {
-                    vec![]
-                } else {
-                    vec![params]
-                };
-                let results_vec = if results == Type::NONE {
-                    vec![]
-                } else {
-                    vec![results]
-                };
+                let params_vec = Self::expand_type(params);
+                let results_vec = Self::expand_type(results);
                 let sig = (params_vec, results_vec);
                 if !type_map.contains(&sig) {
                     type_map.push(sig);
@@ -92,16 +91,8 @@ impl BinaryWriter {
                 type_idx as usize
             } else {
                 // Infer type index from function signature
-                let params_vec = if func.params == Type::NONE {
-                    vec![]
-                } else {
-                    vec![func.params]
-                };
-                let results_vec = if func.results == Type::NONE {
-                    vec![]
-                } else {
-                    vec![func.results]
-                };
+                let params_vec = Self::expand_type(func.params);
+                let results_vec = Self::expand_type(func.results);
 
                 let sig = (params_vec, results_vec);
                 if let Some(pos) = type_map.iter().position(|t| *t == sig) {
@@ -142,7 +133,7 @@ impl BinaryWriter {
 
         // Write Global section
         if !module.globals.is_empty() {
-            self.write_global_section(&module.globals)?;
+            self.write_global_section(&module.globals, &type_map)?;
         }
 
         // Write Export section
@@ -157,17 +148,17 @@ impl BinaryWriter {
 
         // Write Element section
         if !module.elements.is_empty() {
-            self.write_element_section(&module.elements)?;
+            self.write_element_section(&module.elements, &type_map)?;
         }
 
         // Write Code section
         if !module.functions.is_empty() {
-            self.write_code_section(&module.functions)?;
+            self.write_code_section(&module.functions, &type_map)?;
         }
 
         // Write Data section
         if !module.data.is_empty() {
-            self.write_data_section(&module.data)?;
+            self.write_data_section(&module.data, &type_map)?;
         }
 
         Ok(self.buffer.clone())
@@ -233,16 +224,8 @@ impl BinaryWriter {
                 crate::module::ImportKind::Function(params, results) => {
                     section_buf.push(0x00); // Kind: Function
 
-                    let params_vec = if *params == Type::NONE {
-                        vec![]
-                    } else {
-                        vec![*params]
-                    };
-                    let results_vec = if *results == Type::NONE {
-                        vec![]
-                    } else {
-                        vec![*results]
-                    };
+                    let params_vec = Self::expand_type(*params);
+                    let results_vec = Self::expand_type(*results);
                     let sig = (params_vec, results_vec);
 
                     let idx = type_map.iter().position(|t| *t == sig).ok_or_else(|| {
@@ -337,7 +320,11 @@ impl BinaryWriter {
         Ok(())
     }
 
-    fn write_global_section(&mut self, globals: &[crate::module::Global]) -> Result<()> {
+    fn write_global_section(
+        &mut self,
+        globals: &[crate::module::Global],
+        type_map: &[(Vec<Type>, Vec<Type>)],
+    ) -> Result<()> {
         let mut section_buf = Vec::new();
 
         // Count
@@ -354,7 +341,13 @@ impl BinaryWriter {
             // Global init expression must be constant and simple (no labels, no function calls)
             let mut label_stack = Vec::new(); // should stay empty
             let dummy_map = std::collections::HashMap::new();
-            Self::write_expression(&mut section_buf, global.init, &mut label_stack, &dummy_map)?;
+            Self::write_expression(
+                &mut section_buf,
+                global.init,
+                &mut label_stack,
+                &dummy_map,
+                type_map,
+            )?;
 
             // End opcode for expression
             section_buf.push(0x0B);
@@ -418,7 +411,11 @@ impl BinaryWriter {
         Ok(())
     }
 
-    fn write_code_section(&mut self, functions: &[Function]) -> Result<()> {
+    fn write_code_section(
+        &mut self,
+        functions: &[Function],
+        type_map: &[(Vec<Type>, Vec<Type>)],
+    ) -> Result<()> {
         let mut section_buf = Vec::new();
 
         // Build function name to index map
@@ -443,7 +440,13 @@ impl BinaryWriter {
             // Expression
             if let Some(body) = &func.body {
                 let mut label_stack = Vec::new();
-                Self::write_expression(&mut body_buf, *body, &mut label_stack, &func_map)?;
+                Self::write_expression(
+                    &mut body_buf,
+                    *body,
+                    &mut label_stack,
+                    &func_map,
+                    type_map,
+                )?;
             }
 
             // end
@@ -469,6 +472,7 @@ impl BinaryWriter {
         expr: ExprRef,
         label_stack: &mut Vec<Option<String>>,
         func_map: &std::collections::HashMap<&str, u32>,
+        type_map: &[(Vec<Type>, Vec<Type>)],
     ) -> Result<()> {
         match &expr.kind {
             ExpressionKind::Const(lit) => {
@@ -501,12 +505,12 @@ impl BinaryWriter {
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalSet { index, value } => {
-                Self::write_expression(buf, *value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
                 buf.push(0x21); // local.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::LocalTee { index, value } => {
-                Self::write_expression(buf, *value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
                 buf.push(0x22); // local.tee
                 Self::write_leb128_u32(buf, *index)?;
             }
@@ -515,13 +519,13 @@ impl BinaryWriter {
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::GlobalSet { index, value } => {
-                Self::write_expression(buf, *value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
                 buf.push(0x24); // global.set
                 Self::write_leb128_u32(buf, *index)?;
             }
             ExpressionKind::Binary { op, left, right } => {
-                Self::write_expression(buf, *left, label_stack, func_map)?;
-                Self::write_expression(buf, *right, label_stack, func_map)?;
+                Self::write_expression(buf, *left, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *right, label_stack, func_map, type_map)?;
 
                 let opcode = match op {
                     // i32 operations
@@ -608,7 +612,7 @@ impl BinaryWriter {
                 buf.push(opcode);
             }
             ExpressionKind::Unary { op, value } => {
-                Self::write_expression(buf, *value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
 
                 let opcode = match op {
                     // i32 unary operations
@@ -684,7 +688,7 @@ impl BinaryWriter {
 
                 // Write block body
                 for child in list.iter() {
-                    Self::write_expression(buf, *child, label_stack, func_map)?;
+                    Self::write_expression(buf, *child, label_stack, func_map, type_map)?;
                 }
 
                 // Pop label
@@ -700,7 +704,7 @@ impl BinaryWriter {
                 label_stack.push(name.map(|s| s.to_string()));
 
                 // Write loop body
-                Self::write_expression(buf, *body, label_stack, func_map)?;
+                Self::write_expression(buf, *body, label_stack, func_map, type_map)?;
 
                 // Pop label
                 label_stack.pop();
@@ -713,7 +717,7 @@ impl BinaryWriter {
                 if_false,
             } => {
                 // Write condition
-                Self::write_expression(buf, *condition, label_stack, func_map)?;
+                Self::write_expression(buf, *condition, label_stack, func_map, type_map)?;
 
                 buf.push(0x04); // if opcode
                 buf.push(0x40); // block type: empty (void)
@@ -722,12 +726,12 @@ impl BinaryWriter {
                 label_stack.push(None);
 
                 // Write then branch
-                Self::write_expression(buf, *if_true, label_stack, func_map)?;
+                Self::write_expression(buf, *if_true, label_stack, func_map, type_map)?;
 
                 // Write else branch if present
                 if let Some(if_false_expr) = if_false {
                     buf.push(0x05); // else opcode
-                    Self::write_expression(buf, *if_false_expr, label_stack, func_map)?;
+                    Self::write_expression(buf, *if_false_expr, label_stack, func_map, type_map)?;
                 }
 
                 // Pop label
@@ -742,7 +746,7 @@ impl BinaryWriter {
             } => {
                 // Write value if present
                 if let Some(val) = value {
-                    Self::write_expression(buf, *val, label_stack, func_map)?;
+                    Self::write_expression(buf, *val, label_stack, func_map, type_map)?;
                 }
 
                 // Find label depth
@@ -750,7 +754,7 @@ impl BinaryWriter {
 
                 if let Some(cond) = condition {
                     // br_if
-                    Self::write_expression(buf, *cond, label_stack, func_map)?;
+                    Self::write_expression(buf, *cond, label_stack, func_map, type_map)?;
                     buf.push(0x0D); // br_if opcode
                 } else {
                     // br
@@ -761,7 +765,7 @@ impl BinaryWriter {
             }
             ExpressionKind::Return { value } => {
                 if let Some(val) = value {
-                    Self::write_expression(buf, *val, label_stack, func_map)?;
+                    Self::write_expression(buf, *val, label_stack, func_map, type_map)?;
                 }
                 buf.push(0x0F); // return opcode
             }
@@ -769,7 +773,7 @@ impl BinaryWriter {
                 buf.push(0x00); // unreachable opcode
             }
             ExpressionKind::Drop { value } => {
-                Self::write_expression(buf, *value, label_stack, func_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
                 buf.push(0x1A); // drop opcode
             }
             ExpressionKind::Select {
@@ -777,9 +781,9 @@ impl BinaryWriter {
                 if_true,
                 if_false,
             } => {
-                Self::write_expression(buf, *if_true, label_stack, func_map)?;
-                Self::write_expression(buf, *if_false, label_stack, func_map)?;
-                Self::write_expression(buf, *condition, label_stack, func_map)?;
+                Self::write_expression(buf, *if_true, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *if_false, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *condition, label_stack, func_map, type_map)?;
                 buf.push(0x1B); // select opcode
             }
             ExpressionKind::Load {
@@ -789,7 +793,7 @@ impl BinaryWriter {
                 align,
                 ptr,
             } => {
-                Self::write_expression(buf, *ptr, label_stack, func_map)?;
+                Self::write_expression(buf, *ptr, label_stack, func_map, type_map)?;
 
                 // Opcode selection based on type, size and signedness
                 let opcode = match (expr.type_, *bytes, *signed) {
@@ -824,8 +828,8 @@ impl BinaryWriter {
                 ptr,
                 value,
             } => {
-                Self::write_expression(buf, *ptr, label_stack, func_map)?;
-                Self::write_expression(buf, *value, label_stack, func_map)?;
+                Self::write_expression(buf, *ptr, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
 
                 // Opcode selection based on value type and size
                 let opcode = match (value.type_, *bytes) {
@@ -855,7 +859,7 @@ impl BinaryWriter {
             } => {
                 // Write operands (arguments)
                 for operand in operands.iter() {
-                    Self::write_expression(buf, *operand, label_stack, func_map)?;
+                    Self::write_expression(buf, *operand, label_stack, func_map, type_map)?;
                 }
 
                 // Look up function index
@@ -882,11 +886,11 @@ impl BinaryWriter {
             } => {
                 // Write value if present
                 if let Some(val) = value {
-                    Self::write_expression(buf, *val, label_stack, func_map)?;
+                    Self::write_expression(buf, *val, label_stack, func_map, type_map)?;
                 }
 
                 // Write condition (index)
-                Self::write_expression(buf, *condition, label_stack, func_map)?;
+                Self::write_expression(buf, *condition, label_stack, func_map, type_map)?;
 
                 // br_table opcode
                 buf.push(0x0E);
@@ -907,27 +911,46 @@ impl BinaryWriter {
             ExpressionKind::CallIndirect {
                 target,
                 operands,
-                type_: _signature_type,
+                type_: signature_type,
                 ..
             } => {
                 // Write operands (arguments)
                 for operand in operands.iter() {
-                    Self::write_expression(buf, *operand, label_stack, func_map)?;
+                    Self::write_expression(buf, *operand, label_stack, func_map, type_map)?;
                 }
 
                 // Write target (function index on stack)
-                Self::write_expression(buf, *target, label_stack, func_map)?;
+                Self::write_expression(buf, *target, label_stack, func_map, type_map)?;
 
                 // call_indirect opcode
                 buf.push(0x11);
 
-                // Type index - LIMITATION: Hardcoded to 0 as placeholder
-                // TODO: Proper type index management requires:
-                // 1. Registering signature_type in the module's type section
-                // 2. Looking up or creating a type index for signature_type
-                // 3. Using that index here instead of 0
-                // See 1.3.1-opcode-debt.md "Edge Cases to Watch" section
-                Self::write_leb128_u32(buf, 0)?;
+                // Look up signature in type map
+                let sig_key = if signature_type.is_signature() {
+                    let sig = binaryen_core::type_store::lookup_signature(*signature_type)
+                        .ok_or_else(|| {
+                            WriteError::UnsupportedFeature(format!(
+                                "Signature {:?} not found in TypeStore",
+                                signature_type
+                            ))
+                        })?;
+                    (
+                        Self::expand_type(sig.params),
+                        Self::expand_type(sig.results),
+                    )
+                } else {
+                    // Fallback for case where type_ might be a single result type instead of a signature handle
+                    // (Though BinaryReader now ensures it's a signature)
+                    (Vec::new(), Self::expand_type(*signature_type))
+                };
+
+                let idx = type_map.iter().position(|t| *t == sig_key).ok_or_else(|| {
+                    WriteError::UnsupportedFeature(format!(
+                        "Signature {:?} not found in module type map",
+                        signature_type
+                    ))
+                })?;
+                Self::write_leb128_u32(buf, idx as u32)?;
 
                 // Table index (always 0 in MVP)
                 Self::write_leb128_u32(buf, 0)?;
@@ -939,30 +962,239 @@ impl BinaryWriter {
                 buf.push(0x00);
             }
             ExpressionKind::MemoryGrow { delta } => {
-                Self::write_expression(buf, *delta, label_stack, func_map)?;
+                Self::write_expression(buf, *delta, label_stack, func_map, type_map)?;
 
                 // memory.grow opcode
                 buf.push(0x40);
                 // Memory index (always 0 in MVP)
                 buf.push(0x00);
             }
-            ExpressionKind::AtomicRMW { .. }
-            | ExpressionKind::AtomicCmpxchg { .. }
-            | ExpressionKind::AtomicWait { .. }
-            | ExpressionKind::AtomicNotify { .. }
-            | ExpressionKind::AtomicFence
-            | ExpressionKind::SIMDExtract { .. }
-            | ExpressionKind::SIMDReplace { .. }
-            | ExpressionKind::SIMDShuffle { .. }
-            | ExpressionKind::SIMDTernary { .. }
-            | ExpressionKind::SIMDShift { .. }
-            | ExpressionKind::SIMDLoad { .. }
-            | ExpressionKind::SIMDLoadStoreLane { .. }
-            | ExpressionKind::MemoryInit { .. }
-            | ExpressionKind::DataDrop { .. }
-            | ExpressionKind::MemoryCopy { .. }
-            | ExpressionKind::MemoryFill { .. } => {
-                todo!("Implementation of advanced instructions in binary writer")
+            ExpressionKind::MemoryFill { dest, value, size } => {
+                Self::write_expression(buf, *dest, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *size, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x0B)?;
+                buf.push(0x00); // memory index
+            }
+            ExpressionKind::MemoryCopy { dest, src, size } => {
+                Self::write_expression(buf, *dest, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *src, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *size, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x0A)?;
+                buf.push(0x00); // dest memory index
+                buf.push(0x00); // src memory index
+            }
+            ExpressionKind::TableGet { table: _, index } => {
+                Self::write_expression(buf, *index, label_stack, func_map, type_map)?;
+                buf.push(0x25);
+                Self::write_leb128_u32(buf, 0)?; // table index
+            }
+            ExpressionKind::TableSet {
+                table: _,
+                index,
+                value,
+            } => {
+                Self::write_expression(buf, *index, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
+                buf.push(0x26);
+                Self::write_leb128_u32(buf, 0)?; // table index
+            }
+            ExpressionKind::TableSize { table: _ } => {
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x10)?;
+                Self::write_leb128_u32(buf, 0)?; // table index
+            }
+            ExpressionKind::TableGrow {
+                table: _,
+                delta,
+                value,
+            } => {
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *delta, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x0F)?;
+                Self::write_leb128_u32(buf, 0)?; // table index
+            }
+            ExpressionKind::TableFill {
+                table: _,
+                dest,
+                value,
+                size,
+            } => {
+                Self::write_expression(buf, *dest, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *size, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x11)?;
+                Self::write_leb128_u32(buf, 0)?; // table index
+            }
+            ExpressionKind::TableCopy {
+                dest_table: _,
+                src_table: _,
+                dest,
+                src,
+                size,
+            } => {
+                Self::write_expression(buf, *dest, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *src, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *size, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x0E)?;
+                Self::write_leb128_u32(buf, 0)?; // dest table index
+                Self::write_leb128_u32(buf, 0)?; // src table index
+            }
+            ExpressionKind::RefNull { type_ } => {
+                buf.push(0xD0);
+                Self::write_value_type(buf, *type_)?;
+            }
+            ExpressionKind::RefIsNull { value } => {
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
+                buf.push(0xD1);
+            }
+            ExpressionKind::RefFunc { func } => {
+                let func_index = func_map.get(func).ok_or(WriteError::InvalidExpression)?;
+                buf.push(0xD2);
+                Self::write_leb128_u32(buf, *func_index)?;
+            }
+            ExpressionKind::MemoryInit {
+                segment,
+                dest,
+                offset,
+                size,
+            } => {
+                Self::write_expression(buf, *dest, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *offset, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *size, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x08)?;
+                Self::write_leb128_u32(buf, *segment)?;
+                buf.push(0x00); // memory index
+            }
+            ExpressionKind::DataDrop { segment } => {
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x09)?;
+                Self::write_leb128_u32(buf, *segment)?;
+            }
+            ExpressionKind::TableInit {
+                table: _,
+                segment,
+                dest,
+                offset,
+                size,
+            } => {
+                Self::write_expression(buf, *dest, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *offset, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *size, label_stack, func_map, type_map)?;
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x0C)?;
+                Self::write_leb128_u32(buf, *segment)?;
+                Self::write_leb128_u32(buf, 0)?; // table index
+            }
+            ExpressionKind::ElemDrop { segment } => {
+                buf.push(0xFC);
+                Self::write_leb128_u32(buf, 0x0D)?;
+                Self::write_leb128_u32(buf, *segment)?;
+            }
+            ExpressionKind::AtomicFence => {
+                buf.push(0xFE);
+                Self::write_leb128_u32(buf, 0x03)?;
+            }
+            ExpressionKind::AtomicNotify { ptr, count } => {
+                Self::write_expression(buf, *ptr, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *count, label_stack, func_map, type_map)?;
+                buf.push(0xFE);
+                Self::write_leb128_u32(buf, 0x02)?;
+                Self::write_leb128_u32(buf, 0)?; // align placeholder
+                Self::write_leb128_u32(buf, 0)?; // offset placeholder
+            }
+            ExpressionKind::AtomicWait {
+                ptr,
+                expected,
+                timeout,
+                expected_type,
+            } => {
+                Self::write_expression(buf, *ptr, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *expected, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *timeout, label_stack, func_map, type_map)?;
+                buf.push(0xFE);
+                let sub = if *expected_type == Type::I32 {
+                    0x00
+                } else {
+                    0x01
+                };
+                Self::write_leb128_u32(buf, sub)?;
+                Self::write_leb128_u32(buf, 0)?; // align placeholder
+                Self::write_leb128_u32(buf, 0)?; // offset placeholder
+            }
+            ExpressionKind::AtomicRMW {
+                op,
+                bytes,
+                offset,
+                ptr,
+                value,
+            } => {
+                Self::write_expression(buf, *ptr, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *value, label_stack, func_map, type_map)?;
+                buf.push(0xFE);
+
+                let base = match (expr.type_, *bytes) {
+                    (Type::I32, 4) => 0x17,
+                    (Type::I32, 1) => 0x1D,
+                    (Type::I32, 2) => 0x23,
+                    (Type::I64, 8) => 0x29,
+                    (Type::I64, 1) => 0x2F,
+                    (Type::I64, 2) => 0x35,
+                    (Type::I64, 4) => 0x3B,
+                    _ => return Err(WriteError::InvalidExpression),
+                };
+
+                let sub = base
+                    + match op {
+                        AtomicOp::Add => 0x00,
+                        AtomicOp::Sub => 0x01,
+                        AtomicOp::And => 0x02,
+                        AtomicOp::Or => 0x03,
+                        AtomicOp::Xor => 0x04,
+                        AtomicOp::Xchg => 0x05,
+                    };
+                Self::write_leb128_u32(buf, sub)?;
+                Self::write_leb128_u32(buf, 0)?; // align placeholder
+                Self::write_leb128_u32(buf, *offset)?;
+            }
+            ExpressionKind::AtomicCmpxchg {
+                bytes,
+                offset,
+                ptr,
+                expected,
+                replacement,
+            } => {
+                Self::write_expression(buf, *ptr, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *expected, label_stack, func_map, type_map)?;
+                Self::write_expression(buf, *replacement, label_stack, func_map, type_map)?;
+                buf.push(0xFE);
+
+                let sub = match (expr.type_, *bytes) {
+                    (Type::I32, 4) => 0x41,
+                    (Type::I32, 1) => 0x42,
+                    (Type::I32, 2) => 0x43,
+                    (Type::I64, 8) => 0x44,
+                    (Type::I64, 1) => 0x45,
+                    (Type::I64, 2) => 0x46,
+                    (Type::I64, 4) => 0x47,
+                    _ => return Err(WriteError::InvalidExpression),
+                };
+
+                Self::write_leb128_u32(buf, sub)?;
+                Self::write_leb128_u32(buf, 0)?; // align placeholder
+                Self::write_leb128_u32(buf, *offset)?;
+            }
+            _ => {
+                todo!(
+                    "Implementation of advanced instructions in binary writer: {:?}",
+                    expr.kind
+                )
             }
         }
         Ok(())
@@ -996,7 +1228,11 @@ impl BinaryWriter {
         } else if type_ == Type::EXTERNREF {
             0x6F
         } else {
-            return Err(WriteError::UnsupportedFeature(format!("Type: {:?}", type_)));
+            return Err(WriteError::UnsupportedFeature(format!(
+                "Type: {:?} (is_interned: {})",
+                type_,
+                type_.is_signature()
+            )));
         };
         buf.push(byte);
         Ok(())
@@ -1068,7 +1304,11 @@ impl BinaryWriter {
         Ok(())
     }
 
-    fn write_element_section(&mut self, elements: &[crate::module::ElementSegment]) -> Result<()> {
+    fn write_element_section(
+        &mut self,
+        elements: &[crate::module::ElementSegment],
+        type_map: &[(Vec<Type>, Vec<Type>)],
+    ) -> Result<()> {
         if elements.is_empty() {
             return Ok(());
         }
@@ -1090,6 +1330,7 @@ impl BinaryWriter {
                 segment.offset,
                 &mut label_stack,
                 &func_map,
+                type_map,
             )?;
             section_buf.push(0x0B); // end
 
@@ -1110,7 +1351,11 @@ impl BinaryWriter {
         Ok(())
     }
 
-    fn write_data_section(&mut self, data_segments: &[crate::module::DataSegment]) -> Result<()> {
+    fn write_data_section(
+        &mut self,
+        data_segments: &[crate::module::DataSegment],
+        type_map: &[(Vec<Type>, Vec<Type>)],
+    ) -> Result<()> {
         if data_segments.is_empty() {
             return Ok(());
         }
@@ -1132,6 +1377,7 @@ impl BinaryWriter {
                 segment.offset,
                 &mut label_stack,
                 &func_map,
+                type_map,
             )?;
             section_buf.push(0x0B); // end
 

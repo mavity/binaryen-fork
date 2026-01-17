@@ -396,7 +396,32 @@ impl<'a, 'm> ReadOnlyVisitor<'a> for Validator<'a, 'm> {
             | ExpressionKind::MemoryInit { .. }
             | ExpressionKind::DataDrop { .. }
             | ExpressionKind::MemoryCopy { .. }
-            | ExpressionKind::MemoryFill { .. } => {
+            | ExpressionKind::MemoryFill { .. }
+            | ExpressionKind::TableGet { .. }
+            | ExpressionKind::TableSet { .. }
+            | ExpressionKind::TableSize { .. }
+            | ExpressionKind::TableGrow { .. }
+            | ExpressionKind::TableFill { .. }
+            | ExpressionKind::TableCopy { .. }
+            | ExpressionKind::TableInit { .. }
+            | ExpressionKind::RefNull { .. }
+            | ExpressionKind::RefIsNull { .. }
+            | ExpressionKind::RefAs { .. }
+            | ExpressionKind::RefEq { .. }
+            | ExpressionKind::RefFunc { .. }
+            | ExpressionKind::StructNew { .. }
+            | ExpressionKind::StructGet { .. }
+            | ExpressionKind::StructSet { .. }
+            | ExpressionKind::ArrayNew { .. }
+            | ExpressionKind::ArrayGet { .. }
+            | ExpressionKind::ArraySet { .. }
+            | ExpressionKind::ArrayLen { .. }
+            | ExpressionKind::ElemDrop { .. }
+            | ExpressionKind::Try { .. }
+            | ExpressionKind::Throw { .. }
+            | ExpressionKind::Rethrow { .. }
+            | ExpressionKind::TupleMake { .. }
+            | ExpressionKind::TupleExtract { .. } => {
                 // These expression kinds don't require special validation yet
             }
         }

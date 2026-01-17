@@ -24,7 +24,9 @@ impl Type {
 
     // Interned signature flag (bit 32 set indicates this is an interned signature ID)
     const SIGNATURE_FLAG: u64 = 1 << 32;
-    const SIGNATURE_ID_MASK: u64 = 0xFFFF_FFFF; // Lower 32 bits for ID
+    // Interned tuple flag (bit 33 set indicates this is an interned tuple ID)
+    const TUPLE_FLAG: u64 = 1 << 33;
+    const ID_MASK: u64 = 0xFFFF_FFFF; // Lower 32 bits for ID
 
     // Common Reference Types (Aliases)
     // funcref = nullable func
@@ -77,7 +79,7 @@ impl Type {
     /// Extract signature ID if this is an interned signature.
     pub(crate) fn signature_id(self) -> Option<u32> {
         if self.is_signature() {
-            Some((self.0 & Self::SIGNATURE_ID_MASK) as u32)
+            Some((self.0 & Self::ID_MASK) as u32)
         } else {
             None
         }
@@ -86,6 +88,25 @@ impl Type {
     /// Create a Type handle from an interned signature ID.
     pub(crate) fn from_signature_id(id: u32) -> Self {
         Type(Self::SIGNATURE_FLAG | (id as u64))
+    }
+
+    /// Check if this Type represents an interned tuple.
+    pub fn is_tuple(self) -> bool {
+        (self.0 & Self::TUPLE_FLAG) != 0
+    }
+
+    /// Extract tuple ID if this is an interned tuple.
+    pub(crate) fn tuple_id(self) -> Option<u32> {
+        if self.is_tuple() {
+            Some((self.0 & Self::ID_MASK) as u32)
+        } else {
+            None
+        }
+    }
+
+    /// Create a Type handle from an interned tuple ID.
+    pub(crate) fn from_tuple_id(id: u32) -> Self {
+        Type(Self::TUPLE_FLAG | (id as u64))
     }
 }
 
@@ -110,6 +131,11 @@ impl fmt::Debug for Type {
                 if self.is_signature() {
                     if let Some(sig) = crate::type_store::try_lookup_signature(*self) {
                         return write!(f, "Signature({:?} -> {:?})", sig.params, sig.results);
+                    }
+                }
+                if self.is_tuple() {
+                    if let Some(types) = crate::type_store::try_lookup_tuple(*self) {
+                        return write!(f, "Tuple({:?})", types);
                     }
                 }
                 write!(f, "Type({:#x})", self.0)

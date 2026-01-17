@@ -78,14 +78,20 @@ bitflags! {
         /// May be non-deterministic (e.g., memory.size in some contexts).
         const NONDETERMINISTIC = 1 << 12;
 
+        /// May read from a GC heap.
+        const HEAPS_READ = 1 << 13;
+
+        /// May write to a GC heap.
+        const HEAPS_WRITE = 1 << 14;
+
         /// Has implicit trap behavior (e.g., implicit bounds checks).
         const IMPLICIT_TRAP = Self::MAY_TRAP.bits();
 
         /// Reads any state (memory, globals, etc.).
-        const READS = Self::MEMORY_READ.bits() | Self::GLOBAL_READ.bits();
+        const READS = Self::MEMORY_READ.bits() | Self::GLOBAL_READ.bits() | Self::HEAPS_READ.bits();
 
         /// Writes any state (memory, globals, locals).
-        const WRITES = Self::MEMORY_WRITE.bits() | Self::GLOBAL_WRITE.bits() | Self::LOCAL_WRITE.bits();
+        const WRITES = Self::MEMORY_WRITE.bits() | Self::GLOBAL_WRITE.bits() | Self::LOCAL_WRITE.bits() | Self::HEAPS_WRITE.bits();
 
         /// Any effect that could affect program semantics if removed.
         const SIDE_EFFECTS = Self::WRITES.bits() | Self::CALLS.bits() | Self::TRAPS.bits()
@@ -463,14 +469,89 @@ impl EffectAnalyzer {
                     | Self::analyze(*dest)
                     | Self::analyze(*value)
                     | Self::analyze(*size)
-            } // TODO: Add reference type operations when implemented
-              // ExpressionKind::RefNull, RefIsNull, RefFunc => ...
-
-              // TODO: Add when exception handling is implemented
-              // ExpressionKind::Try, Throw, Rethrow => ...
-
-              // TODO: Add when table operations are implemented
-              // ExpressionKind::TableGet, TableSet, TableSize, TableGrow => ...
+            }
+            ExpressionKind::TableGet { index, .. } => {
+                Effect::TABLE_ACCESS | Effect::MAY_TRAP | Self::analyze(*index)
+            }
+            ExpressionKind::TableSet { index, value, .. } => {
+                Effect::TABLE_ACCESS
+                    | Effect::MAY_TRAP
+                    | Self::analyze(*index)
+                    | Self::analyze(*value)
+            }
+            ExpressionKind::TableSize { .. } => Effect::TABLE_ACCESS,
+            ExpressionKind::TableGrow { delta, value, .. } => {
+                Effect::TABLE_ACCESS | Effect::GROWS | Self::analyze(*delta) | Self::analyze(*value)
+            }
+            ExpressionKind::TableFill {
+                dest, value, size, ..
+            } => {
+                Effect::TABLE_ACCESS
+                    | Effect::MAY_TRAP
+                    | Self::analyze(*dest)
+                    | Self::analyze(*value)
+                    | Self::analyze(*size)
+            }
+            ExpressionKind::TableCopy {
+                dest, src, size, ..
+            } => {
+                Effect::TABLE_ACCESS
+                    | Effect::MAY_TRAP
+                    | Self::analyze(*dest)
+                    | Self::analyze(*src)
+                    | Self::analyze(*size)
+            }
+            ExpressionKind::TableInit {
+                dest, offset, size, ..
+            } => {
+                Effect::TABLE_ACCESS
+                    | Effect::MAY_TRAP
+                    | Self::analyze(*dest)
+                    | Self::analyze(*offset)
+                    | Self::analyze(*size)
+            }
+            ExpressionKind::RefNull { .. } => Effect::NONE,
+            ExpressionKind::RefIsNull { value } => Self::analyze(*value),
+            ExpressionKind::RefAs { value, .. } => Effect::MAY_TRAP | Self::analyze(*value),
+            ExpressionKind::RefEq { left, right } => Self::analyze(*left) | Self::analyze(*right),
+            ExpressionKind::RefFunc { .. } => Effect::NONE,
+            ExpressionKind::StructNew { operands, .. } => {
+                Effect::HEAPS_WRITE | Self::analyze_list(operands)
+            }
+            ExpressionKind::StructGet { ptr, .. } => {
+                Effect::HEAPS_READ | Effect::MAY_TRAP | Self::analyze(*ptr)
+            }
+            ExpressionKind::StructSet { ptr, value, .. } => {
+                Effect::HEAPS_WRITE | Effect::MAY_TRAP | Self::analyze(*ptr) | Self::analyze(*value)
+            }
+            ExpressionKind::ArrayNew { size, init, .. } => {
+                let mut e = Effect::HEAPS_WRITE | Effect::MAY_TRAP | Self::analyze(*size);
+                if let Some(i) = init {
+                    e |= Self::analyze(*i);
+                }
+                e
+            }
+            ExpressionKind::ArrayGet { ptr, index, .. } => {
+                Effect::HEAPS_READ | Effect::MAY_TRAP | Self::analyze(*ptr) | Self::analyze(*index)
+            }
+            ExpressionKind::ArraySet {
+                ptr, index, value, ..
+            } => {
+                Effect::HEAPS_WRITE
+                    | Effect::MAY_TRAP
+                    | Self::analyze(*ptr)
+                    | Self::analyze(*index)
+                    | Self::analyze(*value)
+            }
+            ExpressionKind::ArrayLen { ptr } => Effect::MAY_TRAP | Self::analyze(*ptr),
+            ExpressionKind::Try {
+                body, catch_bodies, ..
+            } => Self::analyze(*body) | Self::analyze_list(catch_bodies),
+            ExpressionKind::Throw { operands, .. } => Effect::THROWS | Self::analyze_list(operands),
+            ExpressionKind::Rethrow { .. } => Effect::THROWS,
+            ExpressionKind::TupleMake { operands } => Self::analyze_list(operands),
+            ExpressionKind::TupleExtract { tuple, .. } => Self::analyze(*tuple),
+            ExpressionKind::ElemDrop { .. } => Effect::NONE,
         }
     }
 

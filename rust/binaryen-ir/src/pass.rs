@@ -234,6 +234,190 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
         description: "common subexpression elimination for locals",
         create: |_| Box::new(crate::passes::local_cse::LocalCSE),
     },
+    PassInfo {
+        name: "avoid-reinterprets",
+        description: "optimizes reinterpret instructions",
+        create: |_| Box::new(crate::passes::avoid_reinterprets::AvoidReinterprets),
+    },
+    PassInfo {
+        name: "const-hoisting",
+        description: "hoist constants out of loops",
+        create: |_| Box::new(crate::passes::const_hoisting::ConstHoisting),
+    },
+    PassInfo {
+        name: "dae",
+        description: "dead argument elimination",
+        create: |_| Box::new(crate::passes::dae::DAE),
+    },
+    PassInfo {
+        name: "dfo",
+        description: "data flow optimizations",
+        create: |_| Box::new(crate::passes::dfo::DataFlowOpts),
+    },
+    PassInfo {
+        name: "flatten",
+        description: "flattens out the IR",
+        create: |_| Box::new(crate::passes::flatten::Flatten),
+    },
+    PassInfo {
+        name: "generate-dyncalls",
+        description: "generate JavaScript-compatible dycalls",
+        create: |_| Box::new(crate::passes::generate_dyncalls::GenerateDynCalls),
+    },
+    PassInfo {
+        name: "global-refining",
+        description: "refine types of globals",
+        create: |_| Box::new(crate::passes::global_refining::GlobalRefining),
+    },
+    PassInfo {
+        name: "i64-to-i32-lowering",
+        description: "lowers i64 to i32 for JS compatibility",
+        create: |_| Box::new(crate::passes::i64_to_i32_lowering::I64ToI32Lowering),
+    },
+    PassInfo {
+        name: "instrument-locals",
+        description: "instrument locals for debugging",
+        create: |_| Box::new(crate::passes::instrument_locals::InstrumentLocals),
+    },
+    PassInfo {
+        name: "legalize-js-interface",
+        description: "legalizes JS interface",
+        create: |_| Box::new(crate::passes::legalize_js_interface::LegalizeJSInterface),
+    },
+    PassInfo {
+        name: "licm",
+        description: "loop invariant code motion",
+        create: |_| Box::new(crate::passes::licm::LICM),
+    },
+    PassInfo {
+        name: "local-subtyping",
+        description: "apply subtyping to locals",
+        create: |_| Box::new(crate::passes::local_subtyping::LocalSubtyping),
+    },
+    PassInfo {
+        name: "memory64-lowering",
+        description: "lowers memory64 to memory32",
+        create: |_| Box::new(crate::passes::memory64_lowering::Memory64Lowering),
+    },
+    PassInfo {
+        name: "memory-optimization",
+        description: "optimizes memory accesses",
+        create: |_| Box::new(crate::passes::memory_optimization::MemoryOptimization::new()),
+    },
+    PassInfo {
+        name: "optimize-added-constants",
+        description: "optimizes added constants",
+        create: |_| Box::new(crate::passes::optimize_added_constants::OptimizeAddedConstants),
+    },
+    PassInfo {
+        name: "optimize-added-constants-propagate",
+        description: "propagates optimized added constants",
+        create: |_| {
+            Box::new(
+                crate::passes::optimize_added_constants_propagate::OptimizeAddedConstantsPropagate,
+            )
+        },
+    },
+    PassInfo {
+        name: "optimize-casts",
+        description: "optimizes casts",
+        create: |_| Box::new(crate::passes::optimize_casts::OptimizeCasts::new()),
+    },
+    PassInfo {
+        name: "optimize-for-js",
+        description: "optimizes for JS environment",
+        create: |_| Box::new(crate::passes::optimize_for_js::OptimizeForJS),
+    },
+    PassInfo {
+        name: "poppify",
+        description: "poppify code for Binaryen IR",
+        create: |_| Box::new(crate::passes::poppify::Poppify),
+    },
+    PassInfo {
+        name: "post-emscripten",
+        description: "post-emscripten optimizations",
+        create: |_| Box::new(crate::passes::post_emscripten::PostEmscripten),
+    },
+    PassInfo {
+        name: "precompute-propagate",
+        description: "propagates precomputed values",
+        create: |_| Box::new(crate::passes::precompute_propagate::PrecomputePropagate),
+    },
+    PassInfo {
+        name: "remove-imports",
+        description: "removes imports",
+        create: |_| Box::new(crate::passes::remove_imports::RemoveImports),
+    },
+    PassInfo {
+        name: "remove-memory-init",
+        description: "removes memory initialization",
+        create: |_| Box::new(crate::passes::remove_memory_init::RemoveMemoryInit),
+    },
+    PassInfo {
+        name: "rereloop",
+        description: "re-runs the relooper",
+        create: |_| Box::new(crate::passes::rereloop::Rereloop),
+    },
+    PassInfo {
+        name: "rse",
+        description: "redundant set elimination",
+        create: |_| Box::new(crate::passes::rse::RSE),
+    },
+    PassInfo {
+        name: "safe-heap",
+        description: "instrument heap accesses for safety",
+        create: |_| Box::new(crate::passes::safe_heap::SafeHeap),
+    },
+    PassInfo {
+        name: "signature-pruning",
+        description: "prune function signatures",
+        create: |_| Box::new(crate::passes::signature_pruning::SignaturePruning),
+    },
+    PassInfo {
+        name: "signext-lowering",
+        description: "lowers signext instructions",
+        create: |_| Box::new(crate::passes::signext_lowering::SignextLowering),
+    },
+    PassInfo {
+        name: "simplify-control-flow",
+        description: "simplifies control flow structures",
+        create: |_| Box::new(crate::passes::simplify_control_flow::SimplifyControlFlow),
+    },
+    PassInfo {
+        name: "simplify-globals",
+        description: "simplifies globals",
+        create: |_| Box::new(crate::passes::simplify_globals::SimplifyGlobals),
+    },
+    PassInfo {
+        name: "simplify-identity",
+        description: "removes identity operations",
+        create: |_| Box::new(crate::passes::simplify_identity::SimplifyIdentity),
+    },
+    PassInfo {
+        name: "ssa",
+        description: "transforms to SSA form",
+        create: |_| Box::new(crate::passes::ssa::Ssa),
+    },
+    PassInfo {
+        name: "ssa-nomerge",
+        description: "transforms to SSA form without merging",
+        create: |_| Box::new(crate::passes::ssa_nomerge::SsaNomerge),
+    },
+    PassInfo {
+        name: "stack-check",
+        description: "adds stack check instrumentation",
+        create: |_| Box::new(crate::passes::stack_check::StackCheck),
+    },
+    PassInfo {
+        name: "type-refining",
+        description: "refines types",
+        create: |_| Box::new(crate::passes::type_refining::TypeRefining),
+    },
+    PassInfo {
+        name: "untee",
+        description: "removes local.tees",
+        create: |_| Box::new(crate::passes::untee::Untee),
+    },
 ];
 
 pub struct PassRunner {

@@ -1,6 +1,6 @@
 use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
 use crate::module::{Export, ExportKind, Function, MemoryLimits, Module};
-use crate::ops::{BinaryOp, UnaryOp};
+use crate::ops::{AtomicOp, BinaryOp, UnaryOp};
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
@@ -10,6 +10,10 @@ pub struct BinaryReader<'a> {
     bump: &'a Bump,
     data: Vec<u8>,
     pos: usize,
+    types: Vec<(Vec<Type>, Vec<Type>)>,
+    all_function_types: Vec<u32>,
+    last_delimiter: u8,
+    next_label_id: u32,
 }
 
 #[derive(Debug)]
@@ -18,12 +22,13 @@ pub enum ParseError {
     InvalidMagic,
     InvalidVersion,
     InvalidSection,
-    InvalidOpcode(u8),
+    InvalidOpcode(u32),
     InvalidType,
     InvalidUtf8,
     InvalidExportKind,
     InvalidImportKind,
     Io(io::Error),
+    LabelNotFound(String),
 }
 
 impl From<io::Error> for ParseError {
@@ -36,7 +41,15 @@ type Result<T> = std::result::Result<T, ParseError>;
 
 impl<'a> BinaryReader<'a> {
     pub fn new(bump: &'a Bump, data: Vec<u8>) -> Self {
-        Self { bump, data, pos: 0 }
+        Self {
+            bump,
+            data,
+            pos: 0,
+            types: Vec::new(),
+            all_function_types: Vec::new(),
+            last_delimiter: 0,
+            next_label_id: 0,
+        }
     }
 
     pub fn read_leb128_i32(&mut self) -> Result<i32> {
@@ -66,6 +79,12 @@ impl<'a> BinaryReader<'a> {
         Ok(result)
     }
 
+    fn make_label_name(&mut self) -> String {
+        let name = format!("label${}", self.next_label_id);
+        self.next_label_id += 1;
+        name
+    }
+
     pub fn parse_module(&mut self) -> Result<Module<'a>> {
         // Magic number: 0x00 0x61 0x73 0x6D (\0asm)
         let magic = self.read_u32()?;
@@ -80,11 +99,7 @@ impl<'a> BinaryReader<'a> {
         }
 
         let mut module = Module::new(self.bump);
-        let mut type_section = Vec::new();
         let mut function_section = Vec::new();
-        let mut code_section = Vec::new();
-
-        // Parse sections
         let mut memory_section = None;
         let mut table_section = None;
         let mut global_section = Vec::new();
@@ -92,6 +107,7 @@ impl<'a> BinaryReader<'a> {
         let mut element_section = Vec::new();
         let mut data_section = Vec::new();
         let mut start_section = None;
+        let mut code_section = Vec::new();
 
         while self.pos < self.data.len() {
             let section_id = self.read_u8()?;
@@ -101,11 +117,11 @@ impl<'a> BinaryReader<'a> {
             match section_id {
                 1 => {
                     // Type section
-                    type_section = self.parse_type_section()?;
+                    self.types = self.parse_type_section()?;
                 }
                 2 => {
                     // Import section
-                    let imports = self.parse_import_section(&type_section)?;
+                    let imports = self.parse_import_section()?;
                     for import in imports {
                         module.add_import(import);
                     }
@@ -156,7 +172,7 @@ impl<'a> BinaryReader<'a> {
         }
 
         // Add types to module
-        for (params, results) in &type_section {
+        for (params, results) in &self.types {
             let params_type = Self::types_to_type(params);
             let results_type = Self::types_to_type(results);
             module.add_type(params_type, results_type);
@@ -205,12 +221,12 @@ impl<'a> BinaryReader<'a> {
                 break;
             };
 
-            let func_type = type_section
+            let func_type = self
+                .types
                 .get(type_idx as usize)
                 .cloned()
                 .unwrap_or((vec![], vec![]));
 
-            // For now, use first param/result as Type (simplified for single params)
             let params = Self::types_to_type(&func_type.0);
             let results = Self::types_to_type(&func_type.1);
 
@@ -262,12 +278,7 @@ impl<'a> BinaryReader<'a> {
         match types.len() {
             0 => Type::NONE,
             1 => types[0],
-            _ => {
-                // For multiple types, intern them as a signature
-                // This is a simplification - ideally we'd use tuple types
-                // For now, just take the first type
-                types[0]
-            }
+            _ => binaryen_core::type_store::intern_tuple(types.to_vec()),
         }
     }
 
@@ -278,6 +289,7 @@ impl<'a> BinaryReader<'a> {
         for _ in 0..count {
             let type_idx = self.read_leb128_u32()?;
             funcs.push(type_idx);
+            self.all_function_types.push(type_idx);
         }
 
         Ok(funcs)
@@ -393,6 +405,7 @@ impl<'a> BinaryReader<'a> {
 
         loop {
             let opcode = self.read_u8()?;
+            self.last_delimiter = opcode;
 
             match opcode {
                 0x0B => {
@@ -422,21 +435,25 @@ impl<'a> BinaryReader<'a> {
                         self.read_value_type_from_byte(block_type)?
                     };
 
-                    label_stack.push(None); // Unnamed block
+                    let name = self.make_label_name();
+                    label_stack.push(Some(name.clone()));
 
                     // Parse block body as a single expression (which will parse until its matching 0x0B)
                     if let Some(body) = self.parse_expression_impl(label_stack)? {
                         label_stack.pop();
                         let block_expr = builder.block(
-                            None,
+                            Some(self.bump.alloc_str(&name)),
                             BumpVec::from_iter_in([body], self.bump),
                             Type::NONE,
                         );
                         stack.push(block_expr);
                     } else {
                         label_stack.pop();
-                        let block_expr =
-                            builder.block(None, BumpVec::new_in(self.bump), Type::NONE);
+                        let block_expr = builder.block(
+                            Some(self.bump.alloc_str(&name)),
+                            BumpVec::new_in(self.bump),
+                            Type::NONE,
+                        );
                         stack.push(block_expr);
                     }
                 }
@@ -449,11 +466,13 @@ impl<'a> BinaryReader<'a> {
                         self.read_value_type_from_byte(block_type)?
                     };
 
-                    label_stack.push(None);
+                    let name = self.make_label_name();
+                    label_stack.push(Some(name.clone()));
 
                     if let Some(body) = self.parse_expression_impl(label_stack)? {
                         label_stack.pop();
-                        let loop_expr = builder.loop_(None, body, Type::NONE);
+                        let loop_expr =
+                            builder.loop_(Some(self.bump.alloc_str(&name)), body, Type::NONE);
                         stack.push(loop_expr);
                     } else {
                         label_stack.pop();
@@ -471,14 +490,14 @@ impl<'a> BinaryReader<'a> {
 
                     let condition = stack.pop().ok_or(ParseError::UnexpectedEof)?;
 
-                    label_stack.push(None);
+                    let name = self.make_label_name();
+                    label_stack.push(Some(name.clone()));
                     let if_true = self
                         .parse_expression_impl(label_stack)?
                         .ok_or(ParseError::UnexpectedEof)?;
 
                     // Check for else (0x05) - parse_expression_impl will have stopped at it
-                    let if_false = if self.pos < self.data.len() && self.data[self.pos] == 0x05 {
-                        self.read_u8()?; // Consume else
+                    let if_false = if self.last_delimiter == 0x05 {
                         self.parse_expression_impl(label_stack)?
                     } else {
                         None
@@ -486,30 +505,95 @@ impl<'a> BinaryReader<'a> {
 
                     label_stack.pop();
                     let if_expr = builder.if_(condition, if_true, if_false, Type::NONE);
-                    stack.push(if_expr);
+
+                    // Wrap in block to provide a label
+                    let if_wrapper = builder.block(
+                        Some(self.bump.alloc_str(&name)),
+                        BumpVec::from_iter_in([if_expr], self.bump),
+                        Type::NONE,
+                    );
+                    stack.push(if_wrapper);
                 }
                 0x0C => {
                     // br (unconditional break)
                     let depth = self.read_leb128_u32()?;
-
-                    // For now, use depth as label name since IR requires a label
-                    let label = self.bump.alloc_str(&format!("$depth{}", depth));
+                    let target_idx = label_stack.len() as i32 - 1 - depth as i32;
+                    let label = if target_idx >= 0 {
+                        label_stack[target_idx as usize]
+                            .as_deref()
+                            .unwrap_or("unnamed")
+                    } else {
+                        "invalid"
+                    };
 
                     let value = stack.pop();
-                    let break_expr = builder.break_(label, None, value, Type::UNREACHABLE);
+                    let break_expr =
+                        builder.break_(self.bump.alloc_str(label), None, value, Type::UNREACHABLE);
                     stack.push(break_expr);
                 }
                 0x0D => {
                     // br_if (conditional break)
                     let depth = self.read_leb128_u32()?;
-
-                    // For now, use depth as label name since IR requires a label
-                    let label = self.bump.alloc_str(&format!("$depth{}", depth));
+                    let target_idx = label_stack.len() as i32 - 1 - depth as i32;
+                    let label = if target_idx >= 0 {
+                        label_stack[target_idx as usize]
+                            .as_deref()
+                            .unwrap_or("unnamed")
+                    } else {
+                        "invalid"
+                    };
 
                     let condition = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     let value = stack.pop();
-                    let break_expr = builder.break_(label, Some(condition), value, Type::I32);
+                    let break_expr = builder.break_(
+                        self.bump.alloc_str(label),
+                        Some(condition),
+                        value,
+                        Type::I32,
+                    );
                     stack.push(break_expr);
+                }
+                0x0E => {
+                    // br_table
+                    let num_targets = self.read_leb128_u32()?;
+                    let mut names = BumpVec::with_capacity_in(num_targets as usize, self.bump);
+                    for _ in 0..num_targets {
+                        let depth = self.read_leb128_u32()?;
+                        let target_idx = label_stack.len() as i32 - 1 - depth as i32;
+                        let label = if target_idx >= 0 {
+                            label_stack[target_idx as usize]
+                                .as_deref()
+                                .unwrap_or("unnamed")
+                        } else {
+                            "invalid"
+                        };
+                        names.push(self.bump.alloc_str(label) as &str);
+                    }
+                    let default_depth = self.read_leb128_u32()?;
+                    let target_idx = label_stack.len() as i32 - 1 - default_depth as i32;
+                    let default = if target_idx >= 0 {
+                        label_stack[target_idx as usize]
+                            .as_deref()
+                            .unwrap_or("unnamed")
+                    } else {
+                        "invalid"
+                    };
+                    let default = self.bump.alloc_str(default) as &str;
+
+                    let condition = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    // Binaryen's Switch can have an optional value passed to the targets
+                    // In Wasm binary, if a value is passed, it is on the stack BEFORE the condition.
+                    // But we don't know for sure if it's there without type analysis.
+                    // For now, assume no value if the stack is otherwise empty, or just pop it if exists?
+                    // Actually, standard Wasm br_table can pass A value if it targets a block with results.
+                    let value = if !stack.is_empty() {
+                        Some(stack.pop().unwrap())
+                    } else {
+                        None
+                    };
+
+                    let switch_expr = builder.switch(names, default, condition, value);
+                    stack.push(switch_expr);
                 }
                 0x0F => {
                     // return
@@ -548,47 +632,94 @@ impl<'a> BinaryReader<'a> {
                 0x10 => {
                     // call
                     let func_idx = self.read_leb128_u32()?;
+                    let type_idx = self
+                        .all_function_types
+                        .get(func_idx as usize)
+                        .ok_or(ParseError::InvalidOpcode(0x10))?;
+                    let func_type = self
+                        .types
+                        .get(*type_idx as usize)
+                        .ok_or(ParseError::InvalidType)?;
+
+                    let param_count = func_type.0.len();
+                    let mut operands = BumpVec::with_capacity_in(param_count, self.bump);
+                    for _ in 0..param_count {
+                        operands.push(stack.pop().ok_or(ParseError::UnexpectedEof)?);
+                    }
+                    operands.reverse();
 
                     // Generate function name in bump allocator
                     let func_name =
                         bumpalo::format!(in self.bump, "func_{}", func_idx).into_bump_str();
 
-                    // Pop operands from stack (number depends on function signature)
-                    // For now, we collect all available operands
-                    // TODO: Use function signature to determine exact operand count
-                    let operands = BumpVec::from_iter_in(stack.drain(..), self.bump);
+                    let result_type = Self::types_to_type(&func_type.1);
+
+                    let call_expr = builder.call(func_name, operands, result_type, false);
+                    stack.push(call_expr);
+                }
+                0x11 => {
+                    // call_indirect
+                    let type_idx = self.read_leb128_u32()?;
+                    let _table_idx = self.read_leb128_u32()?; // table index (usually 0)
+
+                    let func_type = self
+                        .types
+                        .get(type_idx as usize)
+                        .ok_or(ParseError::InvalidType)?;
+                    let param_count = func_type.0.len();
+
+                    let params_type = Self::types_to_type(&func_type.0);
+                    let result_type = Self::types_to_type(&func_type.1);
+                    let sig_type =
+                        binaryen_core::type_store::intern_signature(params_type, result_type);
+
+                    let target = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    let mut operands = BumpVec::with_capacity_in(param_count, self.bump);
+                    for _ in 0..param_count {
+                        operands.push(stack.pop().ok_or(ParseError::UnexpectedEof)?);
+                    }
+                    operands.reverse();
+
+                    // CallIndirect IR node currently takes a table name string.
+                    // For now use a placeholder.
+                    let table_name = "0";
 
                     let call_expr = Expression::new(
                         self.bump,
-                        ExpressionKind::Call {
-                            target: func_name,
+                        ExpressionKind::CallIndirect {
+                            table: table_name,
+                            target,
                             operands,
-                            is_return: false,
+                            type_: sig_type,
                         },
-                        Type::I32, // TODO: determine actual return type from function signature
+                        result_type,
                     );
                     stack.push(call_expr);
                 }
                 0x12 => {
                     // return_call (tail call)
                     let func_idx = self.read_leb128_u32()?;
+                    let type_idx = self
+                        .all_function_types
+                        .get(func_idx as usize)
+                        .ok_or(ParseError::InvalidOpcode(0x12))?;
+                    let func_type = self
+                        .types
+                        .get(*type_idx as usize)
+                        .ok_or(ParseError::InvalidType)?;
 
-                    // Generate function name in bump allocator
+                    let param_count = func_type.0.len();
+                    let mut operands = BumpVec::with_capacity_in(param_count, self.bump);
+                    for _ in 0..param_count {
+                        operands.push(stack.pop().ok_or(ParseError::UnexpectedEof)?);
+                    }
+                    operands.reverse();
+
                     let func_name =
                         bumpalo::format!(in self.bump, "func_{}", func_idx).into_bump_str();
+                    let result_type = Self::types_to_type(&func_type.1);
 
-                    // Pop operands from stack
-                    let operands = BumpVec::from_iter_in(stack.drain(..), self.bump);
-
-                    let call_expr = Expression::new(
-                        self.bump,
-                        ExpressionKind::Call {
-                            target: func_name,
-                            operands,
-                            is_return: true,
-                        },
-                        Type::UNREACHABLE, // tail call doesn't return to caller
-                    );
+                    let call_expr = builder.call(func_name, operands, result_type, true);
                     stack.push(call_expr);
                 }
                 0x20 => {
@@ -1457,70 +1588,20 @@ impl<'a> BinaryReader<'a> {
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.unary(UnaryOp::TruncUFloat64ToInt32, value, Type::I32));
                 }
-                0xAE => {
-                    // i64.trunc_s/f32
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::TruncSFloat32ToInt64, value, Type::I64));
-                }
-                0xAF => {
-                    // i64.trunc_u/f32
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::TruncUFloat32ToInt64, value, Type::I64));
-                }
-                0xB0 => {
-                    // i64.trunc_s/f64
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::TruncSFloat64ToInt64, value, Type::I64));
-                }
-                0xB1 => {
-                    // i64.trunc_u/f64
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::TruncUFloat64ToInt64, value, Type::I64));
-                }
                 0xA7 => {
                     // i32.wrap_i64
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.unary(UnaryOp::WrapInt64, value, Type::I32));
                 }
                 0xAC => {
-                    // i64.extend_i32_s
+                    // i64.extend_s/i32
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.unary(UnaryOp::ExtendSInt32, value, Type::I64));
                 }
                 0xAD => {
-                    // i64.extend_i32_u
+                    // i64.extend_u/i32
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.unary(UnaryOp::ExtendUInt32, value, Type::I64));
-                }
-                0xB6 => {
-                    // f32.demote_f64
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::DemoteFloat64, value, Type::F32));
-                }
-                0xBB => {
-                    // f64.promote_f32
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::PromoteFloat32, value, Type::F64));
-                }
-                0xBC => {
-                    // i32.reinterpret_f32
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::ReinterpretFloat32, value, Type::I32));
-                }
-                0xBD => {
-                    // i64.reinterpret_f64
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::ReinterpretFloat64, value, Type::I64));
-                }
-                0xBE => {
-                    // f32.reinterpret_i32
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::ReinterpretInt32, value, Type::F32));
-                }
-                0xBF => {
-                    // f64.reinterpret_i64
-                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
-                    stack.push(builder.unary(UnaryOp::ReinterpretInt64, value, Type::F64));
                 }
                 0xC0 => {
                     // i32.extend8_s
@@ -1547,13 +1628,243 @@ impl<'a> BinaryReader<'a> {
                     let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
                     stack.push(builder.unary(UnaryOp::ExtendS32Int64, value, Type::I64));
                 }
+                0xAE => {
+                    // i64.trunc_s/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncSFloat32ToInt64, value, Type::I64));
+                }
+                0xAF => {
+                    // i64.trunc_u/f32
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncUFloat32ToInt64, value, Type::I64));
+                }
+                0xB0 => {
+                    // i64.trunc_s/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncSFloat64ToInt64, value, Type::I64));
+                }
+                0xB1 => {
+                    // i64.trunc_u/f64
+                    let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                    stack.push(builder.unary(UnaryOp::TruncUFloat64ToInt64, value, Type::I64));
+                }
+                0xFC => {
+                    let sub_opcode = self.read_leb128_u32()?;
+                    match sub_opcode {
+                        0x08 => {
+                            // memory.init
+                            let segment = self.read_leb128_u32()?;
+                            let _mem_idx = self.read_u8()?;
+                            let size = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let offset = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let dest = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.memory_init(segment, dest, offset, size));
+                        }
+                        0x09 => {
+                            // data.drop
+                            let segment = self.read_leb128_u32()?;
+                            stack.push(builder.data_drop(segment));
+                        }
+                        0x0A => {
+                            // memory.copy
+                            let _dest_idx = self.read_u8()?;
+                            let _src_idx = self.read_u8()?;
+                            let size = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let src = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let dest = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.memory_copy(dest, src, size));
+                        }
+                        0x0B => {
+                            // memory.fill
+                            let _mem_idx = self.read_u8()?;
+                            let size = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let dest = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.memory_fill(dest, value, size));
+                        }
+                        0x0C => {
+                            // table.init
+                            let segment = self.read_leb128_u32()?;
+                            let table_idx = self.read_leb128_u32()?;
+                            let size = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let offset = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let dest = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.table_init(
+                                bumpalo::format!(in self.bump, "{}", table_idx).into_bump_str(),
+                                segment,
+                                dest,
+                                offset,
+                                size,
+                            ));
+                        }
+                        0x0D => {
+                            // elem.drop
+                            let segment = self.read_leb128_u32()?;
+                            stack.push(builder.elem_drop(segment));
+                        }
+                        0x0E => {
+                            // table.copy
+                            let dest_idx = self.read_leb128_u32()?;
+                            let src_idx = self.read_leb128_u32()?;
+                            let size = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let src = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let dest = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.table_copy(
+                                bumpalo::format!(in self.bump, "{}", dest_idx).into_bump_str(),
+                                bumpalo::format!(in self.bump, "{}", src_idx).into_bump_str(),
+                                dest,
+                                src,
+                                size,
+                            ));
+                        }
+                        0x0F => {
+                            // table.grow
+                            let table_idx = self.read_leb128_u32()?;
+                            let delta = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.table_grow(
+                                bumpalo::format!(in self.bump, "{}", table_idx).into_bump_str(),
+                                delta,
+                                value,
+                            ));
+                        }
+                        0x10 => {
+                            // table.size
+                            let table_idx = self.read_leb128_u32()?;
+                            stack.push(builder.table_size(
+                                bumpalo::format!(in self.bump, "{}", table_idx).into_bump_str(),
+                            ));
+                        }
+                        0x11 => {
+                            // table.fill
+                            let table_idx = self.read_leb128_u32()?;
+                            let size = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let dest = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.table_fill(
+                                bumpalo::format!(in self.bump, "{}", table_idx).into_bump_str(),
+                                dest,
+                                value,
+                                size,
+                            ));
+                        }
+                        _ => return Err(ParseError::InvalidOpcode(opcode.into())),
+                    }
+                }
+                0xFE => {
+                    let sub_opcode = self.read_leb128_u32()?;
+                    match sub_opcode {
+                        0x03 => {
+                            // atomic.fence
+                            stack.push(builder.atomic_fence());
+                        }
+                        0x02 => {
+                            // memory.atomic.notify
+                            let _align = self.read_leb128_u32()?;
+                            let _offset = self.read_leb128_u32()?;
+                            let count = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            // TODO: Store align/offset if needed, but AtomicNotify in IR doesn't seem to have them?
+                            // Let's check ExpressionKind
+                            stack.push(builder.atomic_notify(ptr, count));
+                        }
+                        0x00 => {
+                            // memory.atomic.wait32
+                            let _align = self.read_leb128_u32()?;
+                            let _offset = self.read_leb128_u32()?;
+                            let timeout = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let expected = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.atomic_wait(ptr, expected, timeout, Type::I32));
+                        }
+                        0x01 => {
+                            // memory.atomic.wait64
+                            let _align = self.read_leb128_u32()?;
+                            let _offset = self.read_leb128_u32()?;
+                            let timeout = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let expected = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.atomic_wait(ptr, expected, timeout, Type::I64));
+                        }
+                        // Atomic RMW and Cmpxchg
+                        0x17..=0x40 => {
+                            let (base, bytes, ty) = if sub_opcode <= 0x1C {
+                                (0x17, 4, Type::I32)
+                            } else if sub_opcode <= 0x22 {
+                                (0x1D, 1, Type::I32)
+                            } else if sub_opcode <= 0x28 {
+                                (0x23, 2, Type::I32)
+                            } else if sub_opcode <= 0x2E {
+                                (0x29, 8, Type::I64)
+                            } else if sub_opcode <= 0x34 {
+                                (0x2F, 1, Type::I64)
+                            } else if sub_opcode <= 0x3A {
+                                (0x35, 2, Type::I64)
+                            } else {
+                                (0x3B, 4, Type::I64)
+                            };
+
+                            let op = match sub_opcode - base {
+                                0 => AtomicOp::Add,
+                                1 => AtomicOp::Sub,
+                                2 => AtomicOp::And,
+                                3 => AtomicOp::Or,
+                                4 => AtomicOp::Xor,
+                                5 => AtomicOp::Xchg,
+                                _ => return Err(ParseError::InvalidOpcode(0xFE00 | sub_opcode)),
+                            };
+
+                            let _align = self.read_leb128_u32()?;
+                            let offset = self.read_leb128_u32()?;
+                            let value = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.atomic_rmw(op, bytes, offset, ptr, value, ty));
+                        }
+                        0x41..=0x47 => {
+                            let (bytes, ty) = match sub_opcode {
+                                0x41 => (4, Type::I32),
+                                0x42 => (1, Type::I32),
+                                0x43 => (2, Type::I32),
+                                0x44 => (8, Type::I64),
+                                0x45 => (1, Type::I64),
+                                0x46 => (2, Type::I64),
+                                0x47 => (4, Type::I64),
+                                _ => unreachable!(),
+                            };
+                            let _align = self.read_leb128_u32()?;
+                            let offset = self.read_leb128_u32()?;
+                            let replacement = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let expected = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            let ptr = stack.pop().ok_or(ParseError::UnexpectedEof)?;
+                            stack.push(builder.atomic_cmpxchg(
+                                bytes,
+                                offset,
+                                ptr,
+                                expected,
+                                replacement,
+                                ty,
+                            ));
+                        }
+                        _ => return Err(ParseError::InvalidOpcode(0xFE00 | sub_opcode)),
+                    }
+                }
                 _ => {
-                    return Err(ParseError::InvalidOpcode(opcode));
+                    return Err(ParseError::InvalidOpcode(opcode.into()));
                 }
             }
         }
 
-        Ok(stack.pop())
+        if stack.is_empty() {
+            Ok(Some(builder.nop()))
+        } else if stack.len() > 1 {
+            // Implicit block for multiple instructions
+            let list = BumpVec::from_iter_in(stack, self.bump);
+            // Result type is the type of the last expression
+            let result_type = list.last().map(|e| e.type_).unwrap_or(Type::NONE);
+            Ok(Some(builder.block(None, list, result_type)))
+        } else {
+            Ok(stack.pop())
+        }
     }
 
     fn read_value_type(&mut self) -> Result<Type> {
@@ -1662,10 +1973,7 @@ impl<'a> BinaryReader<'a> {
         Ok((initial, maximum))
     }
 
-    fn parse_import_section(
-        &mut self,
-        types: &[(Vec<Type>, Vec<Type>)],
-    ) -> Result<Vec<crate::module::Import>> {
+    fn parse_import_section(&mut self) -> Result<Vec<crate::module::Import>> {
         let count = self.read_leb128_u32()?;
         let mut imports = Vec::new();
         for _ in 0..count {
@@ -1676,11 +1984,15 @@ impl<'a> BinaryReader<'a> {
             let kind = match kind_id {
                 0 => {
                     // Function
-                    let type_idx = self.read_leb128_u32()? as usize;
-                    let func_type = types.get(type_idx).ok_or(ParseError::InvalidType)?;
-                    // Simplified: just taking first param/result as Type
-                    let p = func_type.0.first().copied().unwrap_or(Type::NONE);
-                    let r = func_type.1.first().copied().unwrap_or(Type::NONE);
+                    let type_idx = self.read_leb128_u32()?;
+                    self.all_function_types.push(type_idx);
+
+                    let func_type = self
+                        .types
+                        .get(type_idx as usize)
+                        .ok_or(ParseError::InvalidType)?;
+                    let p = Self::types_to_type(&func_type.0);
+                    let r = Self::types_to_type(&func_type.1);
                     crate::module::ImportKind::Function(p, r)
                 }
                 1 => {
@@ -1882,8 +2194,9 @@ mod tests {
         assert_eq!(module.functions.len(), 1);
         let func = &module.functions[0];
 
-        // Function should have parsed first parameter (our current limitation)
-        assert_eq!(func.params, Type::I32);
+        // Function should have parsed both parameters into a tuple
+        let expected_params = binaryen_core::type_store::intern_tuple(vec![Type::I32, Type::I32]);
+        assert_eq!(func.params, expected_params);
         assert_eq!(func.results, Type::I32);
     }
 

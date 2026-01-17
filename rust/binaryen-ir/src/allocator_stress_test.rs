@@ -58,9 +58,9 @@ fn test_many_allocations_throughput() {
 
     println!("Allocated {} items in {:?}", count, duration);
     // 1 million allocations should be very fast with Bumpalo (usually sub-second)
-    // We put a generous 2s limit to avoid flakes on slow CI
+    // We put a generous 5s limit to avoid flakes on slow CI/debug builds
     assert!(
-        duration.as_secs_f32() < 2.0,
+        duration.as_secs_f32() < 5.0,
         "Allocation slow: {:?}",
         duration
     );

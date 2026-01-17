@@ -222,3 +222,26 @@ pub enum MemoryOp {
     Copy,
     Fill,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum RefAsOp {
+    Extern,
+    Func,
+    Any,
+    NonNull,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum RefTestOp {
+    Ref,
+    NotRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum RefCastOp {
+    Cast,
+    NotCast,
+}

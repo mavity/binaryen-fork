@@ -8,4 +8,5 @@ binaryen-core = { path = "../binaryen-core" }
 bitflags = "2.4"
 bumpalo = { version = "3.19.1", features = ["collections"] }
 wat = "1.217"
+wast = "217"
 wasmprinter = "0.217"

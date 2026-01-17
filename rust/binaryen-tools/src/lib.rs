@@ -39,6 +39,14 @@ pub fn add_feature_flags(
     mut cmd: Command,
 ) -> (Command, Vec<(FeatureSet, &'static str, &'static str)>) {
     let mut feature_flag_ids = Vec::new();
+
+    cmd = cmd.arg(
+        Arg::new("all-features")
+            .long("all")
+            .action(ArgAction::SetTrue)
+            .help("Enable all features"),
+    );
+
     for feature in FeatureSet::iter_all() {
         let name = FeatureSet::to_string(feature);
         let enable_name: &'static str = Box::leak(format!("enable-{}", name).into_boxed_str());

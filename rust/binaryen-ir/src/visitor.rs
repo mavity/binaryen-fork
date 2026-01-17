@@ -176,6 +176,101 @@ pub trait Visitor<'a> {
                 self.visit(value);
                 self.visit(size);
             }
+            ExpressionKind::TableGet { index, .. } => {
+                self.visit(index);
+            }
+            ExpressionKind::TableSet { index, value, .. } => {
+                self.visit(index);
+                self.visit(value);
+            }
+            ExpressionKind::TableGrow { delta, value, .. } => {
+                self.visit(delta);
+                self.visit(value);
+            }
+            ExpressionKind::TableFill {
+                dest, value, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(value);
+                self.visit(size);
+            }
+            ExpressionKind::TableCopy {
+                dest, src, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(src);
+                self.visit(size);
+            }
+            ExpressionKind::TableInit {
+                dest, offset, size, ..
+            } => {
+                self.visit(dest);
+                self.visit(offset);
+                self.visit(size);
+            }
+            ExpressionKind::RefIsNull { value } => {
+                self.visit(value);
+            }
+            ExpressionKind::RefAs { value, .. } => {
+                self.visit(value);
+            }
+            ExpressionKind::RefEq { left, right } => {
+                self.visit(left);
+                self.visit(right);
+            }
+            ExpressionKind::StructNew { operands, .. } => {
+                for operand in operands.iter_mut() {
+                    self.visit(operand);
+                }
+            }
+            ExpressionKind::StructGet { ptr, .. } => {
+                self.visit(ptr);
+            }
+            ExpressionKind::StructSet { ptr, value, .. } => {
+                self.visit(ptr);
+                self.visit(value);
+            }
+            ExpressionKind::ArrayNew { size, init, .. } => {
+                self.visit(size);
+                if let Some(val) = init {
+                    self.visit(val);
+                }
+            }
+            ExpressionKind::ArrayGet { ptr, index, .. } => {
+                self.visit(ptr);
+                self.visit(index);
+            }
+            ExpressionKind::ArraySet {
+                ptr, index, value, ..
+            } => {
+                self.visit(ptr);
+                self.visit(index);
+                self.visit(value);
+            }
+            ExpressionKind::ArrayLen { ptr } => {
+                self.visit(ptr);
+            }
+            ExpressionKind::Try {
+                body, catch_bodies, ..
+            } => {
+                self.visit(body);
+                for catch_body in catch_bodies.iter_mut() {
+                    self.visit(catch_body);
+                }
+            }
+            ExpressionKind::Throw { operands, .. } => {
+                for operand in operands.iter_mut() {
+                    self.visit(operand);
+                }
+            }
+            ExpressionKind::TupleMake { operands } => {
+                for operand in operands.iter_mut() {
+                    self.visit(operand);
+                }
+            }
+            ExpressionKind::TupleExtract { tuple, .. } => {
+                self.visit(tuple);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
@@ -183,7 +278,12 @@ pub trait Visitor<'a> {
             | ExpressionKind::GlobalGet { .. }
             | ExpressionKind::MemorySize
             | ExpressionKind::AtomicFence
-            | ExpressionKind::DataDrop { .. } => {}
+            | ExpressionKind::DataDrop { .. }
+            | ExpressionKind::TableSize { .. }
+            | ExpressionKind::RefNull { .. }
+            | ExpressionKind::RefFunc { .. }
+            | ExpressionKind::ElemDrop { .. }
+            | ExpressionKind::Rethrow { .. } => {}
         }
     }
 }
@@ -364,6 +464,101 @@ pub trait ReadOnlyVisitor<'a> {
                 self.visit(*value);
                 self.visit(*size);
             }
+            ExpressionKind::TableGet { index, .. } => {
+                self.visit(*index);
+            }
+            ExpressionKind::TableSet { index, value, .. } => {
+                self.visit(*index);
+                self.visit(*value);
+            }
+            ExpressionKind::TableGrow { delta, value, .. } => {
+                self.visit(*delta);
+                self.visit(*value);
+            }
+            ExpressionKind::TableFill {
+                dest, value, size, ..
+            } => {
+                self.visit(*dest);
+                self.visit(*value);
+                self.visit(*size);
+            }
+            ExpressionKind::TableCopy {
+                dest, src, size, ..
+            } => {
+                self.visit(*dest);
+                self.visit(*src);
+                self.visit(*size);
+            }
+            ExpressionKind::TableInit {
+                dest, offset, size, ..
+            } => {
+                self.visit(*dest);
+                self.visit(*offset);
+                self.visit(*size);
+            }
+            ExpressionKind::RefIsNull { value } => {
+                self.visit(*value);
+            }
+            ExpressionKind::RefAs { value, .. } => {
+                self.visit(*value);
+            }
+            ExpressionKind::RefEq { left, right } => {
+                self.visit(*left);
+                self.visit(*right);
+            }
+            ExpressionKind::StructNew { operands, .. } => {
+                for operand in operands.iter() {
+                    self.visit(*operand);
+                }
+            }
+            ExpressionKind::StructGet { ptr, .. } => {
+                self.visit(*ptr);
+            }
+            ExpressionKind::StructSet { ptr, value, .. } => {
+                self.visit(*ptr);
+                self.visit(*value);
+            }
+            ExpressionKind::ArrayNew { size, init, .. } => {
+                self.visit(*size);
+                if let Some(val) = init {
+                    self.visit(*val);
+                }
+            }
+            ExpressionKind::ArrayGet { ptr, index, .. } => {
+                self.visit(*ptr);
+                self.visit(*index);
+            }
+            ExpressionKind::ArraySet {
+                ptr, index, value, ..
+            } => {
+                self.visit(*ptr);
+                self.visit(*index);
+                self.visit(*value);
+            }
+            ExpressionKind::ArrayLen { ptr } => {
+                self.visit(*ptr);
+            }
+            ExpressionKind::Try {
+                body, catch_bodies, ..
+            } => {
+                self.visit(*body);
+                for catch_body in catch_bodies.iter() {
+                    self.visit(*catch_body);
+                }
+            }
+            ExpressionKind::Throw { operands, .. } => {
+                for operand in operands.iter() {
+                    self.visit(*operand);
+                }
+            }
+            ExpressionKind::TupleMake { operands } => {
+                for operand in operands.iter() {
+                    self.visit(*operand);
+                }
+            }
+            ExpressionKind::TupleExtract { tuple, .. } => {
+                self.visit(*tuple);
+            }
             ExpressionKind::Unreachable
             | ExpressionKind::Const(_)
             | ExpressionKind::Nop
@@ -371,7 +566,12 @@ pub trait ReadOnlyVisitor<'a> {
             | ExpressionKind::GlobalGet { .. }
             | ExpressionKind::MemorySize
             | ExpressionKind::AtomicFence
-            | ExpressionKind::DataDrop { .. } => {}
+            | ExpressionKind::DataDrop { .. }
+            | ExpressionKind::TableSize { .. }
+            | ExpressionKind::RefNull { .. }
+            | ExpressionKind::RefFunc { .. }
+            | ExpressionKind::ElemDrop { .. }
+            | ExpressionKind::Rethrow { .. } => {}
         }
     }
 }
