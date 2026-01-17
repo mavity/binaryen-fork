@@ -60,6 +60,12 @@ pub enum UnaryOp {
     ExtendS32Int64,
 }
 
+impl UnaryOp {
+    pub fn is_relational(&self) -> bool {
+        matches!(self, UnaryOp::EqZInt32 | UnaryOp::EqZInt64)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
 pub enum BinaryOp {
@@ -142,6 +148,46 @@ pub enum BinaryOp {
     LeFloat64,
     GtFloat64,
     GeFloat64,
+}
+
+impl BinaryOp {
+    pub fn is_relational(&self) -> bool {
+        matches!(
+            self,
+            BinaryOp::EqInt32
+                | BinaryOp::NeInt32
+                | BinaryOp::LtSInt32
+                | BinaryOp::LtUInt32
+                | BinaryOp::LeSInt32
+                | BinaryOp::LeUInt32
+                | BinaryOp::GtSInt32
+                | BinaryOp::GtUInt32
+                | BinaryOp::GeSInt32
+                | BinaryOp::GeUInt32
+                | BinaryOp::EqInt64
+                | BinaryOp::NeInt64
+                | BinaryOp::LtSInt64
+                | BinaryOp::LtUInt64
+                | BinaryOp::LeSInt64
+                | BinaryOp::LeUInt64
+                | BinaryOp::GtSInt64
+                | BinaryOp::GtUInt64
+                | BinaryOp::GeSInt64
+                | BinaryOp::GeUInt64
+                | BinaryOp::EqFloat32
+                | BinaryOp::NeFloat32
+                | BinaryOp::LtFloat32
+                | BinaryOp::LeFloat32
+                | BinaryOp::GtFloat32
+                | BinaryOp::GeFloat32
+                | BinaryOp::EqFloat64
+                | BinaryOp::NeFloat64
+                | BinaryOp::LtFloat64
+                | BinaryOp::LeFloat64
+                | BinaryOp::GtFloat64
+                | BinaryOp::GeFloat64
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

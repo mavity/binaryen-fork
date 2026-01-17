@@ -1,3 +1,4 @@
+use crate::annotation::AnnotationStore;
 use crate::expression::ExprRef;
 use binaryen_core::Type;
 
@@ -132,6 +133,7 @@ pub struct Module<'a> {
     pub exports: Vec<Export>,
     pub elements: Vec<ElementSegment<'a>>, // Element section
     pub data: Vec<DataSegment<'a>>,
+    pub annotations: AnnotationStore<'a>,
 }
 
 impl<'a> Module<'a> {
@@ -148,6 +150,7 @@ impl<'a> Module<'a> {
             exports: Vec::new(),
             elements: Vec::new(),
             data: Vec::new(),
+            annotations: std::collections::HashMap::new(),
         }
     }
 
@@ -219,6 +222,14 @@ impl<'a> Module<'a> {
         let type_idx = self.types.len() as u32;
         self.types.push(FuncType { params, results });
         type_idx
+    }
+
+    pub fn set_annotation(&mut self, expr: ExprRef<'a>, annotation: crate::annotation::Annotation) {
+        self.annotations.insert(expr, annotation);
+    }
+
+    pub fn get_annotation(&self, expr: ExprRef<'a>) -> Option<&crate::annotation::Annotation> {
+        self.annotations.get(&expr)
     }
 
     /// Read a WebAssembly module from WAT format using the "binary bridge".

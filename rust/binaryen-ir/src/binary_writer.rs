@@ -1893,15 +1893,15 @@ mod tests {
         let mut writer = BinaryWriter::new();
         let bytes = writer.write_module(&module).expect("Failed to write");
 
-        let test_file = "/tmp/test_module.wasm";
-        fs::write(test_file, &bytes).expect("Failed to write WASM file");
+        let test_file = std::env::temp_dir().join("test_module.wasm");
+        fs::write(&test_file, &bytes).expect("Failed to write WASM file");
 
         // Validate with wasmtime
         let output = Command::new("wasmtime")
             .arg("compile")
-            .arg(test_file)
+            .arg(&test_file)
             .arg("-o")
-            .arg("/tmp/test_module.cwasm")
+            .arg(std::env::temp_dir().join("test_module.cwasm"))
             .output();
 
         match output {
@@ -2146,15 +2146,15 @@ mod tests {
         let mut writer = BinaryWriter::new();
         let bytes = writer.write_module(&module).expect("Failed to write");
 
-        let test_file = "/tmp/test_function_calls.wasm";
-        fs::write(test_file, &bytes).expect("Failed to write WASM file");
+        let test_file = std::env::temp_dir().join("test_function_calls.wasm");
+        fs::write(&test_file, &bytes).expect("Failed to write WASM file");
 
         // Validate with wasmtime
         let output = Command::new("wasmtime")
             .arg("compile")
-            .arg(test_file)
+            .arg(&test_file)
             .arg("-o")
-            .arg("/tmp/test_function_calls.cwasm")
+            .arg(std::env::temp_dir().join("test_function_calls.cwasm"))
             .output();
 
         match output {

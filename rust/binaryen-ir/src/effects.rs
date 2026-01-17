@@ -12,13 +12,19 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust
 //! use binaryen_ir::effects::{Effect, EffectAnalyzer};
+//! use binaryen_ir::expression::{IrBuilder, ExprRef};
+//! use binaryen_core::{Literal, Type};
+//! use bumpalo::Bump;
 //!
-//! let analyzer = EffectAnalyzer;
-//! let effect = analyzer.analyze(expr);
+//! let bump = Bump::new();
+//! let builder = IrBuilder::new(&bump);
+//! let expr = builder.unreachable();
+//!
+//! let effect = EffectAnalyzer::analyze(expr);
 //! assert!(effect.may_trap());
-//! assert!(!effect.transfers_control());
+//! assert!(effect.transfers_control());
 //! ```
 
 use crate::expression::{ExprRef, ExpressionKind};

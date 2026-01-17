@@ -5,4 +5,5 @@ members = [
   "binaryen-ffi",
   "binaryen-support",
   "binaryen-core", "binaryen-ir",
+  "binaryen-decompile",
 ]

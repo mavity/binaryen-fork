@@ -1,0 +1,16 @@
+[package]
+name = "binaryen-decompile"
+version = "0.1.0"
+edition = "2021"
+authors = ["Binaryen Developers"]
+description = "A Binaryen-idiomatic decompiler for WebAssembly"
+
+[dependencies]
+binaryen-ir = { path = "../binaryen-ir" }
+binaryen-core = { path = "../binaryen-core" }
+binaryen-support = { path = "../binaryen-support" }
+bumpalo = { version = "3.12", features = ["collections"] }
+log = "0.4"
+
+[dev-dependencies]
+env_logger = "0.10"
