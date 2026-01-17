@@ -918,11 +918,15 @@ impl<'a> IrBuilder<'a> {
     }
 
     pub fn return_(&self, value: Option<ExprRef<'a>>) -> ExprRef<'a> {
-        Expression::new(self.bump, ExpressionKind::Return { value }, Type::NONE)
+        Expression::new(
+            self.bump,
+            ExpressionKind::Return { value },
+            Type::UNREACHABLE,
+        )
     }
 
     pub fn unreachable(&self) -> ExprRef<'a> {
-        Expression::new(self.bump, ExpressionKind::Unreachable, Type::NONE)
+        Expression::new(self.bump, ExpressionKind::Unreachable, Type::UNREACHABLE)
     }
 
     pub fn select(

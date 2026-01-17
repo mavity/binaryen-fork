@@ -54,6 +54,10 @@ impl Type {
         self.0 <= 6
     }
 
+    pub fn is_concrete(self) -> bool {
+        self.0 > 1
+    }
+
     pub fn is_nullable(self) -> bool {
         !self.is_basic() && (self.0 & Self::NULL_MASK != 0)
     }

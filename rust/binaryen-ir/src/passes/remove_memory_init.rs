@@ -20,9 +20,10 @@ impl Pass for RemoveMemoryInit {
         // 3. Remove the start function itself if it exists
         if let Some(idx) = start_idx {
             // Check if it's exported
-            let is_exported = module.exports.iter().any(|e| {
-                e.kind == crate::module::ExportKind::Function && e.index == idx
-            });
+            let is_exported = module
+                .exports
+                .iter()
+                .any(|e| e.kind == crate::module::ExportKind::Function && e.index == idx);
 
             if !is_exported {
                 // Remove function and remap
@@ -107,6 +108,10 @@ mod tests {
         assert!(module.start.is_none(), "Start function should be unset");
 
         // Function should be removed (since it's not exported)
-        assert_eq!(module.functions.len(), 0, "Non-exported start function should be removed");
+        assert_eq!(
+            module.functions.len(),
+            0,
+            "Non-exported start function should be removed"
+        );
     }
 }

@@ -1,4 +1,4 @@
-use crate::module::{Module, FuncType};
+use crate::module::{FuncType, Module};
 use crate::pass::Pass;
 
 /// Assigns deterministic names to types for debugging.

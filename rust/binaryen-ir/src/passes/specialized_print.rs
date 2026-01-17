@@ -1,6 +1,6 @@
+use crate::analysis::stats::ModuleStats;
 use crate::module::Module;
 use crate::pass::Pass;
-use crate::analysis::stats::ModuleStats;
 
 /// Prints the call graph of the module.
 pub struct PrintCallGraph;

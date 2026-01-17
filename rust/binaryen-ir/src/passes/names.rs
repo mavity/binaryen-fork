@@ -49,9 +49,9 @@ impl Pass for MinifyNames {
 
         // 3. Minify table names (if any)
         // Note: Our IR currently has Option<TableLimits> but no explicit name in TableLimits.
-        // However, expressions use a table name (string). 
+        // However, expressions use a table name (string).
         // This suggests there's a disconnect or a single implicit table name.
-        // In Binaryen, tables have names. 
+        // In Binaryen, tables have names.
 
         // 4. Update calls and other name references
         let mut updater = NameUpdater {
@@ -62,11 +62,16 @@ impl Pass for MinifyNames {
             // Minify local branch names inside function
             let mut local_next_id = 0;
             let mut local_name_map = HashMap::new();
-            self.minify_local_names(func, &mut local_next_id, &mut local_name_map, module.allocator);
+            self.minify_local_names(
+                func,
+                &mut local_next_id,
+                &mut local_name_map,
+                module.allocator,
+            );
 
             if let Some(mut body) = func.body {
                 updater.visit(&mut body);
-                
+
                 // Also update local branch names
                 let mut branch_updater = BranchNameUpdater {
                     name_map: &local_name_map,
@@ -98,10 +103,7 @@ impl MinifyNames {
         allocator: &'a bumpalo::Bump,
     ) {
         if let Some(mut body) = func.body {
-            let mut collector = BranchNameCollector {
-                next_id,
-                name_map,
-            };
+            let mut collector = BranchNameCollector { next_id, name_map };
             collector.visit(&mut body);
         }
     }

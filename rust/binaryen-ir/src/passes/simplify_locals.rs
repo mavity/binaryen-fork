@@ -1230,6 +1230,9 @@ where
         | ExpressionKind::DataDrop { .. }
         | ExpressionKind::ElemDrop { .. }
         | ExpressionKind::Rethrow { .. }
+        | ExpressionKind::RefTest { .. }
+        | ExpressionKind::RefCast { .. }
+        | ExpressionKind::BrOn { .. }
         | ExpressionKind::Pop { .. } => {}
     }
 }
@@ -1504,6 +1507,9 @@ where
         | ExpressionKind::DataDrop { .. }
         | ExpressionKind::ElemDrop { .. }
         | ExpressionKind::Pop { .. }
+        | ExpressionKind::RefTest { .. }
+        | ExpressionKind::RefCast { .. }
+        | ExpressionKind::BrOn { .. }
         | ExpressionKind::Rethrow { .. } => {}
     }
 }

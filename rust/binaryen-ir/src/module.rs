@@ -53,6 +53,22 @@ impl<'a> Function<'a> {
             local_names: vec![String::new(); total_locals],
         }
     }
+
+    pub fn add_var(&mut self, type_: Type) -> u32 {
+        let index = (self.params.tuple_len() + self.vars.len()) as u32;
+        self.vars.push(type_);
+        self.local_names.push(String::new());
+        index
+    }
+
+    pub fn get_local_type(&self, index: u32) -> Type {
+        let params_len = self.params.tuple_len();
+        if (index as usize) < params_len {
+            self.params.tuple_elements()[index as usize]
+        } else {
+            self.vars[(index as usize) - params_len]
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
