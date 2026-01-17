@@ -716,6 +716,7 @@ mod tests {
             params: Type::NONE,
             results: Type::NONE,
             vars: vec![Type::I32],
+            local_names: vec![],
             body: Some(block),
         });
 
@@ -767,6 +768,7 @@ mod tests {
             params: Type::NONE,
             results: Type::NONE,
             vars: vec![Type::I32, Type::I32],
+            local_names: vec![],
             body: Some(if_expr),
         });
 

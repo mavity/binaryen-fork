@@ -117,6 +117,7 @@ impl<'a> TakeFunction<'a> for crate::module::Function<'a> {
                 results: binaryen_core::Type::NONE,
                 vars: Vec::new(),
                 body: None,
+                local_names: Vec::new(),
             },
         )
     }

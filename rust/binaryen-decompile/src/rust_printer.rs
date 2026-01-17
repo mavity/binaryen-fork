@@ -46,6 +46,18 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
         self.output.clone()
     }
 
+    fn type_name(&self, ty: binaryen_core::Type) -> String {
+        use binaryen_core::Type;
+        match ty {
+            Type::NONE => "()".to_string(),
+            Type::I32 => "i32".to_string(),
+            Type::I64 => "i64".to_string(),
+            Type::F32 => "f32".to_string(),
+            Type::F64 => "f64".to_string(),
+            _ => format!("{:?}", ty).to_lowercase(),
+        }
+    }
+
     fn print_function(&mut self, func: &binaryen_ir::Function<'a>) {
         self.output.push_str(&format!("fn {}(", func.name));
 
@@ -59,31 +71,48 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
             } else {
                 "var"
             };
-            self.output.push_str(&format!("{}: {:?}", name, ty));
+            self.output
+                .push_str(&format!("{}: {}", name, self.type_name(*ty)));
         }
 
-        self.output.push_str(") ");
+        self.output.push_str(")");
 
         if func.results != binaryen_core::Type::NONE {
-            self.output.push_str("-> ");
-            self.output.push_str(&format!("{:?} ", func.results));
+            self.output.push_str(" -> ");
+            self.output.push_str(&self.type_name(func.results));
         }
 
-        self.output.push_str("{\n");
+        self.output.push_str(" {\n");
         self.indent += 1;
 
+        // Declare locals
+        let param_count = func.params.tuple_elements().len();
+        for (i, ty) in func.vars.iter().enumerate() {
+            let local_idx = param_count + i;
+            let name = self.get_local_name(func, local_idx as u32, None);
+            self.write_indent();
+            self.output
+                .push_str(&format!("let mut {}: {} = 0;\n", name, self.type_name(*ty)));
+        }
+
         if let Some(body) = func.body {
-            if let binaryen_ir::ExpressionKind::Block { list, .. } = &body.kind {
-                for (i, &child) in list.iter().enumerate() {
-                    let is_last = i == list.len() - 1;
-                    self.walk_expression_ext(
-                        func,
-                        child,
-                        is_last && func.results != binaryen_core::Type::NONE,
-                    );
+            match &body.kind {
+                binaryen_ir::ExpressionKind::Block {
+                    name: None, list, ..
+                } if self.module.annotations.get_if_info(body).is_none() => {
+                    // Skip extra braces for anonymous top-level blocks that aren't lifted
+                    for (i, &child) in list.iter().enumerate() {
+                        let is_last = i == list.len() - 1;
+                        self.walk_expression_ext(
+                            func,
+                            child,
+                            is_last && func.results != binaryen_core::Type::NONE,
+                        );
+                    }
                 }
-            } else {
-                self.walk_expression_ext(func, body, func.results != binaryen_core::Type::NONE);
+                _ => {
+                    self.walk_expression_ext(func, body, func.results != binaryen_core::Type::NONE);
+                }
             }
         }
 
@@ -160,18 +189,55 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
                 return;
             }
             binaryen_ir::ExpressionKind::Loop { name, body } => {
+                if let Some(n) = name {
+                    self.output.push_str(&format!("'{}: ", n));
+                }
+
                 use binaryen_ir::annotation::LoopType;
                 let loop_keyword = match self.module.annotations.get_loop_type(expr) {
                     Some(LoopType::While) => "while ",
                     Some(LoopType::DoWhile) => "loop ",
                     _ => "loop ",
                 };
-                if let Some(n) = name {
-                    self.output.push_str(&format!("'{}: ", n));
-                }
                 self.output.push_str(loop_keyword);
                 self.walk_expression_ext(func, *body, false);
                 return;
+            }
+            binaryen_ir::ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            } => {
+                if let Some(cond) = condition {
+                    self.output.push_str("if ");
+                    self.walk_inline_expression(func, *cond);
+                    self.output.push_str(" { ");
+                }
+
+                if let Some(val) = value {
+                    self.output.push_str(&format!("break '{} ", name));
+                    self.walk_inline_expression(func, *val);
+                } else {
+                    self.output.push_str(&format!("break '{}", name));
+                }
+
+                if condition.is_some() {
+                    self.output.push_str(" }");
+                }
+            }
+            binaryen_ir::ExpressionKind::Return { value } => {
+                if is_return {
+                    if let Some(val) = value {
+                        self.walk_inline_expression(func, *val);
+                    }
+                } else {
+                    if let Some(val) = value {
+                        self.output.push_str("return ");
+                        self.walk_inline_expression(func, *val);
+                    } else {
+                        self.output.push_str("return");
+                    }
+                }
             }
             _ => {
                 self.walk_inline_expression(func, expr);
@@ -183,6 +249,14 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
         } else {
             self.output.push_str(";\n");
         }
+    }
+
+    fn walk_expression(
+        &mut self,
+        func: &binaryen_ir::Function<'a>,
+        expr: binaryen_ir::ExprRef<'a>,
+    ) {
+        self.walk_expression_ext(func, expr, false);
     }
 
     fn walk_inline_expression(
@@ -215,6 +289,7 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
                     binaryen_ir::BinaryOp::AndInt32 | binaryen_ir::BinaryOp::AndInt64 => " & ",
                     binaryen_ir::BinaryOp::OrInt32 | binaryen_ir::BinaryOp::OrInt64 => " | ",
                     binaryen_ir::BinaryOp::XorInt32 | binaryen_ir::BinaryOp::XorInt64 => " ^ ",
+                    binaryen_ir::BinaryOp::RemSInt32 | binaryen_ir::BinaryOp::RemSInt64 => " % ",
                     binaryen_ir::BinaryOp::ShlInt32 | binaryen_ir::BinaryOp::ShlInt64 => " << ",
                     binaryen_ir::BinaryOp::ShrSInt32 | binaryen_ir::BinaryOp::ShrSInt64 => " >> ",
                     binaryen_ir::BinaryOp::ShrUInt32 | binaryen_ir::BinaryOp::ShrUInt64 => " >> ", // logical shift
@@ -300,6 +375,60 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
                     self.walk_inline_expression(func, *op);
                 }
                 self.output.push_str(")");
+            }
+            ExpressionKind::Select {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.output.push_str("if ");
+                self.walk_inline_expression(func, *condition);
+                self.output.push_str(" { ");
+                self.walk_inline_expression(func, *if_true);
+                self.output.push_str(" } else { ");
+                self.walk_inline_expression(func, *if_false);
+                self.output.push_str(" }");
+            }
+            ExpressionKind::Drop { value } => {
+                self.output.push_str("drop(");
+                self.walk_inline_expression(func, *value);
+                self.output.push_str(")");
+            }
+            ExpressionKind::Nop => {
+                self.output.push_str("nop!");
+            }
+            ExpressionKind::Unreachable => {
+                self.output.push_str("unreachable!()");
+            }
+            ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            } => {
+                if let Some(cond) = condition {
+                    self.output.push_str("if ");
+                    self.walk_inline_expression(func, *cond);
+                    self.output.push_str(" { ");
+                }
+
+                if let Some(val) = value {
+                    self.output.push_str(&format!("break '{} ", name));
+                    self.walk_inline_expression(func, *val);
+                } else {
+                    self.output.push_str(&format!("break '{}", name));
+                }
+
+                if condition.is_some() {
+                    self.output.push_str(" }");
+                }
+            }
+            ExpressionKind::Return { value } => {
+                if let Some(val) = value {
+                    self.output.push_str("return ");
+                    self.walk_inline_expression(func, *val);
+                } else {
+                    self.output.push_str("return");
+                }
             }
             _ => {
                 self.output.push_str(&format!("{:?}", expr.kind));

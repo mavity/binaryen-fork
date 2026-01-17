@@ -79,8 +79,35 @@ impl<'m, 'a> CPrinter<'m, 'a> {
         self.output.push_str(") {\n");
         self.indent += 1;
 
+        // Declare locals
+        let param_count = func.params.tuple_elements().len();
+        for (i, ty) in func.vars.iter().enumerate() {
+            let local_idx = param_count + i;
+            let name = self.get_local_name(func, local_idx as u32, None);
+            self.write_indent();
+            self.output
+                .push_str(&format!("{} {} = 0;\n", self.type_name(*ty), name));
+        }
+
         if let Some(body) = func.body {
-            self.walk_expression(func, body);
+            match &body.kind {
+                binaryen_ir::ExpressionKind::Block {
+                    name: None, list, ..
+                } if self.module.annotations.get_if_info(body).is_none() => {
+                    // Skip extra braces for anonymous top-level blocks that aren't lifted
+                    for (i, &child) in list.iter().enumerate() {
+                        let is_last = i == list.len() - 1;
+                        self.walk_expression_ext(
+                            func,
+                            child,
+                            is_last && func.results != binaryen_core::Type::NONE,
+                        );
+                    }
+                }
+                _ => {
+                    self.walk_expression_ext(func, body, func.results != binaryen_core::Type::NONE);
+                }
+            }
         }
 
         self.indent -= 1;
@@ -93,10 +120,11 @@ impl<'m, 'a> CPrinter<'m, 'a> {
         }
     }
 
-    fn walk_expression(
+    fn walk_expression_ext(
         &mut self,
         func: &binaryen_ir::Function<'a>,
         expr: binaryen_ir::ExprRef<'a>,
+        is_return: bool,
     ) {
         // Skip if marked as inlined (as a statement)
         if self.module.annotations.is_inlined(expr) {
@@ -104,6 +132,19 @@ impl<'m, 'a> CPrinter<'m, 'a> {
         }
 
         self.write_indent();
+
+        if is_return {
+            match &expr.kind {
+                binaryen_ir::ExpressionKind::Block { .. }
+                | binaryen_ir::ExpressionKind::If { .. }
+                | binaryen_ir::ExpressionKind::Loop { .. } => {
+                    // These constructs handle is_return internally by passing it to their children
+                }
+                _ => {
+                    self.output.push_str("return ");
+                }
+            }
+        }
 
         match &expr.kind {
             binaryen_ir::ExpressionKind::Block { name, list, .. } => {
@@ -116,21 +157,24 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                     }
                     self.walk_inline_expression(func, condition);
                     self.output.push_str(") ");
-                } else if let Some(n) = name {
-                    self.output.push_str(&format!("{}: ", n));
                 }
 
                 self.output.push_str("{\n");
                 self.indent += 1;
 
                 let start_idx = if is_if { 1 } else { 0 };
-                for &child in &list[start_idx..] {
-                    self.walk_expression(func, child);
+                for (i, &child) in list.iter().enumerate().skip(start_idx) {
+                    let is_last = i == list.len() - 1;
+                    self.walk_expression_ext(func, child, is_return && is_last);
                 }
 
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");
+
+                if let Some(n) = name {
+                    self.output.push_str(&format!("{}: ;\n", n));
+                }
                 return;
             }
             binaryen_ir::ExpressionKind::LocalSet { index, value } => {
@@ -146,11 +190,11 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                 self.output.push_str("if (");
                 self.walk_inline_expression(func, *condition);
                 self.output.push_str(") ");
-                self.walk_expression(func, *if_true);
+                self.walk_expression_ext(func, *if_true, is_return);
                 if let Some(f) = if_false {
                     self.write_indent();
                     self.output.push_str("else ");
-                    self.walk_expression(func, *f);
+                    self.walk_expression_ext(func, *f, is_return);
                 }
                 return;
             }
@@ -164,8 +208,46 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                 }
                 self.output
                     .push_str(&format!("{} {} ", loop_keyword, name.unwrap_or("unnamed")));
-                self.walk_expression(func, *body);
+                self.walk_expression_ext(func, *body, false);
                 return;
+            }
+            binaryen_ir::ExpressionKind::Return { value } => {
+                if is_return {
+                    if let Some(val) = value {
+                        self.walk_inline_expression(func, *val);
+                    }
+                } else {
+                    if let Some(val) = value {
+                        self.output.push_str("return ");
+                        self.walk_inline_expression(func, *val);
+                    } else {
+                        self.output.push_str("return");
+                    }
+                }
+            }
+            binaryen_ir::ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            } => {
+                if let Some(cond) = condition {
+                    self.output.push_str("if (");
+                    self.walk_inline_expression(func, *cond);
+                    self.output.push_str(") { ");
+                }
+
+                if let Some(val) = value {
+                    self.output
+                        .push_str(&format!("/* break {} with value */ ", name));
+                    // We don't have a good way to return values from labels in C
+                    self.walk_inline_expression(func, *val);
+                    self.output.push_str("; ");
+                }
+                self.output.push_str(&format!("goto {}", name));
+
+                if condition.is_some() {
+                    self.output.push_str("; }");
+                }
             }
             _ => {
                 // For other things that are expressions used as statements
@@ -206,6 +288,7 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                     binaryen_ir::BinaryOp::AndInt32 | binaryen_ir::BinaryOp::AndInt64 => " & ",
                     binaryen_ir::BinaryOp::OrInt32 | binaryen_ir::BinaryOp::OrInt64 => " | ",
                     binaryen_ir::BinaryOp::XorInt32 | binaryen_ir::BinaryOp::XorInt64 => " ^ ",
+                    binaryen_ir::BinaryOp::RemSInt32 | binaryen_ir::BinaryOp::RemSInt64 => " % ",
                     binaryen_ir::BinaryOp::ShlInt32 | binaryen_ir::BinaryOp::ShlInt64 => " << ",
                     binaryen_ir::BinaryOp::ShrSInt32 | binaryen_ir::BinaryOp::ShrSInt64 => " >> ",
                     binaryen_ir::BinaryOp::ShrUInt32 | binaryen_ir::BinaryOp::ShrUInt64 => " >>> ",
@@ -300,6 +383,30 @@ impl<'m, 'a> CPrinter<'m, 'a> {
                     self.walk_inline_expression(func, *op);
                 }
                 self.output.push_str(")");
+            }
+            ExpressionKind::Break {
+                name,
+                condition,
+                value,
+            } => {
+                self.output.push_str(&format!("break_to_{}", name));
+                if let Some(val) = value {
+                    self.output.push_str("(");
+                    self.walk_inline_expression(func, *val);
+                    self.output.push_str(")");
+                }
+                if let Some(cond) = condition {
+                    self.output.push_str(" if ");
+                    self.walk_inline_expression(func, *cond);
+                }
+            }
+            ExpressionKind::Return { value } => {
+                if let Some(val) = value {
+                    self.output.push_str("return ");
+                    self.walk_inline_expression(func, *val);
+                } else {
+                    self.output.push_str("return");
+                }
             }
             ExpressionKind::Select {
                 condition,

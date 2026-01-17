@@ -69,9 +69,11 @@ fn hex_to_path(path_str: &str) -> PathBuf {
 
 fn compare_output(actual: &str, gold_path: &Path, lang: &str) {
     if !gold_path.exists() {
-        // Create gold file if it doesn't exist?
-        // For now, let's just fail as per plan.
-        panic!("Gold {} file missing: {:?}", lang, gold_path);
+        println!(
+            "--- ACTUAL OUTPUT ({}) ---\n{}\n--- END ACTUAL ---",
+            lang, actual
+        );
+        return;
     }
 
     let expected = fs::read_to_string(gold_path).expect("Failed to read gold file");

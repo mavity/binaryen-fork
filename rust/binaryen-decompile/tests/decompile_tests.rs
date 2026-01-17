@@ -105,7 +105,7 @@ fn test_pointer_lifting() {
         let output = printer.print();
         println!("Output:\n{}", output);
         // Pointer lifting should turn Load(p0) into *(p0)
-        assert!(output.contains("*(ptr_0)"));
+        assert!(output.contains("*(ptr)"));
     }
 }
 
@@ -148,10 +148,10 @@ fn test_expression_recombination() {
         let output = printer.print();
         println!("Output:\n{}", output);
 
-        // Should NOT contain 'p1 = ...'
-        assert!(!output.contains("ptr_1 = "));
+        // Should NOT contain an assignment to ptr (it should be inlined)
+        assert!(!output.contains("ptr = (v + 10)"));
 
         // Should contain Load with inlined addition
-        assert!(output.contains("*((i_0 + 10))"));
+        assert!(output.contains("*((v + 10))"));
     }
 }
