@@ -6,6 +6,97 @@ pub trait Pass {
     fn run<'a>(&mut self, module: &mut Module<'a>);
 }
 
+#[derive(Debug, Clone)]
+pub struct OptimizationOptions {
+    pub debug: bool,
+    pub validate: bool,
+    pub validate_globally: bool,
+    pub optimize_level: u32,
+    pub shrink_level: u32,
+    pub traps_never_happen: bool,
+    pub low_memory_unused: bool,
+    pub fast_math: bool,
+    pub zero_filled_memory: bool,
+    pub closed_world: bool,
+    pub debug_info: bool,
+}
+
+impl Default for OptimizationOptions {
+    fn default() -> Self {
+        Self {
+            debug: false,
+            validate: true,
+            validate_globally: true,
+            optimize_level: 0,
+            shrink_level: 0,
+            traps_never_happen: false,
+            low_memory_unused: false,
+            fast_math: false,
+            zero_filled_memory: false,
+            closed_world: false,
+            debug_info: false,
+        }
+    }
+}
+
+impl OptimizationOptions {
+    pub fn o0() -> Self {
+        Self {
+            optimize_level: 0,
+            shrink_level: 0,
+            ..Default::default()
+        }
+    }
+
+    pub fn o1() -> Self {
+        Self {
+            optimize_level: 1,
+            shrink_level: 0,
+            ..Default::default()
+        }
+    }
+
+    pub fn o2() -> Self {
+        Self {
+            optimize_level: 2,
+            shrink_level: 0,
+            ..Default::default()
+        }
+    }
+
+    pub fn o3() -> Self {
+        Self {
+            optimize_level: 3,
+            shrink_level: 0,
+            ..Default::default()
+        }
+    }
+
+    pub fn o4() -> Self {
+        Self {
+            optimize_level: 4,
+            shrink_level: 0,
+            ..Default::default()
+        }
+    }
+
+    pub fn os() -> Self {
+        Self {
+            optimize_level: 2,
+            shrink_level: 1,
+            ..Default::default()
+        }
+    }
+
+    pub fn oz() -> Self {
+        Self {
+            optimize_level: 2,
+            shrink_level: 2,
+            ..Default::default()
+        }
+    }
+}
+
 pub struct PassRunner {
     passes: Vec<Box<dyn Pass>>,
     validate_after_pass: bool,
@@ -31,6 +122,91 @@ impl PassRunner {
 
     pub fn add<P: Pass + 'static>(&mut self, pass: P) {
         self.passes.push(Box::new(pass));
+    }
+
+    /// The main entry point for -O1, -O2, etc.
+    /// Ported from C++ PassRunner::addDefaultOptimizationPasses.
+    pub fn add_default_optimization_passes(&mut self, options: &OptimizationOptions) {
+        if options.optimize_level == 0 && options.shrink_level == 0 {
+            return; // -O0: no optimizations
+        }
+
+        // Global pre-passes
+        self.add_global_pre_passes(options);
+
+        // Function-level optimizations (the "meat")
+        self.add_function_optimization_passes(options);
+
+        // Global post-passes
+        self.add_global_post_passes(options);
+    }
+
+    fn add_global_pre_passes(&mut self, options: &OptimizationOptions) {
+        self.add(crate::passes::duplicate_function_elimination::DuplicateFunctionElimination);
+        if options.optimize_level >= 2 {
+            self.add(crate::passes::remove_unused_module_elements::RemoveUnusedModuleElements);
+        }
+    }
+
+    fn add_function_optimization_passes(&mut self, options: &OptimizationOptions) {
+        self.add(crate::passes::dce::DCE);
+        self.add(crate::passes::remove_unused_names::RemoveUnusedNames);
+        self.add(crate::passes::remove_unused_brs::RemoveUnusedBrs);
+        self.add(crate::passes::optimize_instructions::OptimizeInstructions::new());
+
+        if options.optimize_level >= 2 || options.shrink_level >= 2 {
+            self.add(crate::passes::pick_load_signs::PickLoadSigns);
+        }
+
+        self.add(crate::passes::precompute::Precompute);
+
+        if options.optimize_level >= 2 || options.shrink_level >= 2 {
+            self.add(crate::passes::code_pushing::CodePushing);
+        }
+
+        self.add(crate::passes::simplify_locals::SimplifyLocals::with_options(true, false, true));
+        self.add(crate::passes::vacuum::Vacuum);
+
+        self.add(crate::passes::coalesce_locals::CoalesceLocals);
+        self.add(crate::passes::vacuum::Vacuum);
+
+        self.add(crate::passes::merge_blocks::MergeBlocks);
+        self.add(crate::passes::remove_unused_brs::RemoveUnusedBrs);
+        self.add(crate::passes::remove_unused_names::RemoveUnusedNames);
+        self.add(crate::passes::merge_blocks::MergeBlocks);
+
+        self.add(crate::passes::precompute::Precompute);
+        self.add(crate::passes::optimize_instructions::OptimizeInstructions::new());
+        self.add(crate::passes::vacuum::Vacuum);
+    }
+
+    fn add_global_post_passes(&mut self, options: &OptimizationOptions) {
+        if options.optimize_level >= 2 || options.shrink_level >= 1 {
+            self.add(crate::passes::dae_optimizing::DaeOptimizing);
+        }
+        if options.optimize_level >= 2 || options.shrink_level >= 2 {
+            self.add(crate::passes::inlining::Inlining);
+        }
+        self.add(crate::passes::duplicate_function_elimination::DuplicateFunctionElimination);
+    }
+
+    /// Bundle: Standard cleanup sequence (vacuum + name removal + local simplification)
+    pub fn add_cleanup_passes(&mut self) {
+        self.add(crate::passes::vacuum::Vacuum);
+        self.add(crate::passes::remove_unused_names::RemoveUnusedNames);
+        self.add(crate::passes::simplify_locals::SimplifyLocals::new());
+    }
+
+    /// Bundle: Dead Code Elimination sequence
+    pub fn add_dead_code_elimination_passes(&mut self) {
+        self.add(crate::passes::dce::DCE);
+        self.add(crate::passes::remove_unused_module_elements::RemoveUnusedModuleElements);
+    }
+
+    /// Bundle: Branch optimization (merge blocks + remove unused branches)
+    pub fn add_branch_optimization_passes(&mut self) {
+        self.add(crate::passes::merge_blocks::MergeBlocks);
+        self.add(crate::passes::remove_unused_brs::RemoveUnusedBrs);
     }
 
     pub fn run<'a>(&mut self, module: &mut Module<'a>) {
@@ -105,8 +281,6 @@ mod tests {
             }
             fn run<'a>(&mut self, module: &mut Module<'a>) {
                 // Break module validity: Change function return type but not body
-                // Function initially expects I32 and has I32 body.
-                // We change expected return to F32.
                 if let Some(func) = module.functions.get_mut(0) {
                     func.results = Type::F32;
                 }
@@ -114,7 +288,6 @@ mod tests {
         }
 
         let bump = Bump::new();
-        // Body: (i32.const 42)
         let body = bump.alloc(Expression {
             kind: ExpressionKind::Const(Literal::I32(42)),
             type_: Type::I32,
@@ -123,13 +296,13 @@ mod tests {
         let func = Function::new(
             "test".to_string(),
             Type::NONE,
-            Type::I32, // Correct
+            Type::I32,
             vec![],
             Some(ExprRef::new(body)),
         );
 
-        let bump = bumpalo::Bump::new();
-        let mut module = Module::new(&bump);
+        let bump_module = bumpalo::Bump::new();
+        let mut module = Module::new(&bump_module);
         module.add_function(func);
 
         let mut runner = PassRunner::new();
@@ -145,5 +318,24 @@ mod tests {
             result.is_err(),
             "PassRunner should panic on validation error"
         );
+    }
+
+    #[test]
+    fn test_optimization_options_presets() {
+        let o0 = OptimizationOptions::o0();
+        assert_eq!(o0.optimize_level, 0);
+        assert_eq!(o0.shrink_level, 0);
+
+        let o3 = OptimizationOptions::o3();
+        assert_eq!(o3.optimize_level, 3);
+        assert_eq!(o3.shrink_level, 0);
+
+        let os = OptimizationOptions::os();
+        assert_eq!(os.optimize_level, 2);
+        assert_eq!(os.shrink_level, 1);
+
+        let oz = OptimizationOptions::oz();
+        assert_eq!(oz.optimize_level, 2);
+        assert_eq!(oz.shrink_level, 2);
     }
 }

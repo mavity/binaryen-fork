@@ -19,35 +19,35 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
     pub fn print(&mut self) -> String {
         self.output.clear();
         self.output.push_str("// Decompiled from WebAssembly\n\n");
-        
+
         for func in &self.module.functions {
             self.print_function(func);
         }
-        
+
         self.output.clone()
     }
 
     fn print_function(&mut self, func: &binaryen_ir::Function<'a>) {
         self.output.push_str(&format!("fn {}(", func.name));
-        
+
         // Print params
         // For now just show the type as a string
         self.output.push_str(&format!("{:?}", func.params));
-        
+
         self.output.push_str(") ");
-        
+
         if func.results != binaryen_core::Type::NONE {
-             self.output.push_str("-> ");
-             self.output.push_str(&format!("{:?} ", func.results));
+            self.output.push_str("-> ");
+            self.output.push_str(&format!("{:?} ", func.results));
         }
-        
+
         self.output.push_str("{\n");
         self.indent += 1;
-        
+
         if let Some(body) = func.body {
             self.walk_expression(body);
         }
-        
+
         self.indent -= 1;
         self.output.push_str("}\n\n");
     }
@@ -60,12 +60,12 @@ impl<'m, 'a> DecompilerPrinter<'m, 'a> {
 
     fn walk_expression(&mut self, expr: binaryen_ir::ExprRef<'a>) {
         self.write_indent();
-        
+
         // Check for annotations
         if let Some(ann) = self.module.get_annotation(expr) {
             self.output.push_str(&format!("/* {:?} */ ", ann));
         }
-        
+
         match &expr.kind {
             binaryen_ir::ExpressionKind::Binary { op, left, right } => {
                 self.output.push_str(&format!("{:?}(", op));

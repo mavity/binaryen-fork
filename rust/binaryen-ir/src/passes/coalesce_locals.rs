@@ -1,11 +1,24 @@
 use crate::dataflow::cfg::CFGBuilder;
 use crate::dataflow::liveness::InterferenceGraph;
 use crate::expression::{ExprRef, ExpressionKind};
-use crate::module::Function;
+use crate::module::{Function, Module};
+use crate::pass::Pass;
 use crate::visitor::Visitor;
 use binaryen_core::Type;
 
 pub struct CoalesceLocals;
+
+impl Pass for CoalesceLocals {
+    fn name(&self) -> &str {
+        "coalesce-locals"
+    }
+
+    fn run<'a>(&mut self, module: &mut Module<'a>) {
+        for func in &mut module.functions {
+            Self::run_on_func(func);
+        }
+    }
+}
 
 struct LocalMapper<'a> {
     mapping: &'a [u32],
@@ -37,7 +50,7 @@ impl<'a, 'b> Visitor<'a> for LocalMapper<'b> {
 }
 
 impl CoalesceLocals {
-    pub fn run(func: &mut Function) {
+    pub fn run_on_func(func: &mut Function) {
         if let Some(body) = &mut func.body {
             let root = &mut *body;
 
@@ -194,7 +207,7 @@ mod tests {
             Some(body),
         );
 
-        CoalesceLocals::run(&mut func);
+        CoalesceLocals::run_on_func(&mut func);
 
         assert_eq!(func.vars.len(), 1);
         assert_eq!(func.vars[0], Type::I32);
@@ -250,7 +263,7 @@ mod tests {
             Some(body),
         );
 
-        CoalesceLocals::run(&mut func);
+        CoalesceLocals::run_on_func(&mut func);
 
         assert_eq!(func.vars.len(), 2);
     }
@@ -301,7 +314,7 @@ mod tests {
             Some(body),
         );
 
-        CoalesceLocals::run(&mut func);
+        CoalesceLocals::run_on_func(&mut func);
 
         assert_eq!(func.vars.len(), 1);
     }

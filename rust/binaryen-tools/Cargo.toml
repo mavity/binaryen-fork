@@ -1,0 +1,25 @@
+[package]
+name = "binaryen-tools"
+version = "0.1.0"
+edition = "2021"
+authors = ["Binaryen Maintainers"]
+description = "CLI tools for Binaryen"
+
+[dependencies]
+binaryen-ir = { path = "../binaryen-ir" }
+binaryen-core = { path = "../binaryen-core" }
+bumpalo = "3.16.0"
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+
+[[bin]]
+name = "wasm-opt"
+path = "src/bin/wasm_opt.rs"
+
+[[bin]]
+name = "wasm-as"
+path = "src/bin/wasm_as.rs"
+
+[[bin]]
+name = "wasm-dis"
+path = "src/bin/wasm_dis.rs"

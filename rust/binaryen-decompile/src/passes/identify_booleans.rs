@@ -1,4 +1,4 @@
-use binaryen_ir::{Module, ExpressionKind, visitor::Visitor, ExprRef, HighLevelType, Annotation};
+use binaryen_ir::{visitor::Visitor, Annotation, ExprRef, ExpressionKind, HighLevelType, Module};
 
 /// A pass that identifies operations that produce boolean values.
 pub struct IdentifyBooleans;
@@ -12,13 +12,13 @@ impl IdentifyBooleans {
         let mut visitor = BooleanVisitor {
             bool_exprs: Vec::new(),
         };
-        
+
         for func in &mut module.functions {
             if let Some(mut body) = func.body {
                 visitor.visit(&mut body);
             }
         }
-        
+
         for expr in visitor.bool_exprs {
             module.set_annotation(expr, Annotation::Type(HighLevelType::Bool));
         }

@@ -1,6 +1,6 @@
 pub mod lifter;
-pub mod printer;
 pub mod passes;
+pub mod printer;
 
 pub use lifter::Lifter;
 pub use printer::DecompilerPrinter;

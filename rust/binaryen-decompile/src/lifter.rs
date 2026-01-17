@@ -1,5 +1,5 @@
-use binaryen_ir::Module;
 use crate::passes::IdentifyBooleans;
+use binaryen_ir::Module;
 
 /// The Lifter is responsible for running passes that "lift" low-level WASM IR
 /// into high-level constructs by populating annotations on Expressions.
