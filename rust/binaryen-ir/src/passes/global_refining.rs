@@ -40,8 +40,8 @@ impl Pass for GlobalRefining {
         // Update globals
         for (i, global) in module.globals.iter_mut().enumerate() {
             if let Some(Some(inferred)) = inferred_types.get(&(i as u32)) {
-                if *inferred != global.type_ {
-                    // Update type if valid subtype
+                if *inferred != global.type_ && inferred.is_subtype_of(global.type_) {
+                    global.type_ = *inferred;
                 }
             }
         }
@@ -56,14 +56,10 @@ impl GlobalAnalyzer {
     fn note_assignment(&mut self, index: u32, type_: Type) {
         let entry = self.assigned_types.entry(index).or_insert(None);
         if let Some(val) = entry {
-            *val = Self::lub(*val, type_);
+            *val = Type::get_lub(*val, type_);
         } else {
             *entry = Some(type_);
         }
-    }
-
-    fn lub(a: Type, _b: Type) -> Type {
-        a
     }
 }
 

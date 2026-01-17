@@ -134,6 +134,95 @@ impl Type {
         }
         vec![*self]
     }
+
+    /// Check if this type is a subtype of another type.
+    pub fn is_subtype_of(self, other: Type) -> bool {
+        if self == other {
+            return true;
+        }
+
+        if self == Self::UNREACHABLE {
+            return true;
+        }
+
+        if self.is_basic() || other.is_basic() {
+            return self == other;
+        }
+
+        // Reference subtyping logic
+        if self.is_ref() && other.is_ref() {
+            let self_null = self.is_nullable();
+            let other_null = other.is_nullable();
+
+            // Nullability: non-null is subtype of nullable
+            if self_null && !other_null {
+                return false;
+            }
+
+            let self_ht = self.get_heap_type().unwrap();
+            let other_ht = other.get_heap_type().unwrap();
+
+            return self_ht.is_subtype_of(other_ht);
+        }
+
+        // Tuples
+        if self.is_tuple() && other.is_tuple() {
+            let self_elems = self.tuple_elements();
+            let other_elems = other.tuple_elements();
+
+            if self_elems.len() != other_elems.len() {
+                return false;
+            }
+
+            for (s, o) in self_elems.iter().zip(other_elems.iter()) {
+                if !s.is_subtype_of(*o) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        false
+    }
+
+    /// Calculate the Least Upper Bound (LUB) of two types.
+    pub fn get_lub(a: Type, b: Type) -> Type {
+        if a == b {
+            return a;
+        }
+        if a == Self::UNREACHABLE {
+            return b;
+        }
+        if b == Self::UNREACHABLE {
+            return a;
+        }
+
+        if a.is_basic() || b.is_basic() {
+            // No subtyping among basic types
+            return if a == b { a } else { Type::ANYREF }; // Fallback for mixed refs/basics? Wasm doesn't allow mixing concrete and refs usually in LUB.
+        }
+
+        // Reference LUB
+        if a.is_ref() && b.is_ref() {
+            let nullable = a.is_nullable() || b.is_nullable();
+            let ht_a = a.get_heap_type().unwrap();
+            let ht_b = b.get_heap_type().unwrap();
+            let lub_ht = HeapType::get_lub(ht_a, ht_b);
+            return Type::new(lub_ht, nullable);
+        }
+
+        // Tuples
+        if a.is_tuple() && b.is_tuple() {
+            let a_elems = a.tuple_elements();
+            let b_elems = b.tuple_elements();
+            if a_elems.len() == b_elems.len() {
+                // Return a new tuple of LUBs? This requires interned signatures/tuples access.
+                // For now, return a generic type or handle if possible.
+            }
+        }
+
+        Type::NONE // Or some top type if applicable
+    }
 }
 
 impl fmt::Debug for Type {
@@ -202,6 +291,44 @@ impl HeapType {
     pub fn is_basic(self) -> bool {
         // This is a simplification, assuming we only have basic types for now
         true
+    }
+
+    pub fn is_subtype_of(self, other: HeapType) -> bool {
+        if self == other {
+            return true;
+        }
+
+        // Basic hierarchy
+        // any -> eq -> struct/array/i31
+        match other {
+            HeapType::ANY => true,
+            HeapType::EQ => match self {
+                HeapType::EQ | HeapType::STRUCT | HeapType::ARRAY | HeapType::I31 => true,
+                _ => false,
+            },
+            HeapType::FUNC => self == HeapType::FUNC,
+            _ => false,
+        }
+    }
+
+    pub fn get_lub(a: HeapType, b: HeapType) -> HeapType {
+        if a == b {
+            return a;
+        }
+
+        if a.is_subtype_of(b) {
+            return b;
+        }
+        if b.is_subtype_of(a) {
+            return a;
+        }
+
+        // Common ancestors
+        if a.is_subtype_of(HeapType::EQ) && b.is_subtype_of(HeapType::EQ) {
+            return HeapType::EQ;
+        }
+
+        HeapType::ANY
     }
 }
 
