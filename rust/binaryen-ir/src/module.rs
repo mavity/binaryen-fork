@@ -250,7 +250,6 @@ impl<'a> Module<'a> {
             .parse_module()
             .map_err(|e| format!("Binary parsing error: {:?}", e))
     }
-    }
 
     /// Read a WebAssembly module from WAT format using the "binary bridge".
     pub fn read_wat(allocator: &'a bumpalo::Bump, wat: &str) -> Result<Self, String> {
