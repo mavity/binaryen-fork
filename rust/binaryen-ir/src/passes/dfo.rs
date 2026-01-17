@@ -1,7 +1,7 @@
 use crate::analysis::cfg::ControlFlowGraph;
 use crate::analysis::dominators::DominanceTree;
-use crate::analysis::ssa::SSABuilder;
-use crate::expression::IrBuilder;
+use crate::analysis::ssa::{DefA, SSABuilder};
+use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::Module;
 use crate::pass::Pass;
 
@@ -26,14 +26,40 @@ impl Pass for DataFlowOpts {
                 let dom = DominanceTree::build(&cfg);
 
                 // 3. Build SSA info
-                let _ssa = SSABuilder::build(func, &cfg, &dom);
+                let ssa = SSABuilder::build(func, &cfg, &dom);
 
                 // 4. Perform optimizations (DCE, Copy Prop)
-                // Placeholder: identifying dead stores or copies requires analyzing the SSA graph.
+                let _optimizer = DfoOptimizer {
+                    ssa: &ssa,
+                    allocator,
+                    func,
+                };
 
-                // Note: The SSABuilder currently only computes Phi locations.
-                // Full DFO requires full SSA renaming and Def-Use chains.
+                for _block_idx in 0..cfg.blocks.len() {
+                    // Placeholder for actual transformation logic
+                }
             }
+        }
+    }
+}
+
+struct DfoOptimizer<'a, 'b> {
+    ssa: &'b SSABuilder<'a>,
+    allocator: &'a bumpalo::Bump,
+    func: &'b crate::module::Function<'a>,
+}
+
+impl<'a, 'b> DfoOptimizer<'a, 'b> {
+    fn is_dead(&self, expr: ExprRef<'a>) -> bool {
+        match &expr.kind {
+            ExpressionKind::LocalSet { index, value: _ } => {
+                let def = DefA::Instruction(expr);
+                if let Some(uses) = self.ssa.def_uses.get(&def) {
+                    return uses.is_empty();
+                }
+                true
+            }
+            _ => false,
         }
     }
 }

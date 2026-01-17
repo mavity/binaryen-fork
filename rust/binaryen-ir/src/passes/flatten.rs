@@ -112,6 +112,16 @@ impl<'a, 'b> Flattener<'a, 'b> {
         }
         None
     }
+
+    fn is_already_flat(&self, expr: ExprRef<'a>) -> bool {
+        match expr.kind {
+            ExpressionKind::LocalGet { .. }
+            | ExpressionKind::Const(_)
+            | ExpressionKind::Nop
+            | ExpressionKind::Unreachable => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'a, 'b> Visitor<'a> for Flattener<'a, 'b> {
@@ -126,9 +136,13 @@ impl<'a, 'b> Visitor<'a> for Flattener<'a, 'b> {
         let mut original_expr = *expr;
         let mut curr = *expr;
 
-        // Nothing to do for constants, nop, and unreachable.
+        // Nothing to do for constants, nop, and basic flat nodes.
         match curr.kind {
-            ExpressionKind::Const(_) | ExpressionKind::Nop | ExpressionKind::Unreachable => return,
+            ExpressionKind::Const(_)
+            | ExpressionKind::Nop
+            | ExpressionKind::Unreachable
+            | ExpressionKind::LocalGet { .. }
+            | ExpressionKind::GlobalGet { .. } => return,
             _ => {}
         }
 
@@ -332,15 +346,32 @@ impl<'a, 'b> Visitor<'a> for Flattener<'a, 'b> {
                             our_preludes.push(self.builder.local_set(temp, *val));
                             for name in names.iter() {
                                 let target_temp = self.get_temp_for_break_target(name, val_type);
-                                our_preludes.push(self.builder.local_set(
-                                    target_temp,
-                                    self.builder.local_get(temp, val_type),
-                                ));
+                                let get = self.builder.local_get(temp, val_type);
+                                our_preludes.push(self.builder.local_set(target_temp, get));
                             }
                             *value = None;
                             replaced = true;
                         } else {
                             *expr = *val;
+                            replaced = true;
+                        }
+                    }
+                }
+                ExpressionKind::Drop { value } => {
+                    if self.is_already_flat(*value) {
+                        *expr = self.builder.nop();
+                        replaced = true;
+                    }
+                }
+                ExpressionKind::Return { value } => {
+                    if let Some(val) = value {
+                        if !self.is_already_flat(*val) {
+                            // This shouldn't normally happen because visit_children already flattened it,
+                            // but for safety/consistency:
+                            let val_type = val.type_;
+                            let temp = self.function.add_var(val_type);
+                            our_preludes.push(self.builder.local_set(temp, *val));
+                            *val = self.builder.local_get(temp, val_type);
                             replaced = true;
                         }
                     }
@@ -359,7 +390,7 @@ impl<'a, 'b> Visitor<'a> for Flattener<'a, 'b> {
         if curr.type_ == Type::UNREACHABLE {
             our_preludes.push(curr);
             *expr = self.builder.unreachable();
-        } else if curr.type_.is_concrete() {
+        } else if curr.type_.is_concrete() && !self.is_already_flat(curr) {
             let type_ = curr.type_;
             let temp = self.function.add_var(type_);
             our_preludes.push(self.builder.local_set(temp, curr));

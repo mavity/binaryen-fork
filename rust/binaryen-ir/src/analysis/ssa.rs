@@ -26,10 +26,10 @@ pub struct PhiNode<'a> {
 
 pub struct SSABuilder<'a> {
     pub phi_nodes: HashMap<BlockId, Vec<PhiNode<'a>>>,
-    // Map from original local to its SSA versions (just count/ids for now?)
-    // Or map LocalId -> Set of blocks where it is defined (including Phis)
+    // Map from original local to its SSA versions
     pub def_blocks: HashMap<LocalId, HashSet<BlockId>>,
     pub use_def: HashMap<ExprRef<'a>, DefA<'a>>,
+    pub def_uses: HashMap<DefA<'a>, Vec<ExprRef<'a>>>,
 }
 
 impl<'a> Default for SSABuilder<'a> {
@@ -44,23 +44,41 @@ impl<'a> SSABuilder<'a> {
             phi_nodes: HashMap::new(),
             def_blocks: HashMap::new(),
             use_def: HashMap::new(),
+            def_uses: HashMap::new(),
         }
     }
 
     pub fn build(func: &Function, cfg: &ControlFlowGraph<'a>, dom: &DominanceTree) -> Self {
         let mut builder = Self::new();
-        builder.compute_phi_placements(cfg, dom);
+        builder.compute_phi_placements(func, cfg, dom);
         builder.rename_variables(func, cfg, dom);
+        builder.build_def_uses();
         builder
+    }
+
+    fn build_def_uses(&mut self) {
+        for (&use_expr, &def) in &self.use_def {
+            self.def_uses.entry(def).or_default().push(use_expr);
+        }
     }
 
     fn rename_variables(
         &mut self,
-        _func: &Function,
+        func: &Function,
         cfg: &ControlFlowGraph<'a>,
         dom: &DominanceTree,
     ) {
         let mut stacks: HashMap<LocalId, Vec<DefA<'a>>> = HashMap::new();
+
+        // 0. Initialize stacks with params
+        let param_types = func.params.tuple_elements();
+        for i in 0..param_types.len() {
+            stacks
+                .entry(i as u32)
+                .or_default()
+                .push(DefA::Param(i as u32));
+        }
+
         self.rename_block(cfg.entry, cfg, dom, &mut stacks);
     }
 
@@ -133,15 +151,50 @@ impl<'a> SSABuilder<'a> {
                     self.visit_expr_for_rename(*child, stacks, pushes);
                 }
             }
-            // Add other traversals as needed...
+            ExpressionKind::If {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                self.visit_expr_for_rename(*condition, stacks, pushes);
+                self.visit_expr_for_rename(*if_true, stacks, pushes);
+                if let Some(fb) = if_false {
+                    self.visit_expr_for_rename(*fb, stacks, pushes);
+                }
+            }
+            ExpressionKind::Unary { value, .. } => {
+                self.visit_expr_for_rename(*value, stacks, pushes)
+            }
+            ExpressionKind::Binary { left, right, .. } => {
+                self.visit_expr_for_rename(*left, stacks, pushes);
+                self.visit_expr_for_rename(*right, stacks, pushes);
+            }
+            ExpressionKind::Call { operands, .. } => {
+                for op in operands.iter() {
+                    self.visit_expr_for_rename(*op, stacks, pushes);
+                }
+            }
+            ExpressionKind::Loop { body, .. } => self.visit_expr_for_rename(*body, stacks, pushes),
+            ExpressionKind::Drop { value } => self.visit_expr_for_rename(*value, stacks, pushes),
             _ => {}
         }
     }
 
-    fn compute_phi_placements(&mut self, cfg: &ControlFlowGraph<'a>, dom: &DominanceTree) {
+    fn compute_phi_placements(
+        &mut self,
+        func: &Function,
+        cfg: &ControlFlowGraph<'a>,
+        dom: &DominanceTree,
+    ) {
         // 1. Compute join points for each local (where Phis are needed)
         // Set of blocks that define each local
         let mut defs: HashMap<LocalId, HashSet<BlockId>> = HashMap::new();
+
+        // Entry block defines all params
+        let param_count = func.params.tuple_len();
+        for i in 0..param_count {
+            defs.entry(i as u32).or_default().insert(cfg.entry);
+        }
 
         // Scan CFG to find defs
         for block in &cfg.blocks {
@@ -151,25 +204,10 @@ impl<'a> SSABuilder<'a> {
                     | ExpressionKind::LocalTee { index, .. } => {
                         defs.entry(*index).or_default().insert(block.id);
                     }
-                    // Params are defs in entry block?
-                    // Usually params are considered defined in entry.
-                    // We need to know which indices are params.
-                    // func.params provides types but not indices directly (implicit 0..N).
                     _ => {}
                 }
             }
         }
-
-        // Add params as defs in entry block (0)
-        // func.params is Type (if tuple, it has multiple components)
-        // For simplicity, let's assume we scan func.params or vars count?
-        // We iterate found locals.
-        // Actually, if a local is used, it must be defined.
-        // If it is a param, it is defined in entry.
-        // We can check func.params count?
-        // `Type` doesn't expose count easily without `expand`.
-        // Let's assume locals 0..params_count are defined in entry.
-        // For now, we only rely on explicit Sets found in body.
 
         // 2. Insert Phi nodes at dominance frontiers
         for (local, blocks) in &defs {
