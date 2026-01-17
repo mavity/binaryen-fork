@@ -108,6 +108,28 @@ impl Type {
     pub(crate) fn from_tuple_id(id: u32) -> Self {
         Type(Self::TUPLE_FLAG | (id as u64))
     }
+
+    pub fn tuple_len(&self) -> usize {
+        if self.is_tuple() {
+            if let Some(types) = crate::type_store::try_lookup_tuple(*self) {
+                return types.len();
+            }
+        } else if *self == Self::NONE {
+            return 0;
+        }
+        1
+    }
+
+    pub fn tuple_elements(&self) -> Vec<Type> {
+        if self.is_tuple() {
+            if let Some(types) = crate::type_store::try_lookup_tuple(*self) {
+                return types;
+            }
+        } else if *self == Self::NONE {
+            return vec![];
+        }
+        vec![*self]
+    }
 }
 
 impl fmt::Debug for Type {

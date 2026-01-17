@@ -11,6 +11,7 @@ pub struct Function<'a> {
     pub results: Type,
     pub vars: Vec<Type>,
     pub body: Option<ExprRef<'a>>,
+    pub local_names: Vec<String>,
 }
 
 impl<'a> Function<'a> {
@@ -21,6 +22,7 @@ impl<'a> Function<'a> {
         vars: Vec<Type>,
         body: Option<ExprRef<'a>>,
     ) -> Self {
+        let total_locals = params.tuple_len() + vars.len();
         Self {
             name,
             type_idx: None,
@@ -28,6 +30,7 @@ impl<'a> Function<'a> {
             results,
             vars,
             body,
+            local_names: vec![String::new(); total_locals],
         }
     }
 
@@ -39,6 +42,7 @@ impl<'a> Function<'a> {
         vars: Vec<Type>,
         body: Option<ExprRef<'a>>,
     ) -> Self {
+        let total_locals = params.tuple_len() + vars.len();
         Self {
             name,
             type_idx: Some(type_idx),
@@ -46,6 +50,7 @@ impl<'a> Function<'a> {
             results,
             vars,
             body,
+            local_names: vec![String::new(); total_locals],
         }
     }
 }

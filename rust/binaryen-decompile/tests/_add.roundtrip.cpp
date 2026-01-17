@@ -1,5 +1,5 @@
 // Decompiled from WebAssembly
 
-fn func_0(Tuple([i32, i32])) -> i32 {
-  (p1 + i_0);
+int32_t func_0(int32_t v0, int32_t v1) {
+  (v1 + v0);
 }

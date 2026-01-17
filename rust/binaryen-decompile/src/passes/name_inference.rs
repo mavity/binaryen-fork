@@ -53,15 +53,15 @@ pub trait NameFormatter {
     fn format(&self, id: &SemanticID, local_idx: u32) -> String;
 }
 
-pub struct CStyleFormatter;
+pub struct HumanFormatter;
 
-impl NameFormatter for CStyleFormatter {
-    fn format(&self, id: &SemanticID, local_idx: u32) -> String {
+impl NameFormatter for HumanFormatter {
+    fn format(&self, id: &SemanticID, _local_idx: u32) -> String {
         let trait_name = match id.primary_trait {
-            TraitType::Index => "i",
+            TraitType::Index => "idx",
             TraitType::Buffer => "ptr",
             TraitType::Offset => "offset",
-            TraitType::Boolean => "is_ok",
+            TraitType::Boolean => "flag",
             TraitType::Length => "len",
             TraitType::Bitmask => "mask",
             TraitType::Handle => "h",
@@ -70,9 +70,9 @@ impl NameFormatter for CStyleFormatter {
 
         if id.base_hint_id != 0 {
             // TODO: Lookup name hint from string table
-            format!("{}_{}", trait_name, local_idx)
+            trait_name.to_string()
         } else {
-            format!("{}_{}", trait_name, local_idx)
+            trait_name.to_string()
         }
     }
 }
@@ -92,81 +92,92 @@ impl NameInferencePass {
     }
 
     pub fn run<'a>(&mut self, module: &mut Module<'a>) {
+        use std::collections::HashMap;
+
         for func_idx in 0..module.functions.len() {
-            let func = &module.functions[func_idx];
-            let total_locals = self.get_total_locals(func);
-            let mut stats = vec![VariableStats::default(); total_locals as usize];
-            if let Some(mut body) = func.body {
-                let visitor_names = {
-                    let mut visitor = InferenceVisitor {
-                        stats: &mut stats,
-                        names: Vec::new(),
-                        _phantom: std::marker::PhantomData,
-                    };
-                    visitor.visit(&mut body);
-                    visitor.names
+            let total_locals = {
+                let func = &module.functions[func_idx];
+                func.params.tuple_len() + func.vars.len()
+            };
+
+            let mut stats = vec![VariableStats::default(); total_locals];
+            let mut visitor_names = Vec::new();
+
+            if let Some(mut body) = module.functions[func_idx].body {
+                let mut visitor = InferenceVisitor {
+                    stats: &mut stats,
+                    names: Vec::new(),
+                    _phantom: std::marker::PhantomData,
                 };
+                visitor.visit(&mut body);
+                visitor_names = visitor.names;
+            }
 
-                // --- Phase 4: Synthesis ---
-                let formatter = CStyleFormatter;
-                let num_locals = stats.len();
-                let mut local_names = vec![String::new(); num_locals];
-                for (i, stat) in stats.iter().enumerate() {
-                    let mut best_trait = TraitType::Index;
-                    let mut max_score = 0;
-                    for (t_idx, &score) in stat.trait_scores.iter().enumerate() {
-                        if score > max_score {
-                            max_score = score;
-                            best_trait = match t_idx {
-                                0 => TraitType::Index,
-                                1 => TraitType::Buffer,
-                                2 => TraitType::Offset,
-                                3 => TraitType::Boolean,
-                                4 => TraitType::Length,
-                                5 => TraitType::Bitmask,
-                                6 => TraitType::Handle,
-                                7 => TraitType::Accumulator,
-                                _ => TraitType::Index,
-                            };
-                        }
+            // --- Phase 4: Synthesis ---
+            let formatter = HumanFormatter;
+            let mut local_names = vec![String::new(); total_locals];
+            let mut name_counts = HashMap::new();
+
+            for (i, stat) in stats.iter().enumerate() {
+                let mut best_trait = TraitType::Index;
+                let mut max_score = 0;
+                for (t_idx, &score) in stat.trait_scores.iter().enumerate() {
+                    if score > max_score {
+                        max_score = score;
+                        best_trait = match t_idx {
+                            0 => TraitType::Index,
+                            1 => TraitType::Buffer,
+                            2 => TraitType::Offset,
+                            3 => TraitType::Boolean,
+                            4 => TraitType::Length,
+                            5 => TraitType::Bitmask,
+                            6 => TraitType::Handle,
+                            7 => TraitType::Accumulator,
+                            _ => TraitType::Index,
+                        };
                     }
+                }
 
+                let base_name = if max_score > 0 {
                     let id = SemanticID {
                         base_hint_id: stat.name_hint_id,
                         primary_trait: best_trait,
                         confidence: max_score.max(stat.hint_confidence),
                     };
+                    formatter.format(&id, i as u32)
+                } else {
+                    "v".to_string()
+                };
 
-                    local_names[i] = formatter.format(&id, i as u32);
+                local_names[i] = base_name.clone();
+                *name_counts.entry(base_name).or_insert(0) += 1;
+            }
+
+            // Disambiguate names
+            let mut current_counts = HashMap::new();
+            for i in 0..total_locals {
+                let base = local_names[i].clone();
+                if *name_counts.get(&base).unwrap() > 1 {
+                    let count = current_counts.entry(base.clone()).or_insert(0);
+                    local_names[i] = format!("{}{}", base, count);
+                    *count += 1;
                 }
+            }
 
-                // Apply names to all usage points
-                for (idx, expr_ref) in visitor_names {
-                    if (idx as usize) < local_names.len() {
-                        let name = &local_names[idx as usize];
-                        let leaked_name: &'a str = Box::leak(name.clone().into_boxed_str());
-                        module.set_annotation(
-                            expr_ref,
-                            binaryen_ir::Annotation::LocalName(leaked_name),
-                        );
-                    }
+            // Apply to function metadata
+            module.functions[func_idx].local_names = local_names.clone();
+
+            // Apply names to all usage points (ExprRef annotations)
+            for (idx, expr_ref) in visitor_names {
+                if (idx as usize) < local_names.len() {
+                    let name = &local_names[idx as usize];
+                    // Box::leak is safe enough here as these names are small and live for the module lifetime
+                    let leaked_name: &'a str = Box::leak(name.clone().into_boxed_str());
+                    module
+                        .set_annotation(expr_ref, binaryen_ir::Annotation::LocalName(leaked_name));
                 }
             }
         }
-    }
-
-    fn get_total_locals(&self, func: &binaryen_ir::module::Function) -> u32 {
-        let param_count = match func.params {
-            binaryen_core::Type::NONE => 0,
-            _ if func.params.is_signature() => {
-                // This shouldn't happen for params Type itself usually,
-                // but let's be safe if it's a tuple.
-                // Binaryen Types can be tuples but our rust wrapper is simplified.
-                1
-            }
-            _ => 1,
-        };
-        param_count + func.vars.len() as u32
     }
 }
 
