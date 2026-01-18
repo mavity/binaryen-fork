@@ -20,10 +20,19 @@ pub struct GlobalAnalysis {
     /// Which globals are written
     pub written_globals: HashSet<GlobalId>,
 
+    /// How many times each global is read
+    pub read_counts: HashMap<GlobalId, usize>,
+
+    /// How many times each global is written
+    pub write_counts: HashMap<GlobalId, usize>,
+
+    /// Globals that are written a value different from their initial value
+    pub non_init_written: HashSet<GlobalId>,
+
     /// Which functions are reachable from exports
     pub reachable_functions: HashSet<FunctionId>,
 }
-/* ... existing code ... */
+
 impl GlobalAnalysis {
     pub fn new() -> Self {
         Self {
@@ -31,6 +40,9 @@ impl GlobalAnalysis {
             global_values: HashMap::new(),
             read_globals: HashSet::new(),
             written_globals: HashSet::new(),
+            read_counts: HashMap::new(),
+            write_counts: HashMap::new(),
+            non_init_written: HashSet::new(),
             reachable_functions: HashSet::new(),
         }
     }
@@ -48,94 +60,169 @@ impl GlobalAnalysis {
     fn analyze_usage(&mut self, module: &Module) {
         for func in &module.functions {
             if let Some(body) = func.body {
-                self.visit_usage(body);
+                self.visit_usage(module, body);
+            }
+        }
+
+        // Visit global initializers
+        for global in &module.globals {
+            self.visit_usage(module, global.init);
+        }
+
+        // Mark exports as read/written
+        for export in &module.exports {
+            if export.kind == crate::module::ExportKind::Global {
+                let idx = export.index as usize;
+                self.read_globals.insert(idx);
+                self.written_globals.insert(idx);
+                *self.write_counts.entry(idx).or_insert(0) += 1;
+                *self.read_counts.entry(idx).or_insert(0) += 1;
             }
         }
     }
 
     fn analyze_globals(&mut self, module: &Module) {
-        // Track number of sets for each global
-        let mut global_sets: HashMap<GlobalId, usize> = HashMap::new();
-        for &id in &self.written_globals {
-            global_sets.insert(id, 1); // We only care if it's > 0 for now in this simplified logic
-        }
+        // We perform multiple passes to resolve globals that depend on other constant globals in their initializers
+        let mut changed = true;
+        while changed {
+            changed = false;
 
-        // Identify constants
-        for (id, global) in module.globals.iter().enumerate() {
-            if !global.mutable {
-                self.constant_globals.insert(id);
-                // If it has an init value that is a literal, track it
-                if let ExpressionKind::Const(value) = &global.init.kind {
-                    self.global_values.insert(id, value.clone());
+            for (id, global) in module.globals.iter().enumerate() {
+                if self.constant_globals.contains(&id) && self.global_values.contains_key(&id) {
+                    continue;
                 }
-            } else {
-                // Mutable global. Check if it's never modified (0 sets).
-                if !self.written_globals.contains(&id) {
+
+                let mut is_effectively_constant = false;
+                if !global.mutable {
+                    is_effectively_constant = true;
+                } else if !self.written_globals.contains(&id)
+                    || !self.non_init_written.contains(&id)
+                {
+                    is_effectively_constant = true;
+                }
+
+                if is_effectively_constant {
                     self.constant_globals.insert(id);
+
+                    // Try to resolve the value
                     if let ExpressionKind::Const(value) = &global.init.kind {
-                        self.global_values.insert(id, value.clone());
+                        if !self.global_values.contains_key(&id) {
+                            self.global_values.insert(id, value.clone());
+                            changed = true;
+                        }
+                    } else if let ExpressionKind::GlobalGet { index } = &global.init.kind {
+                        if let Some(value) = self.global_values.get(&(*index as usize)) {
+                            let val = value.clone();
+                            if !self.global_values.get(&id).map_or(false, |v| v == &val) {
+                                self.global_values.insert(id, val);
+                                changed = true;
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    fn visit_usage(&mut self, expr: ExprRef) {
+    fn visit_usage(&mut self, module: &Module, expr: ExprRef) {
         match &expr.kind {
             ExpressionKind::GlobalGet { index } => {
-                self.read_globals.insert(*index as usize);
+                let idx = *index as usize;
+                self.read_globals.insert(idx);
+                *self.read_counts.entry(idx).or_insert(0) += 1;
             }
             ExpressionKind::GlobalSet { index, value } => {
-                self.written_globals.insert(*index as usize);
-                self.visit_usage(*value);
+                let idx = *index as usize;
+                self.written_globals.insert(idx);
+                *self.write_counts.entry(idx).or_insert(0) += 1;
+
+                // Check if we are writing a value different from the initializer
+                if let ExpressionKind::Const(lit) = &value.kind {
+                    if let Some(global) = module.globals.get(idx) {
+                        if let ExpressionKind::Const(init_lit) = &global.init.kind {
+                            if lit != init_lit {
+                                self.non_init_written.insert(idx);
+                            }
+                        } else {
+                            // Non-const initializer, any write is non-init (effectively)
+                            self.non_init_written.insert(idx);
+                        }
+                    }
+                } else {
+                    // Non-const value being set
+                    self.non_init_written.insert(idx);
+                }
+
+                self.visit_usage(module, *value);
             }
             ExpressionKind::Block { list, .. } => {
                 for child in list.iter() {
-                    self.visit_usage(*child);
+                    self.visit_usage(module, *child);
                 }
             }
-            ExpressionKind::Loop { body, .. } => self.visit_usage(*body),
+            ExpressionKind::Loop { body, .. } => self.visit_usage(module, *body),
             ExpressionKind::If {
                 condition,
                 if_true,
                 if_false,
                 ..
             } => {
-                self.visit_usage(*condition);
-                self.visit_usage(*if_true);
+                self.visit_usage(module, *condition);
+                self.visit_usage(module, *if_true);
                 if let Some(e) = if_false {
-                    self.visit_usage(*e);
+                    self.visit_usage(module, *e);
                 }
             }
             ExpressionKind::Binary { left, right, .. } => {
-                self.visit_usage(*left);
-                self.visit_usage(*right);
+                self.visit_usage(module, *left);
+                self.visit_usage(module, *right);
             }
-            ExpressionKind::Unary { value, .. } => self.visit_usage(*value),
+            ExpressionKind::Unary { value, .. } => self.visit_usage(module, *value),
+            ExpressionKind::Const(_) | ExpressionKind::Nop | ExpressionKind::Unreachable => {}
             ExpressionKind::Call { operands, .. }
             | ExpressionKind::CallIndirect { operands, .. } => {
-                for op in operands.iter() {
-                    self.visit_usage(*op);
+                for arg in operands {
+                    self.visit_usage(module, *arg);
+                }
+                if let ExpressionKind::CallIndirect { target, .. } = &expr.kind {
+                    self.visit_usage(module, *target);
                 }
             }
+            ExpressionKind::LocalGet { .. } => {}
             ExpressionKind::LocalSet { value, .. } | ExpressionKind::LocalTee { value, .. } => {
-                self.visit_usage(*value);
+                self.visit_usage(module, *value);
             }
-            ExpressionKind::Drop { value } => self.visit_usage(*value),
-            ExpressionKind::Return { value: Some(v) } => {
-                self.visit_usage(*v);
-            }
+            ExpressionKind::Drop { value } => self.visit_usage(module, *value),
             ExpressionKind::Select {
                 condition,
                 if_true,
                 if_false,
-                ..
             } => {
-                self.visit_usage(*condition);
-                self.visit_usage(*if_true);
-                self.visit_usage(*if_false);
+                self.visit_usage(module, *condition);
+                self.visit_usage(module, *if_true);
+                self.visit_usage(module, *if_false);
             }
-            _ => {}
+            ExpressionKind::Load { ptr, .. } => self.visit_usage(module, *ptr),
+            ExpressionKind::Store { ptr, value, .. } => {
+                self.visit_usage(module, *ptr);
+                self.visit_usage(module, *value);
+            }
+            ExpressionKind::Return { value } => {
+                if let Some(v) = value {
+                    self.visit_usage(module, *v);
+                }
+            }
+            ExpressionKind::Switch {
+                condition, value, ..
+            } => {
+                self.visit_usage(module, *condition);
+                if let Some(v) = value {
+                    self.visit_usage(module, *v);
+                }
+            }
+            _ => {
+                // Fallback for other expressions if any
+            }
         }
     }
 
@@ -155,9 +242,6 @@ impl GlobalAnalysis {
                 roots.insert(export.index as usize);
             }
         }
-
-        // 2. Start function (not modeled in Module struct currently? Assuming explicit start section or implicit main)
-        // If module has start, add it.
 
         // Compute reachability
         let mut visited = HashSet::new();
