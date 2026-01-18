@@ -30,8 +30,10 @@ impl Pass for DataFlowOpts {
 
                 // 4. Optimization Phase: Use SSA to find refinements
                 let mut dead_definitions = HashSet::new();
-                let mut constant_props: HashMap<*mut crate::expression::Expression<'a>, ExprRef<'a>> =
-                    HashMap::new();
+                let mut constant_props: HashMap<
+                    *mut crate::expression::Expression<'a>,
+                    ExprRef<'a>,
+                > = HashMap::new();
 
                 // Dead Store Elimination and Constant Propagation
                 for (def, uses) in &ssa.def_uses {
