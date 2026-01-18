@@ -23,6 +23,7 @@ impl OptimizeInstructions {
         let mut matcher = PatternMatcher::new();
         Self::register_constant_folding(&mut matcher);
         Self::register_algebraic_identities(&mut matcher);
+        Self::register_reassociation(&mut matcher);
         Self::register_strength_reduction(&mut matcher);
         Self::register_comparison_optimizations(&mut matcher);
         Self { matcher }
@@ -1053,7 +1054,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::F32(0.0)),
             ),
             |env: &MatchEnv, bump| {
-                let x = env.get("x")?;
+                let _x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.const_(Literal::F32(0.0)))
             },
@@ -1067,7 +1068,7 @@ impl OptimizeInstructions {
                 Pattern::Var("x"),
             ),
             |env: &MatchEnv, bump| {
-                let x = env.get("x")?;
+                let _x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.const_(Literal::F32(0.0)))
             },
@@ -1083,7 +1084,7 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::F64(0.0)),
             ),
             |env: &MatchEnv, bump| {
-                let x = env.get("x")?;
+                let _x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.const_(Literal::F64(0.0)))
             },
@@ -1093,32 +1094,89 @@ impl OptimizeInstructions {
         matcher.add_rule(
             Pattern::binary(
                 BinaryOp::MulFloat64,
-                Pattern::Const(Literal::F64(1.0)),
+                Pattern::Const(Literal::F64(0.0)),
                 Pattern::Var("x"),
+            ),
+            |env: &MatchEnv, bump| {
+                let _x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::F64(0.0)))
+            },
+        );
+
+        // --- Bitwise NOT Patterns ---
+
+        // x ^ -1 -> ~x (Normalized form is x ^ -1)
+        // ~~x -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::XorInt32,
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("x"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+                Pattern::Const(Literal::I32(-1)),
             ),
             |env: &MatchEnv, _| env.get("x").copied(),
         );
 
-        // --- MulFloat64 ---
+        // --- Self Identities ---
 
-        // x * 1.0 -> x
+        // x - x -> 0
         matcher.add_rule(
-            Pattern::binary(
-                BinaryOp::MulFloat64,
-                Pattern::Var("x"),
-                Pattern::Const(Literal::F64(1.0)),
-            ),
+            Pattern::binary(BinaryOp::SubInt32, Pattern::Var("x"), Pattern::Var("x")),
+            |_env: &MatchEnv, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(0)))
+            },
+        );
+
+        // x & x -> x
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::AndInt32, Pattern::Var("x"), Pattern::Var("x")),
             |env: &MatchEnv, _| env.get("x").copied(),
         );
 
-        // 1.0 * x -> x
+        // x == x -> 1 (For integers)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::EqInt32, Pattern::Var("x"), Pattern::Var("x")),
+            |_env: &MatchEnv, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(1)))
+            },
+        );
+
+        // x != x -> 0 (For integers)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::NeInt32, Pattern::Var("x"), Pattern::Var("x")),
+            |_env: &MatchEnv, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(0)))
+            },
+        );
+
+        // --- Shift/Rotate Patterns ---
+
+        // (x << C1) << C2 -> x << (C1 + C2)
         matcher.add_rule(
             Pattern::binary(
-                BinaryOp::MulFloat64,
-                Pattern::Const(Literal::F64(1.0)),
-                Pattern::Var("x"),
+                BinaryOp::ShlInt32,
+                Pattern::binary(BinaryOp::ShlInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
             ),
-            |env: &MatchEnv, _| env.get("x").copied(),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let c1 = env.get_const("left")?.get_i32();
+                let c2 = env.get_const("right")?.get_i32();
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::ShlInt32,
+                    *x,
+                    builder.const_(Literal::I32(c1.wrapping_add(c2))),
+                    Type::I32,
+                ))
+            },
         );
 
         // --- SubInt64 ---
@@ -1131,6 +1189,113 @@ impl OptimizeInstructions {
                 Pattern::Const(Literal::I64(0)),
             ),
             |env: &MatchEnv, _| env.get("x").copied(),
+        );
+    }
+
+    fn register_reassociation(matcher: &mut PatternMatcher) {
+        // (x + C1) + C2 -> x + (C1 + C2)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AddInt32,
+                Pattern::binary(BinaryOp::AddInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let c1 = env.get_const("left")?.get_i32();
+                let c2 = env.get_const("right")?.get_i32();
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::AddInt32,
+                    *x,
+                    builder.const_(Literal::I32(c1.wrapping_add(c2))),
+                    Type::I32,
+                ))
+            },
+        );
+
+        // (x * C1) * C2 -> x * (C1 * C2)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::MulInt32,
+                Pattern::binary(BinaryOp::MulInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let c1 = env.get_const("left")?.get_i32();
+                let c2 = env.get_const("right")?.get_i32();
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::MulInt32,
+                    *x,
+                    builder.const_(Literal::I32(c1.wrapping_mul(c2))),
+                    Type::I32,
+                ))
+            },
+        );
+
+        // (x & C1) & C2 -> x & (C1 & C2)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AndInt32,
+                Pattern::binary(BinaryOp::AndInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let c1 = env.get_const("left")?.get_i32();
+                let c2 = env.get_const("right")?.get_i32();
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::AndInt32,
+                    *x,
+                    builder.const_(Literal::I32(c1 & c2)),
+                    Type::I32,
+                ))
+            },
+        );
+
+        // (x | C1) | C2 -> x | (C1 | C2)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::OrInt32,
+                Pattern::binary(BinaryOp::OrInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let c1 = env.get_const("left")?.get_i32();
+                let c2 = env.get_const("right")?.get_i32();
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::OrInt32,
+                    *x,
+                    builder.const_(Literal::I32(c1 | c2)),
+                    Type::I32,
+                ))
+            },
+        );
+
+        // (x ^ C1) ^ C2 -> x ^ (C1 ^ C2)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::XorInt32,
+                Pattern::binary(BinaryOp::XorInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let c1 = env.get_const("left")?.get_i32();
+                let c2 = env.get_const("right")?.get_i32();
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::XorInt32,
+                    *x,
+                    builder.const_(Literal::I32(c1 ^ c2)),
+                    Type::I32,
+                ))
+            },
         );
     }
 
@@ -2101,6 +2266,99 @@ mod tests {
                 op: UnaryOp::EqZInt32,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn test_optimize_reassociation() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // (x + 10) + 20 -> x + 30
+        let x = builder.local_get(0, Type::I32);
+        let c10 = builder.const_(Literal::I32(10));
+        let c20 = builder.const_(Literal::I32(20));
+        let inner_add = builder.binary(BinaryOp::AddInt32, x, c10, Type::I32);
+        let outer_add = builder.binary(BinaryOp::AddInt32, inner_add, c20, Type::I32);
+
+        let pass = OptimizeInstructions::new();
+        let mut visitor = OptimizeInstructionsVisitor {
+            matcher: &pass.matcher,
+            allocator: &bump,
+        };
+
+        let mut expr_ref = outer_add;
+        visitor.visit(&mut expr_ref);
+
+        if let ExpressionKind::Binary { op, left, right } = expr_ref.kind {
+            assert_eq!(op, BinaryOp::AddInt32);
+            assert!(matches!(
+                left.kind,
+                ExpressionKind::LocalGet { index: 0, .. }
+            ));
+            assert!(matches!(
+                right.kind,
+                ExpressionKind::Const(Literal::I32(30))
+            ));
+        } else {
+            panic!("Expected reassociated add (x + 30)");
+        }
+    }
+
+    #[test]
+    fn test_optimize_shift_chaining() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // (x << 2) << 3 -> x << 5
+        let x = builder.local_get(0, Type::I32);
+        let c2 = builder.const_(Literal::I32(2));
+        let c3 = builder.const_(Literal::I32(3));
+        let inner_shl = builder.binary(BinaryOp::ShlInt32, x, c2, Type::I32);
+        let outer_shl = builder.binary(BinaryOp::ShlInt32, inner_shl, c3, Type::I32);
+
+        let pass = OptimizeInstructions::new();
+        let mut visitor = OptimizeInstructionsVisitor {
+            matcher: &pass.matcher,
+            allocator: &bump,
+        };
+
+        let mut expr_ref = outer_shl;
+        visitor.visit(&mut expr_ref);
+
+        if let ExpressionKind::Binary { op, left, right } = expr_ref.kind {
+            assert_eq!(op, BinaryOp::ShlInt32);
+            assert!(matches!(
+                left.kind,
+                ExpressionKind::LocalGet { index: 0, .. }
+            ));
+            assert!(matches!(right.kind, ExpressionKind::Const(Literal::I32(5))));
+        } else {
+            panic!("Expected chained shift (x << 5)");
+        }
+    }
+
+    #[test]
+    fn test_optimize_self_sub() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // x - x -> 0
+        let x = builder.local_get(0, Type::I32);
+        let sub = builder.binary(BinaryOp::SubInt32, x, x, Type::I32);
+
+        let pass = OptimizeInstructions::new();
+        let mut visitor = OptimizeInstructionsVisitor {
+            matcher: &pass.matcher,
+            allocator: &bump,
+        };
+
+        let mut expr_ref = sub;
+        visitor.visit(&mut expr_ref);
+
+        assert!(matches!(
+            expr_ref.kind,
+            ExpressionKind::Const(Literal::I32(0))
         ));
     }
 }
