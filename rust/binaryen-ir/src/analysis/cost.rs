@@ -6,19 +6,36 @@ use crate::visitor::ReadOnlyVisitor;
 pub struct CostEstimator;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrivialInstruction {
+    /// Function is not a single instruction, or it may not shrink when inlined.
+    NotTrivial,
+
+    /// Function is just one instruction, with `local.get`s as arguments, and with
+    /// each `local` is used exactly once, and in the order they appear in the
+    /// argument list.
+    Shrinks,
+
+    /// Function is a single instruction, but maybe with constant arguments, or
+    /// maybe some locals are used more than once.
+    MayNotShrink,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cost {
     pub instruction_count: u32,
     pub call_count: u32,
     pub loop_count: u32,
     pub has_try_delegate: bool,
+    pub trivial_instruction: TrivialInstruction,
 }
 
 impl CostEstimator {
     /// Estimate cost of inlining this function
     pub fn inline_cost(func: &Function) -> Cost {
-        let mut calculator = CostCalculator::new();
+        let mut calculator = CostCalculator::new(func);
         if let Some(body) = &func.body {
             calculator.visit(*body);
+            calculator.analyze_trivial(*body);
         }
         calculator.cost
     }
@@ -26,17 +43,111 @@ impl CostEstimator {
 
 struct CostCalculator {
     cost: Cost,
+    param_count: usize,
 }
 
 impl CostCalculator {
-    fn new() -> Self {
+    fn new(func: &Function) -> Self {
         Self {
             cost: Cost {
                 instruction_count: 0,
                 call_count: 0,
                 loop_count: 0,
                 has_try_delegate: false,
+                trivial_instruction: TrivialInstruction::NotTrivial,
             },
+            param_count: func.params.tuple_len(),
+        }
+    }
+
+    fn analyze_trivial<'a>(&mut self, body: ExprRef<'a>) {
+        // A function is trivial if its body is a single instruction.
+        // If it's a block with one instruction, that's also trivial.
+        let mut current = body;
+
+        if let ExpressionKind::Block { list, .. } = &current.kind {
+            if list.len() == 1 {
+                current = list[0];
+            } else if list.is_empty() {
+                // Empty block is also trivial (shrinks)
+                self.cost.trivial_instruction = TrivialInstruction::Shrinks;
+                return;
+            } else {
+                return;
+            }
+        }
+
+        match &current.kind {
+            ExpressionKind::Block { .. }
+            | ExpressionKind::Loop { .. }
+            | ExpressionKind::If { .. }
+            | ExpressionKind::Try { .. } => {
+                // Control flow is not trivial in this sense
+                return;
+            }
+            ExpressionKind::LocalGet { .. }
+            | ExpressionKind::Const(_)
+            | ExpressionKind::Unreachable => {
+                self.cost.trivial_instruction = TrivialInstruction::Shrinks;
+                return;
+            }
+            _ => {}
+        }
+
+        // Check operands if it's a simple instruction
+        let mut operands = Vec::new();
+        match &current.kind {
+            ExpressionKind::Unary { value, .. } => operands.push(*value),
+            ExpressionKind::Binary { left, right, .. } => {
+                operands.push(*left);
+                operands.push(*right);
+            }
+            ExpressionKind::Select {
+                if_true,
+                if_false,
+                condition,
+            } => {
+                operands.push(*if_true);
+                operands.push(*if_false);
+                operands.push(*condition);
+            }
+            ExpressionKind::Call {
+                operands: ops,
+                is_return,
+                ..
+            } if !*is_return => {
+                for op in ops.iter() {
+                    operands.push(*op);
+                }
+            }
+            _ => {
+                // For other complex instructions, we don't consider them trivial for now
+                return;
+            }
+        }
+
+        if operands.len() != self.param_count {
+            self.cost.trivial_instruction = TrivialInstruction::MayNotShrink;
+            return;
+        }
+
+        let mut shrink = true;
+        for (i, op) in operands.iter().enumerate() {
+            if let ExpressionKind::LocalGet { index } = &op.kind {
+                if *index != i as u32 {
+                    shrink = false;
+                    break;
+                }
+            } else {
+                shrink = false;
+                break;
+            }
+        }
+
+        if shrink {
+            self.cost.trivial_instruction = TrivialInstruction::Shrinks;
+        } else {
+            self.cost.trivial_instruction = TrivialInstruction::MayNotShrink;
         }
     }
 }

@@ -724,6 +724,7 @@ impl<'a> Expression<'a> {
 }
 
 // Helpers for construction
+#[derive(Clone, Copy)]
 pub struct IrBuilder<'a> {
     pub bump: &'a Bump,
 }

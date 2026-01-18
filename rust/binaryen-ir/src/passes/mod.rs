@@ -1,3 +1,4 @@
+pub mod asyncify;
 pub mod avoid_reinterprets;
 pub mod coalesce_locals;
 pub mod code_pushing;

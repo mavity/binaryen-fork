@@ -273,8 +273,19 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
         name: "inlining",
         description: "inlines functions",
         create: |runner| {
-            Box::new(crate::passes::inlining::Inlining::with_options(
-                runner.options.inlining.clone(),
+            Box::new(
+                crate::passes::inlining::Inlining::with_optimization_options(
+                    runner.options.clone(),
+                ),
+            )
+        },
+    },
+    PassInfo {
+        name: "inlining-optimizing",
+        description: "inlines functions and optimizes locals",
+        create: |runner| {
+            Box::new(crate::passes::inlining::InliningOptimizing::with_options(
+                runner.options.clone(),
             ))
         },
     },
@@ -287,6 +298,15 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
         name: "local-cse",
         description: "common subexpression elimination for locals",
         create: |_| Box::new(crate::passes::local_cse::LocalCSE),
+    },
+    PassInfo {
+        name: "asyncify",
+        description: "async/await support",
+        create: |_| {
+            Box::new(crate::passes::asyncify::Asyncify::new(
+                crate::passes::asyncify::AsyncifyConfig::default(),
+            ))
+        },
     },
     PassInfo {
         name: "avoid-reinterprets",
@@ -589,10 +609,12 @@ impl PassRunner {
         if options.optimize_level >= 2 || options.shrink_level >= 1 {
             self.add(crate::passes::dae_optimizing::DaeOptimizing);
         }
-        if options.optimize_level >= 2 || options.shrink_level >= 2 {
-            self.add(crate::passes::inlining::Inlining::with_options(
-                options.inlining.clone(),
+        if (options.optimize_level >= 2 && options.shrink_level == 0) || options.shrink_level >= 2 {
+            self.add(crate::passes::inlining::InliningOptimizing::with_options(
+                options.clone(),
             ));
+        } else if options.optimize_level > 0 || options.shrink_level > 0 {
+            self.add(crate::passes::inlining::Inlining::with_optimization_options(options.clone()));
         }
         self.add(crate::passes::duplicate_function_elimination::DuplicateFunctionElimination);
     }

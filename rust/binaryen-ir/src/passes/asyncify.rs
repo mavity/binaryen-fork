@@ -1,12 +1,12 @@
 use crate::analysis::call_graph::CallGraph;
-use crate::expression::{ExprRef, ExpressionKind, IrBuilder, Expression};
-use crate::module::{Module, Function, Global, ImportKind};
+use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+use crate::module::{Function, Global, ImportKind, Module};
 use crate::pass::Pass;
-use crate::visitor::{ReadOnlyVisitor, Visitor};
-use binaryen_core::{Type, Literal};
-use std::collections::{HashSet, HashMap};
-use bumpalo::collections::Vec as BumpVec;
 use crate::passes::flatten::Flatten;
+use crate::visitor::{ReadOnlyVisitor, Visitor};
+use binaryen_core::{Literal, Type};
+use bumpalo::collections::Vec as BumpVec;
+use std::collections::{HashMap, HashSet};
 
 pub const ASYNCIFY_STATE: &str = "__asyncify_state";
 pub const ASYNCIFY_DATA: &str = "__asyncify_data";
@@ -72,7 +72,7 @@ impl Asyncify {
 
         module.globals.push(Global {
             name: ASYNCIFY_STATE.to_string(),
-            type_: Type::i32,
+            type_: Type::I32,
             mutable: true,
             init: builder.const_(Literal::I32(0)),
         });
@@ -81,23 +81,23 @@ impl Asyncify {
             name: ASYNCIFY_DATA.to_string(),
             type_: pointer_type,
             mutable: true,
-            init: if pointer_type == Type::i64 { 
-                builder.const_(Literal::I64(0)) 
-            } else { 
-                builder.const_(Literal::I32(0)) 
+            init: if pointer_type == Type::I64 {
+                builder.const_(Literal::I64(0))
+            } else {
+                builder.const_(Literal::I32(0))
             },
         });
 
-        for ty in [Type::i32, Type::i64, Type::f32, Type::f64] {
-             module.globals.push(Global {
+        for ty in [Type::I32, Type::I64, Type::F32, Type::F64] {
+            module.globals.push(Global {
                 name: format!("asyncify_fake_global_{}", ty.to_string()),
                 type_: ty,
                 mutable: true,
                 init: match ty {
-                    Type::i32 => builder.const_(Literal::I32(0)),
-                    Type::i64 => builder.const_(Literal::I64(0)),
-                    Type::f32 => builder.const_(Literal::F32(0.0)),
-                    Type::f64 => builder.const_(Literal::F64(0.0)),
+                    Type::I32 => builder.const_(Literal::I32(0)),
+                    Type::I64 => builder.const_(Literal::I64(0)),
+                    Type::F32 => builder.const_(Literal::F32(0.0)),
+                    Type::F64 => builder.const_(Literal::F64(0.0)),
                     _ => unreachable!(),
                 },
             });
@@ -116,13 +116,17 @@ impl Pass for Asyncify {
         let analyzer = ModuleAnalyzer::analyze(module, &self.config);
 
         let pointer_type = if module.memory.as_ref().map_or(false, |m| m.initial > 0) {
-            Type::i32 // TODO: check if 64-bit
+            Type::I32 // TODO: check if 64-bit
         } else {
-            Type::i32
+            Type::I32
         };
         self.add_globals(module, pointer_type);
 
-        let state_index = module.globals.iter().position(|g| g.name == ASYNCIFY_STATE).unwrap() as u32;
+        let state_index = module
+            .globals
+            .iter()
+            .position(|g| g.name == ASYNCIFY_STATE)
+            .unwrap() as u32;
 
         for i in 0..module.functions.len() {
             if !analyzer.needs_instrumentation(&module.functions[i]) {
@@ -178,36 +182,43 @@ impl ModuleAnalyzer {
 
         // Check imports
         for import in &module.imports {
-             if let ImportKind::Function(_, _) = &import.kind {
-                 let is_asyncify = import.module == "asyncify";
-                 let mut changes = false;
-                 if is_asyncify {
-                     match import.name.as_str() {
-                         "start_unwind" | "stop_rewind" => {
-                             changes = true;
-                             is_top_most_runtime.insert(import.name.clone());
-                         }
-                         "stop_unwind" | "start_rewind" => is_bottom_most_runtime.insert(import.name.clone()),
-                         _ => {}
-                     }
-                 } else if !config.ignore_imports {
-                     if config.imports.is_empty() || config.imports.contains(&format!("{}.{}", import.module, import.name)) {
-                         changes = true;
-                     }
-                 }
-                 if changes {
-                     can_change_state.insert(import.name.clone());
-                 }
-             }
+            if let ImportKind::Function(_, _) = &import.kind {
+                let is_asyncify = import.module == "asyncify";
+                let mut changes = false;
+                if is_asyncify {
+                    match import.name.as_str() {
+                        "start_unwind" | "stop_rewind" => {
+                            changes = true;
+                            is_top_most_runtime.insert(import.name.clone());
+                        }
+                        "stop_unwind" | "start_rewind" => {
+                            is_bottom_most_runtime.insert(import.name.clone());
+                        }
+                        _ => {}
+                    }
+                } else if !config.ignore_imports {
+                    if config.imports.is_empty()
+                        || config
+                            .imports
+                            .contains(&format!("{}.{}", import.module, import.name))
+                    {
+                        changes = true;
+                    }
+                }
+                if changes {
+                    can_change_state.insert(import.name.clone());
+                }
+            }
         }
 
         let call_graph = CallGraph::build(module);
         let final_can_change_state = call_graph.propagate_back(can_change_state, |name| {
-            !config.remove_list.contains(&name.to_string()) && !is_bottom_most_runtime.contains(name)
+            !config.remove_list.contains(&name.to_string())
+                && !is_bottom_most_runtime.contains(name)
         });
 
-        let mut fake_call_globals = HashMap::new();
-        for ty in [Type::i32, Type::i64, Type::f32, Type::f64] {
+        let mut fake_call_globals: HashMap<Type, String> = HashMap::new();
+        for ty in [Type::I32, Type::I64, Type::F32, Type::F64] {
             fake_call_globals.insert(ty, format!("asyncify_fake_global_{}", ty.to_string()));
         }
 
@@ -243,10 +254,18 @@ struct CanChangeStateVisitor<'a, 'b> {
 
 impl<'a, 'b> ReadOnlyVisitor<'a> for CanChangeStateVisitor<'a, 'b> {
     fn visit_expression(&mut self, expr: ExprRef<'a>) {
-        if self.can_change_state { return; }
+        if self.can_change_state {
+            return;
+        }
         match &expr.kind {
-            ExpressionKind::Call { target, .. } if self.analyzer.can_change_state.contains(*target) => self.can_change_state = true,
-            ExpressionKind::CallIndirect { .. } if !self.analyzer.ignore_indirect => self.can_change_state = true,
+            ExpressionKind::Call { target, .. }
+                if self.analyzer.can_change_state.contains(*target) =>
+            {
+                self.can_change_state = true
+            }
+            ExpressionKind::CallIndirect { .. } if !self.analyzer.ignore_indirect => {
+                self.can_change_state = true
+            }
             _ => {}
         }
     }
@@ -266,14 +285,20 @@ impl<'a, 'b> ReadOnlyVisitor<'a> for FunctionStateAnalyzer<'a, 'b> {
             for import in &self.module.imports {
                 if import.name == *target && import.module == "asyncify" {
                     match import.name.as_str() {
-                        "start_unwind" | "stop_rewind" => { self.can_change_state = true; self.is_top_most_runtime = true; }
-                        "stop_unwind" | "start_rewind" => { self.is_bottom_most_runtime = true; }
+                        "start_unwind" | "stop_rewind" => {
+                            self.can_change_state = true;
+                            self.is_top_most_runtime = true;
+                        }
+                        "stop_unwind" | "start_rewind" => {
+                            self.is_bottom_most_runtime = true;
+                        }
                         _ => {}
                     }
                 }
             }
         }
-        if matches!(expr.kind, ExpressionKind::CallIndirect { .. }) && !self.config.ignore_indirect {
+        if matches!(expr.kind, ExpressionKind::CallIndirect { .. }) && !self.config.ignore_indirect
+        {
             self.can_change_state = true;
         }
     }
@@ -301,33 +326,74 @@ impl<'a, 'b> AsyncifyFlow<'a, 'b> {
     fn make_state_check(&self, state: AsyncifyState) -> ExprRef<'b> {
         self.builder.binary(
             crate::ops::BinaryOp::EqInt32,
-            self.builder.global_get(self.state_index, Type::i32),
+            self.builder.global_get(self.state_index, Type::I32),
             self.builder.const_(Literal::I32(state as i32)),
-            Type::i32,
+            Type::I32,
         )
     }
 
     pub fn process(&mut self, expr: &mut ExprRef<'b>) {
         if !self.analyzer.can_change_state_expr(self.module, *expr) {
             let old = *expr;
-            *expr = self.builder.if_expr(self.make_state_check(AsyncifyState::Normal), old, None);
+            *expr = self.builder.if_(
+                self.make_state_check(AsyncifyState::Normal),
+                old,
+                None,
+                expr.type_,
+            );
             return;
         }
         match &mut expr.kind {
-            ExpressionKind::Block { list, .. } => { for child in list.iter_mut() { self.process(child); } }
-            ExpressionKind::If { condition, if_true, if_false } => {
+            ExpressionKind::Block { list, .. } => {
+                for child in list.iter_mut() {
+                    self.process(child);
+                }
+            }
+            ExpressionKind::If {
+                condition,
+                if_true,
+                if_false,
+            } => {
                 let state_rewinding = self.make_state_check(AsyncifyState::Rewinding);
-                *condition = self.builder.binary(crate::ops::BinaryOp::OrInt32, *condition, state_rewinding, Type::i32);
+                *condition = self.builder.binary(
+                    crate::ops::BinaryOp::OrInt32,
+                    *condition,
+                    state_rewinding,
+                    Type::I32,
+                );
                 self.process(if_true);
-                if let Some(f) = if_false { self.process(f); }
+                if let Some(f) = if_false {
+                    self.process(f);
+                }
             }
             ExpressionKind::Loop { body, .. } => self.process(body),
-            ExpressionKind::Call { .. } | ExpressionKind::CallIndirect { .. } => *expr = self.make_call_support(*expr),
-            ExpressionKind::LocalSet { value, .. } | ExpressionKind::LocalTee { value, .. } | ExpressionKind::Drop { value } => {
-                if self.analyzer.can_change_state_expr(self.module, *value) { self.process(value); }
-                else { let old = *expr; *expr = self.builder.if_expr(self.make_state_check(AsyncifyState::Normal), old, None); }
+            ExpressionKind::Call { .. } | ExpressionKind::CallIndirect { .. } => {
+                *expr = self.make_call_support(*expr)
             }
-            _ => { let old = *expr; *expr = self.builder.if_expr(self.make_state_check(AsyncifyState::Normal), old, None); }
+            ExpressionKind::LocalSet { value, .. }
+            | ExpressionKind::LocalTee { value, .. }
+            | ExpressionKind::Drop { value } => {
+                if self.analyzer.can_change_state_expr(self.module, *value) {
+                    self.process(value);
+                } else {
+                    let old = *expr;
+                    *expr = self.builder.if_(
+                        self.make_state_check(AsyncifyState::Normal),
+                        old,
+                        None,
+                        expr.type_,
+                    );
+                }
+            }
+            _ => {
+                let old = *expr;
+                *expr = self.builder.if_(
+                    self.make_state_check(AsyncifyState::Normal),
+                    old,
+                    None,
+                    expr.type_,
+                );
+            }
         }
     }
 
@@ -336,14 +402,32 @@ impl<'a, 'b> AsyncifyFlow<'a, 'b> {
         self.call_index += 1;
         let mut ops = BumpVec::new_in(self.module.allocator);
         ops.push(self.builder.const_(Literal::I32(index as i32)));
-        let check_index = self.builder.call(ASYNCIFY_CHECK_CALL_INDEX, ops, Type::i32, false);
-        let condition = self.builder.binary(crate::ops::BinaryOp::OrInt32, self.make_state_check(AsyncifyState::Normal), check_index, Type::i32);
+        let check_index = self
+            .builder
+            .call(ASYNCIFY_CHECK_CALL_INDEX, ops, Type::I32, false);
+        let condition = self.builder.binary(
+            crate::ops::BinaryOp::OrInt32,
+            self.make_state_check(AsyncifyState::Normal),
+            check_index,
+            Type::I32,
+        );
         let mut u_ops = BumpVec::new_in(self.module.allocator);
         u_ops.push(self.builder.const_(Literal::I32(index as i32)));
-        let unwind_check = self.builder.if_expr(self.make_state_check(AsyncifyState::Unwinding), self.builder.call(ASYNCIFY_UNWIND, u_ops, Type::none, false), None);
+        let unwind_check = self.builder.if_(
+            self.make_state_check(AsyncifyState::Unwinding),
+            self.builder.call(ASYNCIFY_UNWIND, u_ops, Type::NONE, false),
+            None,
+            Type::NONE,
+        );
         let mut list = BumpVec::new_in(self.module.allocator);
-        list.push(expr); list.push(unwind_check);
-        self.builder.if_expr(condition, self.builder.block(None, list, Type::none), None)
+        list.push(expr);
+        list.push(unwind_check);
+        self.builder.if_(
+            condition,
+            self.builder.block(None, list, Type::NONE),
+            None,
+            Type::NONE,
+        )
     }
 }
 
@@ -355,24 +439,67 @@ pub struct AsyncifyLocals<'a, 'b> {
 }
 
 impl<'a, 'b> AsyncifyLocals<'a, 'b> {
-    pub fn new(module: &'a mut Module<'b>, analyzer: &'a ModuleAnalyzer, func_idx: usize, state_index: u32) -> Self {
-        Self { module, analyzer, func_idx, state_index }
+    pub fn new(
+        module: &'a mut Module<'b>,
+        analyzer: &'a ModuleAnalyzer,
+        func_idx: usize,
+        state_index: u32,
+    ) -> Self {
+        Self {
+            module,
+            analyzer,
+            func_idx,
+            state_index,
+        }
     }
 
     pub fn run(&mut self) {
         let builder = IrBuilder::new(self.module.allocator);
-        let rewind_index_local = self.module.functions[self.func_idx].add_var(Type::i32);
+        let rewind_index_local = self.module.functions[self.func_idx].add_var(Type::I32);
         let fake_globals = self.analyzer.fake_call_globals.clone();
-        let mut transformer = LocalTransformer { builder, rewind_index_local, fake_globals, fake_locals: HashMap::new(), func: &mut self.module.functions[self.func_idx], state_index: self.state_index };
+        let mut transformer = LocalTransformer {
+            builder,
+            rewind_index_local,
+            fake_globals,
+            fake_locals: HashMap::new(),
+            func: &mut self.module.functions[self.func_idx],
+            state_index: self.state_index,
+        };
         let body = transformer.func.body.unwrap();
         transformer.func.body = Some(transformer.visit_top_level(body));
-        
+
         let func = &mut self.module.functions[self.func_idx];
         let mut list = BumpVec::new_in(self.module.allocator);
-        let rewinding = builder.binary(crate::ops::BinaryOp::EqInt32, builder.global_get(self.state_index, Type::i32), builder.const_(Literal::I32(AsyncifyState::Rewinding as i32)), Type::i32);
-        list.push(builder.if_expr(rewinding, builder.local_set(rewind_index_local, builder.call(ASYNCIFY_GET_CALL_INDEX, BumpVec::new_in(self.module.allocator), Type::i32, false)), None));
-        list.push(builder.block(Some(ASYNCIFY_UNWIND), { let mut v = BumpVec::new_in(self.module.allocator); v.push(func.body.unwrap()); v }, Type::none));
-        func.body = Some(builder.block(None, list, Type::none));
+        let rewinding = builder.binary(
+            crate::ops::BinaryOp::EqInt32,
+            builder.global_get(self.state_index, Type::I32),
+            builder.const_(Literal::I32(AsyncifyState::Rewinding as i32)),
+            Type::I32,
+        );
+        list.push(builder.if_(
+            rewinding,
+            builder.local_set(
+                rewind_index_local,
+                builder.call(
+                    ASYNCIFY_GET_CALL_INDEX,
+                    BumpVec::new_in(self.module.allocator),
+                    Type::I32,
+                    false,
+                ),
+            ),
+            None,
+            Type::NONE,
+        ));
+        list.push(builder.block(
+            Some(ASYNCIFY_UNWIND),
+            {
+                let mut v = BumpVec::new_in(self.module.allocator);
+                v.push(func.body.unwrap());
+                v
+            },
+            Type::NONE,
+        ));
+        func.body = Some(builder.block(None, list, Type::NONE));
     }
 }
 
@@ -390,17 +517,87 @@ impl<'a, 'b> LocalTransformer<'a, 'b> {
         match &expr.kind {
             ExpressionKind::Block { name, list } => {
                 let mut new_list = BumpVec::new_in(self.builder.bump);
-                for &child in list { new_list.push(self.visit_top_level(child)); }
+                for &child in list {
+                    new_list.push(self.visit_top_level(child));
+                }
                 self.builder.block(name.clone(), new_list, expr.type_)
             }
-            ExpressionKind::Call { target, operands, .. } => {
-                if *target == ASYNCIFY_UNWIND { self.builder.break_expr(ASYNCIFY_UNWIND, None, None) }
-                else if *target == ASYNCIFY_CHECK_CALL_INDEX { 
-                    self.builder.binary(crate::ops::BinaryOp::EqInt32, self.builder.local_get(self.rewind_index_local, Type::i32), operands[0], Type::i32)
-                } else if *target == ASYNCIFY_GET_CALL_INDEX { self.builder.const_(Literal::I32(0)) }
-                else { expr }
+            ExpressionKind::Call {
+                target, operands, ..
+            } => {
+                if *target == ASYNCIFY_UNWIND {
+                    self.builder
+                        .break_(ASYNCIFY_UNWIND, None, None, Type::UNREACHABLE)
+                } else if *target == ASYNCIFY_CHECK_CALL_INDEX {
+                    self.builder.binary(
+                        crate::ops::BinaryOp::EqInt32,
+                        self.builder.local_get(self.rewind_index_local, Type::I32),
+                        operands[0],
+                        Type::I32,
+                    )
+                } else if *target == ASYNCIFY_GET_CALL_INDEX {
+                    self.builder.const_(Literal::I32(0))
+                } else {
+                    expr
+                }
             }
             _ => expr,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::expression::{ExprRef, IrBuilder};
+    use crate::module::Module;
+    use binaryen_core::{Literal, Type};
+    use bumpalo::Bump;
+
+    #[test]
+    fn test_asyncify_basic() {
+        let allocator = Bump::new();
+        let mut module = Module::new(&allocator);
+        let builder = IrBuilder::new(&allocator);
+
+        // Define imports that change state
+        module.imports.push(crate::module::Import {
+            module: "env".to_string(),
+            name: "sleep".to_string(),
+            kind: crate::module::ImportKind::Function(Type::NONE, Type::NONE),
+        });
+
+        let mut func = crate::module::Function::new(
+            "test_func".to_string(),
+            Type::NONE,
+            Type::NONE,
+            Vec::new(),
+            None,
+        );
+
+        let sleep_call = builder.call("sleep", bumpalo::vec![in &allocator], Type::NONE, false);
+        func.body = Some(builder.block(None, bumpalo::vec![in &allocator; sleep_call], Type::NONE));
+
+        module.functions.push(func);
+
+        let mut config = AsyncifyConfig::default();
+        config.imports.push("env.sleep".to_string());
+
+        let mut asyncify = Asyncify::new(config);
+        asyncify.run(&mut module);
+
+        // Verification: Check if globals were added
+        assert!(module.globals.iter().any(|g| g.name == ASYNCIFY_STATE));
+        assert!(module.globals.iter().any(|g| g.name == ASYNCIFY_DATA));
+
+        // The function body should have been wrapped in a block
+        let func = &module.functions[0];
+        let body = func.body.unwrap();
+        if let ExpressionKind::Block { list, .. } = &body.kind {
+            // Should have a check for rewinding and the original body (wrapped)
+            assert!(list.len() >= 2);
+        } else {
+            panic!("Function body should be a block now");
         }
     }
 }
