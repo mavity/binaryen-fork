@@ -1,6 +1,6 @@
 use crate::dataflow::cfg::CFGBuilder;
 use crate::dataflow::liveness::InterferenceGraph;
-use crate::expression::{ExprRef, Expression, ExpressionKind};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::{Function, Module};
 use crate::pass::Pass;
 use crate::visitor::Visitor;
