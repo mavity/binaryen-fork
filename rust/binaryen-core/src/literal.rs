@@ -1,5 +1,6 @@
 use crate::Type;
 use std::fmt;
+use std::ops::Neg;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Literal {
@@ -66,6 +67,20 @@ impl Literal {
             *v
         } else {
             panic!("not an f64 literal");
+        }
+    }
+}
+
+impl Neg for Literal {
+    type Output = Literal;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Literal::I32(v) => Literal::I32(-v),
+            Literal::I64(v) => Literal::I64(-v),
+            Literal::F32(v) => Literal::F32(-v),
+            Literal::F64(v) => Literal::F64(-v),
+            Literal::V128(_) => panic!("V128 literals cannot be negated"),
         }
     }
 }

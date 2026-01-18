@@ -9,6 +9,7 @@ use std::collections::HashMap;
 pub struct MatchEnv<'a> {
     vars: HashMap<&'static str, ExprRef<'a>>,
     op: Option<BinaryOp>,
+    unary_op: Option<UnaryOp>,
     left: Option<ExprRef<'a>>,
     right: Option<ExprRef<'a>>,
 }
@@ -18,6 +19,7 @@ impl<'a> MatchEnv<'a> {
         Self {
             vars: HashMap::new(),
             op: None,
+            unary_op: None,
             left: None,
             right: None,
         }
@@ -40,12 +42,20 @@ impl<'a> MatchEnv<'a> {
         self.op
     }
 
+    pub fn get_unary_op(&self) -> Option<UnaryOp> {
+        self.unary_op
+    }
+
     pub fn insert(&mut self, name: &'static str, expr: ExprRef<'a>) {
         self.vars.insert(name, expr);
     }
 
     pub fn set_op(&mut self, op: BinaryOp) {
         self.op = Some(op);
+    }
+
+    pub fn set_unary_op(&mut self, op: UnaryOp) {
+        self.unary_op = Some(op);
     }
 
     pub fn set_left(&mut self, expr: ExprRef<'a>) {
@@ -59,6 +69,7 @@ impl<'a> MatchEnv<'a> {
     pub fn clear(&mut self) {
         self.vars.clear();
         self.op = None;
+        self.unary_op = None;
         self.left = None;
         self.right = None;
     }
@@ -82,12 +93,21 @@ pub enum Pattern {
         right: Box<Pattern>,
     },
     /// Match unary operation
-    Unary { op: UnaryOp, value: Box<Pattern> },
+    Unary {
+        op: PatternUnaryOp,
+        value: Box<Pattern>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatternOp {
     Op(BinaryOp),
+    AnyOp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatternUnaryOp {
+    Op(UnaryOp),
     AnyOp,
 }
 
@@ -102,9 +122,9 @@ impl Pattern {
     }
 
     /// Helper to create a unary pattern
-    pub fn unary(op: UnaryOp, value: Pattern) -> Self {
+    pub fn unary(op: impl Into<PatternUnaryOp>, value: Pattern) -> Self {
         Pattern::Unary {
-            op,
+            op: op.into(),
             value: Box::new(value),
         }
     }
@@ -170,7 +190,16 @@ impl Pattern {
                     op: e_op,
                     value: e_value,
                 },
-            ) => p_op == e_op && p_value.matches(*e_value, env),
+            ) => {
+                let op_matches = match p_op {
+                    PatternUnaryOp::Op(op) => op == e_op,
+                    PatternUnaryOp::AnyOp => {
+                        env.set_unary_op(*e_op);
+                        true
+                    }
+                };
+                op_matches && p_value.matches(*e_value, env)
+            }
 
             _ => false,
         }
@@ -180,6 +209,12 @@ impl Pattern {
 impl From<BinaryOp> for PatternOp {
     fn from(op: BinaryOp) -> Self {
         PatternOp::Op(op)
+    }
+}
+
+impl From<UnaryOp> for PatternUnaryOp {
+    fn from(op: UnaryOp) -> Self {
+        PatternUnaryOp::Op(op)
     }
 }
 
