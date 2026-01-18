@@ -1,4 +1,4 @@
-use crate::module::{FuncType, Module};
+use crate::module::Module;
 use crate::pass::Pass;
 
 /// Assigns deterministic names to types for debugging.
@@ -25,7 +25,7 @@ impl Pass for EmitTargetFeatures {
         "EmitTargetFeatures"
     }
 
-    fn run<'a>(&mut self, module: &mut Module<'a>) {
+    fn run<'a>(&mut self, _module: &mut Module<'a>) {
         // Synchronize and validate features based on module content.
         // For now, we ensure the FeatureSet is updated to include essential features
         // if they are used. In a full implementation, this would scan all expressions.

@@ -65,4 +65,94 @@ mod tests {
         assert!(code.contains("if (!"));
         assert!(code.contains("log"));
     }
+
+    #[test]
+    fn test_type_names_printing() {
+        use binaryen_ir::pass::Pass;
+        use binaryen_ir::passes::metadata::NameTypes;
+
+        let bump = Bump::new();
+        let mut module = binaryen_ir::Module::new(&bump);
+
+        // Add a type: (i32) -> (i32)
+        module.add_type(Type::I32, Type::I32);
+
+        // Populate type names
+        let mut name_types = NameTypes;
+        name_types.run(&mut module);
+
+        let mut func = Function::new("test_func".to_string(), Type::I32, Type::I32, vec![], None);
+        func.type_idx = Some(0);
+        module.functions.push(func);
+
+        // Test C Printer
+        let mut c_printer = CPrinter::new(&module);
+        let c_code = c_printer.print();
+        println!("C Output:\n{}", c_code);
+        assert!(c_code.contains("// Types:"));
+        assert!(c_code.contains("//   type$0 : (int32_t) -> (int32_t)"));
+        assert!(c_code.contains("// type: type$0"));
+
+        // Test Rust Printer
+        let mut rust_printer = RustPrinter::new(&module);
+        let rust_code = rust_printer.print();
+        println!("Rust Output:\n{}", rust_code);
+        assert!(rust_code.contains("// Types:"));
+        assert!(rust_code.contains("//   type$0 : (i32) -> (i32)"));
+        assert!(rust_code.contains("// type: type$0"));
+    }
+
+    #[test]
+    fn test_call_indirect_printing() {
+        use binaryen_core::type_store::intern_signature;
+        use binaryen_ir::pass::Pass;
+        use binaryen_ir::passes::metadata::NameTypes;
+        use bumpalo::collections::Vec as BumpVec;
+
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+        let mut module = binaryen_ir::Module::new(&bump);
+
+        // 1. Create a module with a type (i32) -> (i32)
+        module.add_type(Type::I32, Type::I32);
+        let sig_type = intern_signature(Type::I32, Type::I32);
+
+        // 2. Populate type names using NameTypes
+        let mut name_types = NameTypes;
+        name_types.run(&mut module);
+
+        // 3. Create a function "caller" that uses CallIndirect with that type
+        let target = builder.const_(Literal::I32(0)); // function index 0 (the target)
+        let mut operands = BumpVec::new_in(&bump);
+        operands.push(builder.const_(Literal::I32(42)));
+
+        let call_indirect = builder.call_indirect(
+            "0", // table index 0
+            target,
+            operands,
+            sig_type,
+            Type::I32, // return type
+        );
+
+        let caller_func = Function::new(
+            "caller".to_string(),
+            Type::NONE,
+            Type::I32,
+            vec![],
+            Some(call_indirect),
+        );
+        module.functions.push(caller_func);
+
+        // Test C Printer
+        let mut c_printer = CPrinter::new(&module);
+        let c_code = c_printer.print();
+        println!("C Output:\n{}", c_code);
+        assert!(c_code.contains("call_indirect<type$0>"));
+
+        // Test Rust Printer
+        let mut rust_printer = RustPrinter::new(&module);
+        let rust_code = rust_printer.print();
+        println!("Rust Output:\n{}", rust_code);
+        assert!(rust_code.contains("call_indirect<type$0>"));
+    }
 }

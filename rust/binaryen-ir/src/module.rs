@@ -250,6 +250,15 @@ impl<'a> Module<'a> {
         type_idx
     }
 
+    /// Finds the index of a signature type in the module's type section.
+    pub fn find_type_index(&self, ty: Type) -> Option<u32> {
+        let sig = binaryen_core::type_store::lookup_signature(ty)?;
+        self.types
+            .iter()
+            .position(|t| t.params == sig.params && t.results == sig.results)
+            .map(|i| i as u32)
+    }
+
     pub fn set_annotation(
         &mut self,
         expr: ExprRef<'a>,

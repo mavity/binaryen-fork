@@ -788,6 +788,26 @@ impl<'a> IrBuilder<'a> {
         )
     }
 
+    pub fn call_indirect(
+        &self,
+        table: &'a str,
+        target: ExprRef<'a>,
+        operands: BumpVec<'a, ExprRef<'a>>,
+        sig: Type,
+        type_: Type,
+    ) -> ExprRef<'a> {
+        Expression::new(
+            self.bump,
+            ExpressionKind::CallIndirect {
+                table,
+                target,
+                operands,
+                type_: sig,
+            },
+            type_,
+        )
+    }
+
     pub fn local_get(&self, index: u32, type_: Type) -> ExprRef<'a> {
         Expression::new(self.bump, ExpressionKind::LocalGet { index }, type_)
     }

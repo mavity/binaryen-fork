@@ -39,11 +39,42 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
         self.output
             .push_str("// Decompiled to Rust from WebAssembly\n\n");
 
+        self.print_types();
+
         for func in &self.module.functions {
             self.print_function(func);
         }
 
         self.output.clone()
+    }
+
+    fn print_types(&mut self) {
+        if self.module.type_names.is_empty() {
+            return;
+        }
+
+        self.output.push_str("// Types:\n");
+        for (i, name) in self.module.type_names.iter().enumerate() {
+            if let Some(ty) = self.module.types.get(i) {
+                let params = self.format_type_list(ty.params);
+                let results = self.format_type_list(ty.results);
+                self.output
+                    .push_str(&format!("//   {} : ({}) -> ({})\n", name, params, results));
+            }
+        }
+        self.output.push_str("\n");
+    }
+
+    fn format_type_list(&self, ty: binaryen_core::Type) -> String {
+        let elements = ty.tuple_elements();
+        if elements.is_empty() {
+            return "()".to_string();
+        }
+        elements
+            .iter()
+            .map(|&t| self.type_name(t))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     fn type_name(&self, ty: binaryen_core::Type) -> String {
@@ -59,6 +90,15 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
     }
 
     fn print_function(&mut self, func: &binaryen_ir::Function<'a>) {
+        if let Some(idx) = func.type_idx.or_else(|| {
+            let ty = binaryen_core::type_store::intern_signature(func.params, func.results);
+            self.module.find_type_index(ty)
+        }) {
+            if let Some(name) = self.module.type_names.get(idx as usize) {
+                self.output.push_str(&format!("// type: {}\n", name));
+            }
+        }
+
         self.output.push_str(&format!("fn {}(", func.name));
 
         let param_types = func.params.tuple_elements();
@@ -251,14 +291,6 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
         }
     }
 
-    fn walk_expression(
-        &mut self,
-        func: &binaryen_ir::Function<'a>,
-        expr: binaryen_ir::ExprRef<'a>,
-    ) {
-        self.walk_expression_ext(func, expr, false);
-    }
-
     fn walk_inline_expression(
         &mut self,
         func: &binaryen_ir::Function<'a>,
@@ -368,6 +400,36 @@ impl<'m, 'a> RustPrinter<'m, 'a> {
                 target, operands, ..
             } => {
                 self.output.push_str(&format!("{}(", target));
+                for (i, op) in operands.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.walk_inline_expression(func, *op);
+                }
+                self.output.push_str(")");
+            }
+            ExpressionKind::CallIndirect {
+                target,
+                operands,
+                type_,
+                ..
+            } => {
+                let type_name = if let Some(idx) = self.module.find_type_index(*type_) {
+                    self.module
+                        .type_names
+                        .get(idx as usize)
+                        .cloned()
+                        .unwrap_or_else(|| format!("type${}", idx))
+                } else {
+                    "unknown".to_string()
+                };
+                self.output
+                    .push_str(&format!("call_indirect<{}>((", type_name));
+                self.walk_inline_expression(func, *target);
+                self.output.push_str(")");
+                if !operands.is_empty() {
+                    self.output.push_str(", ");
+                }
                 for (i, op) in operands.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
