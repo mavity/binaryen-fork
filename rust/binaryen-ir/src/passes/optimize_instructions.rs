@@ -26,7 +26,534 @@ impl OptimizeInstructions {
         Self::register_reassociation(&mut matcher);
         Self::register_strength_reduction(&mut matcher);
         Self::register_comparison_optimizations(&mut matcher);
+        Self::register_bitwise_optimizations(&mut matcher);
+        Self::register_fp_optimizations(&mut matcher);
+        Self::register_select_optimizations(&mut matcher);
         Self { matcher }
+    }
+
+    fn register_select_optimizations(matcher: &mut PatternMatcher) {
+        // select(condition, x, x) -> x
+        matcher.add_rule(
+            Pattern::select(Pattern::Any, Pattern::Var("x"), Pattern::Var("x")),
+            |env, _| env.get("x").copied(),
+        );
+
+        // select(1, x, y) -> x
+        matcher.add_rule(
+            Pattern::select(
+                Pattern::Const(Literal::I32(1)),
+                Pattern::Var("x"),
+                Pattern::Var("y"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // select(0, x, y) -> y
+        matcher.add_rule(
+            Pattern::select(
+                Pattern::Const(Literal::I32(0)),
+                Pattern::Var("x"),
+                Pattern::Var("y"),
+            ),
+            |env, _| env.get("y").copied(),
+        );
+    }
+
+    fn register_fp_optimizations(matcher: &mut PatternMatcher) {
+        use crate::ops::UnaryOp;
+
+        // --- Double Negation / Abs ---
+
+        // f32.neg(f32.neg(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::NegFloat32,
+                Pattern::unary(UnaryOp::NegFloat32, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // f64.neg(f64.neg(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::NegFloat64,
+                Pattern::unary(UnaryOp::NegFloat64, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // f32.abs(f32.abs(x)) -> f32.abs(x)
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::AbsFloat32,
+                Pattern::unary(UnaryOp::AbsFloat32, Pattern::Var("x")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::AbsFloat32, *x, Type::F32))
+            },
+        );
+
+        // f64.abs(f64.abs(x)) -> f64.abs(x)
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::AbsFloat64,
+                Pattern::unary(UnaryOp::AbsFloat64, Pattern::Var("x")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::AbsFloat64, *x, Type::F64))
+            },
+        );
+
+        // --- Negation Flipping (Multiplication) ---
+
+        // f32.neg(x) * f32.neg(y) -> x * y
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::MulFloat32,
+                Pattern::unary(UnaryOp::NegFloat32, Pattern::Var("x")),
+                Pattern::unary(UnaryOp::NegFloat32, Pattern::Var("y")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let y = env.get("y")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(BinaryOp::MulFloat32, *x, *y, Type::F32))
+            },
+        );
+
+        // f64.neg(x) * f64.neg(y) -> x * y
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::MulFloat64,
+                Pattern::unary(UnaryOp::NegFloat64, Pattern::Var("x")),
+                Pattern::unary(UnaryOp::NegFloat64, Pattern::Var("y")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let y = env.get("y")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(BinaryOp::MulFloat64, *x, *y, Type::F64))
+            },
+        );
+
+        // --- Negation Flipping (Division) ---
+
+        // f32.neg(x) / f32.neg(y) -> x / y
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::DivFloat32,
+                Pattern::unary(UnaryOp::NegFloat32, Pattern::Var("x")),
+                Pattern::unary(UnaryOp::NegFloat32, Pattern::Var("y")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let y = env.get("y")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(BinaryOp::DivFloat32, *x, *y, Type::F32))
+            },
+        );
+
+        // f64.neg(x) / f64.neg(y) -> x / y
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::DivFloat64,
+                Pattern::unary(UnaryOp::NegFloat64, Pattern::Var("x")),
+                Pattern::unary(UnaryOp::NegFloat64, Pattern::Var("y")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let y = env.get("y")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(BinaryOp::DivFloat64, *x, *y, Type::F64))
+            },
+        );
+
+        // --- Copysign ---
+
+        // f32.copysign(x, x) -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::CopySignFloat32,
+                Pattern::Var("x"),
+                Pattern::Var("x"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // f64.copysign(x, x) -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::CopySignFloat64,
+                Pattern::Var("x"),
+                Pattern::Var("x"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // --- Min/Max ---
+
+        // f32.min(x, x) -> x
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::MinFloat32, Pattern::Var("x"), Pattern::Var("x")),
+            |env, _| env.get("x").copied(),
+        );
+
+        // f32.max(x, x) -> x
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::MaxFloat32, Pattern::Var("x"), Pattern::Var("x")),
+            |env, _| env.get("x").copied(),
+        );
+
+        // f64.min(x, x) -> x
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::MinFloat64, Pattern::Var("x"), Pattern::Var("x")),
+            |env, _| env.get("x").copied(),
+        );
+
+        // f64.max(x, x) -> x
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::MaxFloat64, Pattern::Var("x"), Pattern::Var("x")),
+            |env, _| env.get("x").copied(),
+        );
+    }
+
+    fn register_bitwise_optimizations(matcher: &mut PatternMatcher) {
+        // --- Shift Truncation ---
+
+        // (x << C) where C >= 32 -> x << (C % 32)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::ShlInt32, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i32();
+                if c as u32 >= 32 {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::ShlInt32,
+                        *x,
+                        builder.const_(Literal::I32((c as u32 & 31) as i32)),
+                        Type::I32,
+                    ));
+                }
+                None
+            },
+        );
+
+        // (x >>u C) where C >= 32 -> x >>u (C % 32)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::ShrUInt32, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i32();
+                if c as u32 >= 32 {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::ShrUInt32,
+                        *x,
+                        builder.const_(Literal::I32((c as u32 & 31) as i32)),
+                        Type::I32,
+                    ));
+                }
+                None
+            },
+        );
+
+        // (x >>s C) where C >= 32 -> x >>s (C % 32)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::ShrSInt32, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i32();
+                if c as u32 >= 32 {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::ShrSInt32,
+                        *x,
+                        builder.const_(Literal::I32((c as u32 & 31) as i32)),
+                        Type::I32,
+                    ));
+                }
+                None
+            },
+        );
+
+        // I64 Shift Truncation
+
+        // (x << C) where C >= 64 -> x << (C % 64)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::ShlInt64, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i64();
+                if c as u64 >= 64 {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::ShlInt64,
+                        *x,
+                        builder.const_(Literal::I64((c as u64 & 63) as i64)),
+                        Type::I64,
+                    ));
+                }
+                None
+            },
+        );
+
+        // (x >>u C) where C >= 64 -> x >>u (C % 64)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::ShrUInt64, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i64();
+                if c as u64 >= 64 {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::ShrUInt64,
+                        *x,
+                        builder.const_(Literal::I64((c as u64 & 63) as i64)),
+                        Type::I64,
+                    ));
+                }
+                None
+            },
+        );
+
+        // (x >>s C) where C >= 64 -> x >>s (C % 64)
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::ShrSInt64, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i64();
+                if c as u64 >= 64 {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::ShrSInt64,
+                        *x,
+                        builder.const_(Literal::I64((c as u64 & 63) as i64)),
+                        Type::I64,
+                    ));
+                }
+                None
+            },
+        );
+
+        // --- Bitwise Identities ---
+
+        // x & (x ^ -1) -> 0 (x & ~x)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AndInt32,
+                Pattern::Var("x"),
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("x"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+            ),
+            |_env, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(0)))
+            },
+        );
+
+        // x | (x ^ -1) -> -1 (x | ~x)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::OrInt32,
+                Pattern::Var("x"),
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("x"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+            ),
+            |_env, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(-1)))
+            },
+        );
+
+        // eqz(x | y) -> eqz(x) & eqz(y)
+        // This is only helpful if eqz(x) and eqz(y) can be folded or further simplified.
+        // Actually, sometimes (x | y) == 0 is better as eqz(x) & eqz(y) if we can then fold one side.
+        // But in general, (x | y) == 0 is one op, while eqz(x) & eqz(y) is three.
+        // C++ implementation does:
+        // if (curr->op == EqZInt32) { ... if (inner->op == OrInt32) ... }
+        // Let's stick to what C++ does if possible.
+
+        // --- De Morgan's ---
+
+        // (x ^ -1) & (y ^ -1) -> (x | y) ^ -1
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AndInt32,
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("x"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("y"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let y = env.get("y")?;
+                let builder = IrBuilder::new(bump);
+                let or = builder.binary(BinaryOp::OrInt32, *x, *y, Type::I32);
+                Some(builder.binary(
+                    BinaryOp::XorInt32,
+                    or,
+                    builder.const_(Literal::I32(-1)),
+                    Type::I32,
+                ))
+            },
+        );
+
+        // (x ^ -1) | (y ^ -1) -> (x & y) ^ -1
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::OrInt32,
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("x"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+                Pattern::binary(
+                    BinaryOp::XorInt32,
+                    Pattern::Var("y"),
+                    Pattern::Const(Literal::I32(-1)),
+                ),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let y = env.get("y")?;
+                let builder = IrBuilder::new(bump);
+                let and = builder.binary(BinaryOp::AndInt32, *x, *y, Type::I32);
+                Some(builder.binary(
+                    BinaryOp::XorInt32,
+                    and,
+                    builder.const_(Literal::I32(-1)),
+                    Type::I32,
+                ))
+            },
+        );
+
+        // --- Absorption Laws ---
+
+        // x & (x | y) -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AndInt32,
+                Pattern::Var("x"),
+                Pattern::binary(BinaryOp::OrInt32, Pattern::Var("x"), Pattern::Var("y")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // (x | y) & x -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AndInt32,
+                Pattern::binary(BinaryOp::OrInt32, Pattern::Var("x"), Pattern::Var("y")),
+                Pattern::Var("x"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // x | (x & y) -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::OrInt32,
+                Pattern::Var("x"),
+                Pattern::binary(BinaryOp::AndInt32, Pattern::Var("x"), Pattern::Var("y")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // (x & y) | x -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::OrInt32,
+                Pattern::binary(BinaryOp::AndInt32, Pattern::Var("x"), Pattern::Var("y")),
+                Pattern::Var("x"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // --- Xor Identities ---
+
+        // (x ^ y) ^ y -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::XorInt32,
+                Pattern::binary(BinaryOp::XorInt32, Pattern::Var("x"), Pattern::Var("y")),
+                Pattern::Var("y"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // y ^ (x ^ y) -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::XorInt32,
+                Pattern::Var("y"),
+                Pattern::binary(BinaryOp::XorInt32, Pattern::Var("x"), Pattern::Var("y")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // --- Shift-Mask Interactions ---
+
+        // (x << C) & M where (M & ((1 << C) - 1)) == 0
+        // If we shift left by C, the lowest C bits are 0. If the mask also has those bits as 0, the mask is redundant for those bits.
+        // Wait, if (M & ((1 << C) - 1)) == 0 it means M doesn't care about the bits that became 0.
+        // But (x << C) already has those bits as 0. So the mask doesn't change anything in those bits.
+        // However, if M has other bits as 0, it might still be useful.
+        // If M only has bits set that are >= C, then M might be simplifying the value of x before shift.
+        // (x << C) & (Mask << C) -> (x & Mask) << C
+
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AndInt32,
+                Pattern::binary(BinaryOp::ShlInt32, Pattern::Var("x"), Pattern::AnyConst),
+                Pattern::AnyConst,
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("left")?.get_i32() as u32 & 31;
+                let m = env.get_const("right")?.get_i32();
+
+                if c > 0 {
+                    let mask_shifted = m >> c;
+                    // Check if m has no bits set in the lower c bits
+                    let low_bits_mask = (1i32 << c).wrapping_sub(1);
+                    if (m & low_bits_mask) == 0 {
+                        // (x << c) & m  =>  (x & (m >> c)) << c
+                        let builder = IrBuilder::new(bump);
+                        let inner_and = builder.binary(
+                            BinaryOp::AndInt32,
+                            *x,
+                            builder.const_(Literal::I32(mask_shifted)),
+                            Type::I32,
+                        );
+                        return Some(builder.binary(
+                            BinaryOp::ShlInt32,
+                            inner_and,
+                            builder.const_(Literal::I32(c as i32)),
+                            Type::I32,
+                        ));
+                    }
+                }
+                None
+            },
+        );
     }
 
     fn register_constant_folding(matcher: &mut PatternMatcher) {
@@ -370,6 +897,12 @@ impl OptimizeInstructions {
             ExtendUInt32 => Some(Literal::I64(value.get_u32() as i64)),
             WrapInt64 => Some(Literal::I32(value.get_i64() as i32)),
 
+            ExtendS8Int32 => Some(Literal::I32(value.get_i32() as i8 as i32)),
+            ExtendS16Int32 => Some(Literal::I32(value.get_i32() as i16 as i32)),
+            ExtendS8Int64 => Some(Literal::I64(value.get_i64() as i8 as i64)),
+            ExtendS16Int64 => Some(Literal::I64(value.get_i64() as i16 as i64)),
+            ExtendS32Int64 => Some(Literal::I64(value.get_i64() as i32 as i64)),
+
             ConvertSInt32ToFloat32 => Some(Literal::F32(value.get_i32() as f32)),
             ConvertUInt32ToFloat32 => Some(Literal::F32(value.get_u32() as f32)),
             ConvertSInt64ToFloat32 => Some(Literal::F32(value.get_i64() as f32)),
@@ -453,6 +986,125 @@ impl OptimizeInstructions {
                 let x = env.get("x")?;
                 let builder = IrBuilder::new(bump);
                 Some(builder.unary(UnaryOp::EqZInt32, *x, Type::I32))
+            },
+        );
+
+        // x <u 1 -> x == 0 -> eqz(x)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::LtUInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(1)),
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::EqZInt32, *x, Type::I32))
+            },
+        );
+
+        // x >=u 1 -> x != 0
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::GeUInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(1)),
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                let zero = builder.const_(Literal::I32(0));
+                Some(builder.binary(BinaryOp::NeInt32, *x, zero, Type::I32))
+            },
+        );
+
+        // x <u MAX_INT -> x != -1
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::LtUInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(-1)),
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                let minus_one = builder.const_(Literal::I32(-1));
+                Some(builder.binary(BinaryOp::NeInt32, *x, minus_one, Type::I32))
+            },
+        );
+
+        // x >=u MAX_INT -> x == -1
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::GeUInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(-1)),
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                let minus_one = builder.const_(Literal::I32(-1));
+                Some(builder.binary(BinaryOp::EqInt32, *x, minus_one, Type::I32))
+            },
+        );
+
+        // --- I64 Versions ---
+
+        // x == 0 -> eqz(x)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::EqInt64,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I64(0)),
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::EqZInt64, *x, Type::I32)) // Note: EqZ returns I32
+            },
+        );
+
+        // --- Boundary Folding ---
+
+        // x < C  =>  x <= C-1 (if C is not MIN)
+        // x > C  =>  x >= C+1 (if C is not MAX)
+        // These can be useful for canonicalization.
+        // Actually, C++ code often prefers < or <= depending on the context.
+        // Let's add rules that convert < Constant to <= (Constant - 1) if it helps.
+
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::LtSInt32, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i32();
+                if c > i32::MIN {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::LeSInt32,
+                        *x,
+                        builder.const_(Literal::I32(c - 1)),
+                        Type::I32,
+                    ));
+                }
+                None
+            },
+        );
+
+        matcher.add_rule(
+            Pattern::binary(BinaryOp::GtSInt32, Pattern::Var("x"), Pattern::AnyConst),
+            |env, bump| {
+                let x = env.get("x")?;
+                let c = env.get_const("right")?.get_i32();
+                if c < i32::MAX {
+                    let builder = IrBuilder::new(bump);
+                    return Some(builder.binary(
+                        BinaryOp::GeSInt32,
+                        *x,
+                        builder.const_(Literal::I32(c + 1)),
+                        Type::I32,
+                    ));
+                }
+                None
             },
         );
 
@@ -1213,6 +1865,120 @@ impl OptimizeInstructions {
             ),
             |env: &MatchEnv, _| env.get("x").copied(),
         );
+
+        // --- Cast / Reinterpret Identities ---
+
+        // wrap(extend_s(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::WrapInt64,
+                Pattern::unary(UnaryOp::ExtendSInt32, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // wrap(extend_u(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::WrapInt64,
+                Pattern::unary(UnaryOp::ExtendUInt32, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // extend_s(wrap(x)) -> extend_s32(x)
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ExtendSInt32,
+                Pattern::unary(UnaryOp::WrapInt64, Pattern::Var("x")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::ExtendS32Int64, *x, Type::I64))
+            },
+        );
+
+        // extend_u(wrap(x)) -> x & 0xffffffff
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ExtendUInt32,
+                Pattern::unary(UnaryOp::WrapInt64, Pattern::Var("x")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                let mask = builder.const_(Literal::I64(0xffffffff));
+                Some(builder.binary(BinaryOp::AndInt64, *x, mask, Type::I64))
+            },
+        );
+
+        // extend_s(wrap(x)) -> extend_s(wrap(x)) - No change needed here, it's already in minimal form.
+        // But what about extend_s(i32_const) ? That's constant folding, which we already have.
+
+        // reinterpret_f32(reinterpret_i32(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ReinterpretInt32,
+                Pattern::unary(UnaryOp::ReinterpretFloat32, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // reinterpret_i32(reinterpret_f32(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ReinterpretFloat32,
+                Pattern::unary(UnaryOp::ReinterpretInt32, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // reinterpret_f64(reinterpret_i64(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ReinterpretInt64,
+                Pattern::unary(UnaryOp::ReinterpretFloat64, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // reinterpret_i64(reinterpret_f64(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ReinterpretFloat64,
+                Pattern::unary(UnaryOp::ReinterpretInt64, Pattern::Var("x")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // --- Sign Extension Identities ---
+
+        // extend_s16(extend_s8(x)) -> extend_s8(x)
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ExtendS16Int32,
+                Pattern::unary(UnaryOp::ExtendS8Int32, Pattern::Var("x")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::ExtendS8Int32, *x, Type::I32))
+            },
+        );
+
+        // extend_s8(extend_s16(x)) -> extend_s8(x)
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::ExtendS8Int32,
+                Pattern::unary(UnaryOp::ExtendS16Int32, Pattern::Var("x")),
+            ),
+            |env, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::ExtendS8Int32, *x, Type::I32))
+            },
+        );
     }
 
     fn register_reassociation(matcher: &mut PatternMatcher) {
@@ -1320,9 +2086,155 @@ impl OptimizeInstructions {
                 ))
             },
         );
+
+        // --- Multi-Operation Identities ---
+
+        // (x + y) - x -> y
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::SubInt32,
+                Pattern::binary(BinaryOp::AddInt32, Pattern::Var("x"), Pattern::Var("y")),
+                Pattern::Var("x"),
+            ),
+            |env, _| env.get("y").copied(),
+        );
+
+        // (x + y) - y -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::SubInt32,
+                Pattern::binary(BinaryOp::AddInt32, Pattern::Var("x"), Pattern::Var("y")),
+                Pattern::Var("y"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // (x - y) + y -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AddInt32,
+                Pattern::binary(BinaryOp::SubInt32, Pattern::Var("x"), Pattern::Var("y")),
+                Pattern::Var("y"),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // y + (x - y) -> x
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::AddInt32,
+                Pattern::Var("y"),
+                Pattern::binary(BinaryOp::SubInt32, Pattern::Var("x"), Pattern::Var("y")),
+            ),
+            |env, _| env.get("x").copied(),
+        );
+
+        // x - (x - y) -> y
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::SubInt32,
+                Pattern::Var("x"),
+                Pattern::binary(BinaryOp::SubInt32, Pattern::Var("x"), Pattern::Var("y")),
+            ),
+            |env, _| env.get("y").copied(),
+        );
     }
 
     fn register_strength_reduction(matcher: &mut PatternMatcher) {
+        // x / 1 -> x (Unsigned)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::DivUInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(1)),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
+
+        // x / 1 -> x (Signed)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::DivSInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(1)),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
+
+        // x % 1 -> 0 (Unsigned)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::RemUInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(1)),
+            ),
+            |_env, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(0)))
+            },
+        );
+
+        // x % 1 -> 0 (Signed)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::RemSInt32,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I32(1)),
+            ),
+            |_env, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I32(0)))
+            },
+        );
+
+        // --- Int64 versions ---
+
+        // x / 1 -> x (Unsigned)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::DivUInt64,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I64(1)),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
+
+        // x / 1 -> x (Signed)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::DivSInt64,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I64(1)),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
+
+        // x % 1 -> 0 (Unsigned)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::RemUInt64,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I64(1)),
+            ),
+            |_env, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I64(0)))
+            },
+        );
+
+        // x % 1 -> 0 (Signed)
+        matcher.add_rule(
+            Pattern::binary(
+                BinaryOp::RemSInt64,
+                Pattern::Var("x"),
+                Pattern::Const(Literal::I64(1)),
+            ),
+            |_env, bump| {
+                let builder = IrBuilder::new(bump);
+                Some(builder.const_(Literal::I64(0)))
+            },
+        );
+
         // x * 2^k -> x << k
         matcher.add_rule(
             Pattern::binary(BinaryOp::MulInt32, Pattern::Var("x"), Pattern::Var("c")),

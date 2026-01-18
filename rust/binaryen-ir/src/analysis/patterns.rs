@@ -97,6 +97,12 @@ pub enum Pattern {
         op: PatternUnaryOp,
         value: Box<Pattern>,
     },
+    /// Match select expression
+    Select {
+        condition: Box<Pattern>,
+        if_true: Box<Pattern>,
+        if_false: Box<Pattern>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,6 +132,15 @@ impl Pattern {
         Pattern::Unary {
             op: op.into(),
             value: Box::new(value),
+        }
+    }
+
+    /// Helper to create a select pattern
+    pub fn select(condition: Pattern, if_true: Pattern, if_false: Pattern) -> Self {
+        Pattern::Select {
+            condition: Box::new(condition),
+            if_true: Box::new(if_true),
+            if_false: Box::new(if_false),
         }
     }
 
@@ -199,6 +214,23 @@ impl Pattern {
                     }
                 };
                 op_matches && p_value.matches(*e_value, env)
+            }
+
+            (
+                Pattern::Select {
+                    condition: p_cond,
+                    if_true: p_true,
+                    if_false: p_false,
+                },
+                ExpressionKind::Select {
+                    condition: e_cond,
+                    if_true: e_true,
+                    if_false: e_false,
+                },
+            ) => {
+                p_cond.matches(*e_cond, env)
+                    && p_true.matches(*e_true, env)
+                    && p_false.matches(*e_false, env)
             }
 
             _ => false,
