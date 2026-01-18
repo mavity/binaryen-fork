@@ -56,6 +56,13 @@ impl Pass for DataFlowOpts {
                                         constant_props.insert(use_expr.as_ptr(), *value);
                                     }
                                 }
+
+                                // Generalized Copy Propagation: local.set $v2, (local.get $v1)
+                                if let ExpressionKind::LocalGet { .. } = &value.kind {
+                                    for &use_expr in uses {
+                                        constant_props.insert(use_expr.as_ptr(), *value);
+                                    }
+                                }
                             }
                         }
                         _ => {}

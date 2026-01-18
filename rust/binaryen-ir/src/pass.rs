@@ -300,6 +300,16 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
         create: |_| Box::new(crate::passes::local_cse::LocalCSE),
     },
     PassInfo {
+        name: "type-ssa",
+        description: "refine types using SSA",
+        create: |_| Box::new(crate::passes::type_ssa::TypeSSA),
+    },
+    PassInfo {
+        name: "gufa",
+        description: "global unified flow analysis",
+        create: |_| Box::new(crate::passes::gufa::GUFA),
+    },
+    PassInfo {
         name: "asyncify",
         description: "async/await support",
         create: |_| {

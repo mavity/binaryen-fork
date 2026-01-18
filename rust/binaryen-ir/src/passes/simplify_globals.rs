@@ -3,7 +3,8 @@ use crate::analysis::global_analysis::GlobalAnalysis;
 use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::Module;
 use crate::pass::Pass;
-use bumpalo::Bump;
+use crate::visitor::Visitor;
+use std::collections::HashSet;
 
 pub struct SimplifyGlobals;
 
@@ -19,80 +20,128 @@ impl Pass for SimplifyGlobals {
         // 2. Run Global Analysis
         let analysis = GlobalAnalysis::analyze(module, &call_graph);
 
-        // 3. Optimize
-        // We can replace GlobalGet of constant globals with Const.
-
-        if analysis.constant_globals.is_empty() {
-            return;
-        }
-
-        let allocator = module.allocator;
+        // 3. Constant Propagation
         let mut optimizer = GlobalOptimizer {
             analysis: &analysis,
-            allocator,
-            optimized_count: 0,
+            builder: IrBuilder::new(module.allocator),
         };
 
         for func in &mut module.functions {
-            if let Some(body) = func.body {
-                func.body = Some(optimizer.transform(body));
+            if let Some(mut body) = func.body {
+                optimizer.visit(&mut body);
+                func.body = Some(body);
             }
         }
 
-        // Note: Removing unused globals would require modifying module.globals,
-        // which is harder with current mutable borrow of functions.
-        // We'll focus on constant propagation here.
+        // 4. Cleanup: Remove unused or write-only globals
+        let mut globals_to_remove = HashSet::new();
+        for id in 0..module.globals.len() {
+            if !analysis.read_globals.contains(&id) {
+                // If it's not read, it's either write-only or completely unused.
+                let mut is_exported = false;
+                for export in &module.exports {
+                    if export.kind == crate::module::ExportKind::Global
+                        && export.index as usize == id
+                    {
+                        is_exported = true;
+                        break;
+                    }
+                }
+                if !is_exported {
+                    globals_to_remove.insert(id);
+                }
+            }
+        }
+
+        if !globals_to_remove.is_empty() {
+            self.remove_globals(module, globals_to_remove);
+        }
     }
 }
 
-struct GlobalOptimizer<'a, 'b> {
-    analysis: &'b GlobalAnalysis,
-    allocator: &'a Bump,
-    optimized_count: usize,
+impl SimplifyGlobals {
+    fn remove_globals<'a>(&self, module: &mut Module<'a>, to_remove: HashSet<usize>) {
+        if to_remove.is_empty() {
+            return;
+        }
+
+        let mut old_to_new = vec![None; module.globals.len()];
+        let mut new_globals = Vec::new();
+        let mut current_new_idx = 0;
+
+        let old_globals = std::mem::take(&mut module.globals);
+        for (i, global) in old_globals.into_iter().enumerate() {
+            if to_remove.contains(&i) {
+                old_to_new[i] = None;
+            } else {
+                old_to_new[i] = Some(current_new_idx);
+                new_globals.push(global);
+                current_new_idx += 1;
+            }
+        }
+        module.globals = new_globals;
+
+        // Remap indices in functions
+        let mut remapper = GlobalRemapper {
+            old_to_new: &old_to_new,
+        };
+        for func in &mut module.functions {
+            if let Some(mut body) = func.body {
+                remapper.visit(&mut body);
+                func.body = Some(body);
+            }
+        }
+
+        // Remap indices in exports
+        for export in &mut module.exports {
+            if export.kind == crate::module::ExportKind::Global {
+                if let Some(new_idx) = old_to_new[export.index as usize] {
+                    export.index = new_idx as u32;
+                }
+            }
+        }
+    }
 }
 
-impl<'a, 'b> GlobalOptimizer<'a, 'b> {
-    fn transform(&mut self, expr: ExprRef<'a>) -> ExprRef<'a> {
-        let builder = IrBuilder::new(self.allocator);
+struct GlobalOptimizer<'b, 'a> {
+    analysis: &'b GlobalAnalysis,
+    builder: IrBuilder<'a>,
+}
 
-        match &expr.kind {
+impl<'b, 'a> Visitor<'a> for GlobalOptimizer<'b, 'a> {
+    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
+        self.visit_children(expr);
+
+        match &mut expr.kind {
             ExpressionKind::GlobalGet { index } => {
                 if let Some(literal) = self.analysis.global_values.get(&(*index as usize)) {
-                    self.optimized_count += 1;
-                    return builder.const_(literal.clone());
+                    *expr = self.builder.const_(literal.clone());
                 }
-                expr
             }
-            ExpressionKind::Block { name, list } => {
-                let mut new_list = bumpalo::collections::Vec::new_in(self.allocator);
-                for child in list.iter() {
-                    new_list.push(self.transform(*child));
+            _ => {}
+        }
+    }
+}
+
+struct GlobalRemapper<'b> {
+    old_to_new: &'b [Option<usize>],
+}
+
+impl<'b, 'a> Visitor<'a> for GlobalRemapper<'b> {
+    fn visit_expression(&mut self, expr: &mut ExprRef<'a>) {
+        self.visit_children(expr);
+        match &mut expr.kind {
+            ExpressionKind::GlobalGet { index } => {
+                if let Some(&Some(new_idx)) = self.old_to_new.get(*index as usize) {
+                    *index = new_idx as u32;
                 }
-                builder.block(*name, new_list, expr.type_)
             }
-            ExpressionKind::Binary { op, left, right } => {
-                let new_left = self.transform(*left);
-                let new_right = self.transform(*right);
-                builder.binary(*op, new_left, new_right, expr.type_)
-            }
-            // ... shallow impl for other nodes, ideally use a standardized rewriter/visitor
-            // For now, implement for most common structures
-            ExpressionKind::Call {
-                target,
-                operands,
-                is_return,
-            } => {
-                let mut new_ops = bumpalo::collections::Vec::new_in(self.allocator);
-                for op in operands.iter() {
-                    new_ops.push(self.transform(*op));
+            ExpressionKind::GlobalSet { index, .. } => {
+                if let Some(&Some(new_idx)) = self.old_to_new.get(*index as usize) {
+                    *index = new_idx as u32;
                 }
-                builder.call(target, new_ops, expr.type_, *is_return)
             }
-            ExpressionKind::Return { value } => {
-                let new_val = value.map(|v| self.transform(v));
-                builder.return_(new_val)
-            }
-            _ => expr, // fallback: don't recurse if not implemented (unsafe for deep trees, but ok for demo)
+            _ => {}
         }
     }
 }

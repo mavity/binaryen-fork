@@ -14,21 +14,23 @@ pub struct GlobalAnalysis {
     /// Known values for constant globals
     pub global_values: HashMap<GlobalId, Literal>,
 
+    /// Which globals are read
+    pub read_globals: HashSet<GlobalId>,
+
+    /// Which globals are written
+    pub written_globals: HashSet<GlobalId>,
+
     /// Which functions are reachable from exports
     pub reachable_functions: HashSet<FunctionId>,
 }
-
-impl Default for GlobalAnalysis {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
+/* ... existing code ... */
 impl GlobalAnalysis {
     pub fn new() -> Self {
         Self {
             constant_globals: HashSet::new(),
             global_values: HashMap::new(),
+            read_globals: HashSet::new(),
+            written_globals: HashSet::new(),
             reachable_functions: HashSet::new(),
         }
     }
@@ -36,21 +38,26 @@ impl GlobalAnalysis {
     pub fn analyze(module: &Module, call_graph: &CallGraph) -> Self {
         let mut analysis = Self::new();
 
+        analysis.analyze_usage(module);
         analysis.analyze_globals(module);
         analysis.analyze_reachability(module, call_graph);
 
         analysis
     }
 
+    fn analyze_usage(&mut self, module: &Module) {
+        for func in &module.functions {
+            if let Some(body) = func.body {
+                self.visit_usage(body);
+            }
+        }
+    }
+
     fn analyze_globals(&mut self, module: &Module) {
         // Track number of sets for each global
         let mut global_sets: HashMap<GlobalId, usize> = HashMap::new();
-
-        // Scan all functions
-        for func in &module.functions {
-            if let Some(body) = func.body {
-                self.visit_for_globals(body, &mut global_sets);
-            }
+        for &id in &self.written_globals {
+            global_sets.insert(id, 1); // We only care if it's > 0 for now in this simplified logic
         }
 
         // Identify constants
@@ -63,10 +70,7 @@ impl GlobalAnalysis {
                 }
             } else {
                 // Mutable global. Check if it's never modified (0 sets).
-                // Or maybe modified only during start?
-                // For simplicity, strict 0 sets means constant (initial value).
-                let sets = global_sets.get(&id).cloned().unwrap_or(0);
-                if sets == 0 {
+                if !self.written_globals.contains(&id) {
                     self.constant_globals.insert(id);
                     if let ExpressionKind::Const(value) = &global.init.kind {
                         self.global_values.insert(id, value.clone());
@@ -76,47 +80,50 @@ impl GlobalAnalysis {
         }
     }
 
-    fn visit_for_globals(&mut self, expr: ExprRef, sets: &mut HashMap<GlobalId, usize>) {
+    fn visit_usage(&mut self, expr: ExprRef) {
         match &expr.kind {
+            ExpressionKind::GlobalGet { index } => {
+                self.read_globals.insert(*index as usize);
+            }
             ExpressionKind::GlobalSet { index, value } => {
-                *sets.entry(*index as usize).or_default() += 1;
-                self.visit_for_globals(*value, sets);
+                self.written_globals.insert(*index as usize);
+                self.visit_usage(*value);
             }
             ExpressionKind::Block { list, .. } => {
                 for child in list.iter() {
-                    self.visit_for_globals(*child, sets);
+                    self.visit_usage(*child);
                 }
             }
-            ExpressionKind::Loop { body, .. } => self.visit_for_globals(*body, sets),
+            ExpressionKind::Loop { body, .. } => self.visit_usage(*body),
             ExpressionKind::If {
                 condition,
                 if_true,
                 if_false,
                 ..
             } => {
-                self.visit_for_globals(*condition, sets);
-                self.visit_for_globals(*if_true, sets);
+                self.visit_usage(*condition);
+                self.visit_usage(*if_true);
                 if let Some(e) = if_false {
-                    self.visit_for_globals(*e, sets);
+                    self.visit_usage(*e);
                 }
             }
             ExpressionKind::Binary { left, right, .. } => {
-                self.visit_for_globals(*left, sets);
-                self.visit_for_globals(*right, sets);
+                self.visit_usage(*left);
+                self.visit_usage(*right);
             }
-            ExpressionKind::Unary { value, .. } => self.visit_for_globals(*value, sets),
+            ExpressionKind::Unary { value, .. } => self.visit_usage(*value),
             ExpressionKind::Call { operands, .. }
             | ExpressionKind::CallIndirect { operands, .. } => {
                 for op in operands.iter() {
-                    self.visit_for_globals(*op, sets);
+                    self.visit_usage(*op);
                 }
             }
             ExpressionKind::LocalSet { value, .. } | ExpressionKind::LocalTee { value, .. } => {
-                self.visit_for_globals(*value, sets);
+                self.visit_usage(*value);
             }
-            ExpressionKind::Drop { value } => self.visit_for_globals(*value, sets),
+            ExpressionKind::Drop { value } => self.visit_usage(*value),
             ExpressionKind::Return { value: Some(v) } => {
-                self.visit_for_globals(*v, sets);
+                self.visit_usage(*v);
             }
             ExpressionKind::Select {
                 condition,
@@ -124,11 +131,10 @@ impl GlobalAnalysis {
                 if_false,
                 ..
             } => {
-                self.visit_for_globals(*condition, sets);
-                self.visit_for_globals(*if_true, sets);
-                self.visit_for_globals(*if_false, sets);
+                self.visit_usage(*condition);
+                self.visit_usage(*if_true);
+                self.visit_usage(*if_false);
             }
-            // Others?
             _ => {}
         }
     }
