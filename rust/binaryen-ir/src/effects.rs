@@ -253,14 +253,20 @@ impl EffectAnalyzer {
 
             ExpressionKind::Block { list, .. } => Self::analyze_list(list),
 
-            ExpressionKind::Unary { value, .. } => {
-                // Unary operations may trap (e.g., float-to-int conversions)
-                Effect::MAY_TRAP | Self::analyze(*value)
+            ExpressionKind::Unary { op, value } => {
+                let mut effects = Self::analyze(*value);
+                if op.may_trap() {
+                    effects |= Effect::MAY_TRAP;
+                }
+                effects
             }
 
-            ExpressionKind::Binary { left, right, .. } => {
-                // Binary operations may trap (e.g., division by zero)
-                Effect::MAY_TRAP | Self::analyze(*left) | Self::analyze(*right)
+            ExpressionKind::Binary { op, left, right } => {
+                let mut effects = Self::analyze(*left) | Self::analyze(*right);
+                if op.may_trap() {
+                    effects |= Effect::MAY_TRAP;
+                }
+                effects
             }
 
             ExpressionKind::LocalGet { .. } => Effect::NONE,
@@ -1116,7 +1122,6 @@ mod tests {
 
         let effect = EffectAnalyzer::analyze(unary);
         assert!(effect.calls());
-        assert!(effect.may_trap()); // Unary itself may trap
     }
 
     #[test]
@@ -1132,7 +1137,6 @@ mod tests {
         let effect = EffectAnalyzer::analyze(binary);
         assert!(effect.reads_global());
         assert!(effect.calls());
-        assert!(effect.may_trap());
     }
 
     #[test]

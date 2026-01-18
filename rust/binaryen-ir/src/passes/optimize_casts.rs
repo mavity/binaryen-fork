@@ -41,6 +41,39 @@ impl OptimizeCasts {
             ),
             |env: &MatchEnv, _| env.get("x").copied(),
         );
+
+        // demote(promote(x)) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::DemoteFloat64,
+                Pattern::unary(UnaryOp::PromoteFloat32, Pattern::Var("x")),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
+
+        // trunc_s_f64(promote_f32(convert_s_i32(x))) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::TruncSFloat64ToInt32,
+                Pattern::unary(
+                    UnaryOp::PromoteFloat32,
+                    Pattern::unary(UnaryOp::ConvertSInt32ToFloat32, Pattern::Var("x")),
+                ),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
+
+        // trunc_u_f64(promote_f32(convert_u_i32(x))) -> x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::TruncUFloat64ToInt32,
+                Pattern::unary(
+                    UnaryOp::PromoteFloat32,
+                    Pattern::unary(UnaryOp::ConvertUInt32ToFloat32, Pattern::Var("x")),
+                ),
+            ),
+            |env: &MatchEnv, _| env.get("x").copied(),
+        );
     }
 }
 
@@ -101,6 +134,31 @@ mod tests {
         };
 
         let mut expr_ref = wrap;
+        visitor.visit(&mut expr_ref);
+
+        assert!(matches!(
+            expr_ref.kind,
+            ExpressionKind::LocalGet { index: 0, .. }
+        ));
+    }
+
+    #[test]
+    fn test_optimize_demote_promote() {
+        let bump = Bump::new();
+        let builder = IrBuilder::new(&bump);
+
+        // demote(promote(local.get 0)) -> local.get 0
+        let x = builder.local_get(0, Type::F32);
+        let promote = builder.unary(UnaryOp::PromoteFloat32, x, Type::F64);
+        let demote = builder.unary(UnaryOp::DemoteFloat64, promote, Type::F32);
+
+        let mut expr_ref = demote;
+        let pass = OptimizeCasts::new();
+        let mut visitor = OptimizeCastsVisitor {
+            matcher: &pass.matcher,
+            allocator: &bump,
+        };
+
         visitor.visit(&mut expr_ref);
 
         assert!(matches!(

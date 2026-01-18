@@ -793,7 +793,6 @@ impl CoalesceLocals {
                     }
                 }
                 ExpressionKind::Const(_)
-                | ExpressionKind::LocalGet { .. }
                 | ExpressionKind::GlobalGet { .. }
                 | ExpressionKind::Unreachable
                 | ExpressionKind::Nop
@@ -805,7 +804,8 @@ impl CoalesceLocals {
                 | ExpressionKind::DataDrop { .. }
                 | ExpressionKind::ElemDrop { .. }
                 | ExpressionKind::Rethrow { .. }
-                | ExpressionKind::Pop { .. } => {}
+                | ExpressionKind::Pop { .. }
+                | ExpressionKind::LocalGet { .. } => {}
             }
         }
     }

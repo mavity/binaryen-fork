@@ -95,8 +95,8 @@ struct FunctionContext<'a> {
     first_cycle: bool,
     /// Options
     allow_tee: bool,
-    allow_structure: bool,
-    allow_nesting: bool,
+    _allow_structure: bool,
+    _allow_nesting: bool,
     /// Sinkable traces that exit blocks
     block_breaks: HashMap<String, Vec<BlockBreak<'a>>>,
     /// Blocks that cannot produce return values
@@ -114,8 +114,8 @@ impl<'a> FunctionContext<'a> {
             get_counts: HashMap::new(),
             first_cycle: true,
             allow_tee,
-            allow_structure,
-            allow_nesting,
+            _allow_structure: allow_structure,
+            _allow_nesting: allow_nesting,
             block_breaks: HashMap::new(),
             unoptimizable_blocks: std::collections::HashSet::new(),
             if_stack: Vec::new(),
@@ -1230,9 +1230,6 @@ where
         | ExpressionKind::DataDrop { .. }
         | ExpressionKind::ElemDrop { .. }
         | ExpressionKind::Rethrow { .. }
-        | ExpressionKind::RefTest { .. }
-        | ExpressionKind::RefCast { .. }
-        | ExpressionKind::BrOn { .. }
         | ExpressionKind::Pop { .. }
         | ExpressionKind::RefTest { .. }
         | ExpressionKind::RefCast { .. }
@@ -1552,8 +1549,8 @@ mod tests {
         // Test FunctionContext creation
         let ctx = FunctionContext::new(true, true, true);
         assert!(ctx.allow_tee);
-        assert!(ctx.allow_structure);
-        assert!(ctx.allow_nesting);
+        assert!(ctx._allow_structure);
+        assert!(ctx._allow_nesting);
         assert!(ctx.first_cycle);
     }
 
@@ -1680,7 +1677,7 @@ mod tests {
         pass.run(&mut module);
 
         let body = module.functions[0].body.unwrap();
-        if let ExpressionKind::LocalSet { index, value } = &body.kind {
+        if let ExpressionKind::LocalSet { index, value: _ } = &body.kind {
             assert_eq!(*index, 0);
         } else {
             panic!("Expected LocalSet, got {:?}", body.kind);

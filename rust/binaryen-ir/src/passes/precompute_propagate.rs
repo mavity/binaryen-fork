@@ -62,16 +62,15 @@ impl<'a, 'b> Visitor<'a> for PrecomputePropagateVisitor<'a, 'b> {
     fn visit(&mut self, expr: &mut ExprRef<'a>) {
         // Pre-order traversal for control flow handling
         match &expr.kind {
-            // Control flow structures invalidate our simple straight-line knowledge
-            ExpressionKind::Block { .. }
-            | ExpressionKind::If { .. }
-            | ExpressionKind::Loop { .. }
+            // Loops invalidate our simple straight-line knowledge because of back-edges
+            ExpressionKind::Loop { .. }
             | ExpressionKind::Break { .. }
-            | ExpressionKind::Switch { .. }
-            | ExpressionKind::Call { .. }
-            | ExpressionKind::CallIndirect { .. } => {
-                // Conservative approach: invalidate everything when entering control flow
-                // Real implementation needs proper merging
+            | ExpressionKind::Switch { .. } => {
+                self.invalidate_all();
+            }
+            // If handling: ideally we branch and merge.
+            // For now, let's just invalidate when entering an If to keep it simple but safe.
+            ExpressionKind::If { .. } => {
                 self.invalidate_all();
             }
             _ => {}
@@ -82,7 +81,8 @@ impl<'a, 'b> Visitor<'a> for PrecomputePropagateVisitor<'a, 'b> {
 
         // Post-order processing
         match &expr.kind {
-            ExpressionKind::LocalSet { index, value } => {
+            ExpressionKind::LocalSet { index, value }
+            | ExpressionKind::LocalTee { index, value } => {
                 // If value is a constant, record it
                 if let ExpressionKind::Const(lit) = &value.kind {
                     self.known_locals.insert(*index, lit.clone());
@@ -98,18 +98,10 @@ impl<'a, 'b> Visitor<'a> for PrecomputePropagateVisitor<'a, 'b> {
                     self.made_changes = true;
                 }
             }
-            ExpressionKind::LocalTee { index, value } => {
-                // Like Set, record if constant
-                if let ExpressionKind::Const(lit) = &value.kind {
-                    self.known_locals.insert(*index, lit.clone());
-                } else {
-                    self.known_locals.remove(index);
-                }
-            }
             _ => {
-                // Try to evaluate constant expressions
-                // This reuses the logic from Precompute pass
+                // For other expressions, try to precompute them if they are pure
                 if let Some(lit) = self.evaluator.eval(*expr) {
+                    // Only replace if it wasn't already a constant
                     if !matches!(expr.kind, ExpressionKind::Const(_)) {
                         expr.kind = ExpressionKind::Const(lit);
                         self.made_changes = true;

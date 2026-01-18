@@ -98,6 +98,7 @@ impl Pass for ReorderFunctions {
 }
 
 // Helper trait to allow "taking" from a Vec of Functions
+#[allow(dead_code)]
 trait TakeFunction<'a> {
     fn take(&mut self) -> crate::module::Function<'a>;
 }

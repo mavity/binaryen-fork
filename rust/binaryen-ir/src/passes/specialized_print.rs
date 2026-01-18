@@ -1,4 +1,3 @@
-use crate::analysis::stats::ModuleStats;
 use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::{ExportKind, Module};
 use crate::pass::Pass;
@@ -94,7 +93,7 @@ impl Pass for PrintMinified {
         "PrintMinified"
     }
 
-    fn run<'a>(&mut self, module: &mut Module<'a>) {
+    fn run<'a>(&mut self, _module: &mut Module<'a>) {
         // This would use a dedicated printer. For now, we reuse the existing printer
         // but with a flag if it supported it.
         println!("Minified Output: [not implemented]");

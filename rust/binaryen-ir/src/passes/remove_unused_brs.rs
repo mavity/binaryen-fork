@@ -63,6 +63,7 @@ impl<'a> Flow<'a> {
         }
     }
 
+    #[allow(dead_code)]
     fn return_(expr: ExprRef<'a>) -> Self {
         Self {
             unconditional_breaks: Vec::new(),

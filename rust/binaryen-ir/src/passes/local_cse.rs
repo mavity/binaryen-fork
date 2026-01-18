@@ -471,7 +471,6 @@ mod tests {
     #[test]
     fn test_local_cse_can_generate_keys() {
         let bump = Bump::new();
-        let mut dummy_vars: Vec<Type> = Vec::new(); // Create a dummy mutable vector with explicit type
 
         let transformer = CSETransformer {
             allocator: &bump,

@@ -2,7 +2,7 @@ use crate::analysis::cfg::ControlFlowGraph;
 use crate::analysis::dominators::DominanceTree;
 use crate::analysis::ssa::{DefA, SSABuilder};
 use crate::effects::EffectAnalyzer;
-use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
+use crate::expression::{ExprRef, ExpressionKind};
 use crate::module::Module;
 use crate::pass::Pass;
 use crate::visitor::Visitor;

@@ -1,9 +1,9 @@
 use crate::analysis::call_graph::CallGraph;
-use crate::expression::{ExprRef, Expression, ExpressionKind, IrBuilder};
+use crate::expression::{ExprRef, ExpressionKind, IrBuilder};
 use crate::module::{Function, Global, ImportKind, Module};
 use crate::pass::Pass;
 use crate::passes::flatten::Flatten;
-use crate::visitor::{ReadOnlyVisitor, Visitor};
+use crate::visitor::ReadOnlyVisitor;
 use binaryen_core::{Literal, Type};
 use bumpalo::collections::Vec as BumpVec;
 use std::collections::{HashMap, HashSet};
@@ -237,7 +237,7 @@ impl ModuleAnalyzer {
 
     pub fn can_change_state_expr(&self, module: &Module, expr: ExprRef) -> bool {
         let mut visitor = CanChangeStateVisitor {
-            module,
+            _module: module,
             analyzer: self,
             can_change_state: false,
         };
@@ -247,7 +247,7 @@ impl ModuleAnalyzer {
 }
 
 struct CanChangeStateVisitor<'a, 'b> {
-    module: &'a Module<'b>,
+    _module: &'a Module<'b>,
     analyzer: &'a ModuleAnalyzer,
     can_change_state: bool,
 }
@@ -460,10 +460,10 @@ impl<'a, 'b> AsyncifyLocals<'a, 'b> {
         let mut transformer = LocalTransformer {
             builder,
             rewind_index_local,
-            fake_globals,
-            fake_locals: HashMap::new(),
+            _fake_globals: fake_globals,
+            _fake_locals: HashMap::new(),
             func: &mut self.module.functions[self.func_idx],
-            state_index: self.state_index,
+            _state_index: self.state_index,
         };
         let body = transformer.func.body.unwrap();
         transformer.func.body = Some(transformer.visit_top_level(body));
@@ -506,10 +506,10 @@ impl<'a, 'b> AsyncifyLocals<'a, 'b> {
 struct LocalTransformer<'a, 'b> {
     builder: IrBuilder<'b>,
     rewind_index_local: u32,
-    fake_globals: HashMap<Type, String>,
-    fake_locals: HashMap<Type, u32>,
+    _fake_globals: HashMap<Type, String>,
+    _fake_locals: HashMap<Type, u32>,
     func: &'a mut Function<'b>,
-    state_index: u32,
+    _state_index: u32,
 }
 
 impl<'a, 'b> LocalTransformer<'a, 'b> {
@@ -549,9 +549,9 @@ impl<'a, 'b> LocalTransformer<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{ExprRef, IrBuilder};
+    use crate::expression::IrBuilder;
     use crate::module::Module;
-    use binaryen_core::{Literal, Type};
+    use binaryen_core::Type;
     use bumpalo::Bump;
 
     #[test]

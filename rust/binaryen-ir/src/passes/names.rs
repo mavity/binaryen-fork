@@ -16,7 +16,7 @@ impl Pass for MinifyNames {
         let mut name_map = HashMap::new();
         let mut next_id = 0;
 
-        let mut get_next_name = |next_id: &mut usize| {
+        let get_next_name = |next_id: &mut usize| {
             let mut name = String::new();
             let mut id = *next_id;
             loop {
@@ -100,7 +100,7 @@ impl MinifyNames {
         func: &mut crate::module::Function<'a>,
         next_id: &mut usize,
         name_map: &mut HashMap<String, String>,
-        allocator: &'a bumpalo::Bump,
+        _allocator: &'a bumpalo::Bump,
     ) {
         if let Some(mut body) = func.body {
             let mut collector = BranchNameCollector { next_id, name_map };

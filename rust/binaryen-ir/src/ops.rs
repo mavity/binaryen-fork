@@ -64,6 +64,20 @@ impl UnaryOp {
     pub fn is_relational(&self) -> bool {
         matches!(self, UnaryOp::EqZInt32 | UnaryOp::EqZInt64)
     }
+
+    pub fn may_trap(&self) -> bool {
+        matches!(
+            self,
+            UnaryOp::TruncSFloat32ToInt32
+                | UnaryOp::TruncUFloat32ToInt32
+                | UnaryOp::TruncSFloat64ToInt32
+                | UnaryOp::TruncUFloat64ToInt32
+                | UnaryOp::TruncSFloat32ToInt64
+                | UnaryOp::TruncUFloat32ToInt64
+                | UnaryOp::TruncSFloat64ToInt64
+                | UnaryOp::TruncUFloat64ToInt64
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -186,6 +200,20 @@ impl BinaryOp {
                 | BinaryOp::LeFloat64
                 | BinaryOp::GtFloat64
                 | BinaryOp::GeFloat64
+        )
+    }
+
+    pub fn may_trap(&self) -> bool {
+        matches!(
+            self,
+            BinaryOp::DivSInt32
+                | BinaryOp::DivUInt32
+                | BinaryOp::RemSInt32
+                | BinaryOp::RemUInt32
+                | BinaryOp::DivSInt64
+                | BinaryOp::DivUInt64
+                | BinaryOp::RemSInt64
+                | BinaryOp::RemUInt64
         )
     }
 }

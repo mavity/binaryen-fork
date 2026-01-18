@@ -236,8 +236,6 @@ impl OptimizeInstructions {
             LeFloat64 => Some(Literal::I32((left.get_f64() <= right.get_f64()) as i32)),
             GtFloat64 => Some(Literal::I32((left.get_f64() > right.get_f64()) as i32)),
             GeFloat64 => Some(Literal::I32((left.get_f64() >= right.get_f64()) as i32)),
-
-            _ => None,
         }
     }
 
@@ -761,13 +759,38 @@ impl OptimizeInstructions {
 
         // --- Double Negation ---
 
-        // !(!)x -> x
+        // !(!(!x))) -> !x
+        matcher.add_rule(
+            Pattern::unary(
+                UnaryOp::EqZInt32,
+                Pattern::unary(
+                    UnaryOp::EqZInt32,
+                    Pattern::unary(UnaryOp::EqZInt32, Pattern::Var("x")),
+                ),
+            ),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.unary(UnaryOp::EqZInt32, *x, Type::I32))
+            },
+        );
+
+        // !!x -> x != 0 (normalized boolean)
         matcher.add_rule(
             Pattern::unary(
                 UnaryOp::EqZInt32,
                 Pattern::unary(UnaryOp::EqZInt32, Pattern::Var("x")),
             ),
-            |env: &MatchEnv, _| env.get("x").copied(),
+            |env: &MatchEnv, bump| {
+                let x = env.get("x")?;
+                let builder = IrBuilder::new(bump);
+                Some(builder.binary(
+                    BinaryOp::NeInt32,
+                    *x,
+                    builder.const_(Literal::I32(0)),
+                    Type::I32,
+                ))
+            },
         );
 
         // --- Commutative Operator Normalization ---
@@ -1633,7 +1656,7 @@ mod tests {
         let bump = Bump::new();
         let builder = IrBuilder::new(&bump);
 
-        // !(!)x -> x
+        // !!x -> x != 0
         let x = builder.local_get(0, Type::I32);
         let neg1 = builder.unary(UnaryOp::EqZInt32, x, Type::I32);
         let neg2 = builder.unary(UnaryOp::EqZInt32, neg1, Type::I32);
@@ -1647,10 +1670,12 @@ mod tests {
         let mut expr_ref = neg2;
         visitor.visit(&mut expr_ref);
 
-        assert!(matches!(
-            expr_ref.kind,
-            ExpressionKind::LocalGet { index: 0, .. }
-        ));
+        if let ExpressionKind::Binary { op, right, .. } = &expr_ref.kind {
+            assert_eq!(*op, BinaryOp::NeInt32);
+            assert!(matches!(right.kind, ExpressionKind::Const(Literal::I32(0))));
+        } else {
+            panic!("Expected x != 0, got {:?}", expr_ref.kind);
+        }
     }
 
     #[test]
@@ -2233,7 +2258,7 @@ mod tests {
         let mut expr_ref = mul;
         visitor.visit(&mut expr_ref);
 
-        if let ExpressionKind::Binary { op, left, right } = expr_ref.kind {
+        if let ExpressionKind::Binary { op, left: _, right } = expr_ref.kind {
             assert_eq!(op, BinaryOp::ShlInt32);
             assert!(matches!(right.kind, ExpressionKind::Const(Literal::I32(2))));
         } else {

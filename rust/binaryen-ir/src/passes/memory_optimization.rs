@@ -692,7 +692,9 @@ mod tests {
 
         let body = module.functions[0].body.as_ref().unwrap();
         if let ExpressionKind::Block { list, .. } = &body.kind {
-            assert_eq!(list.len(), 2);
+            // UnaryOp::EqZInt32 no longer traps by default in our updated EffectAnalyzer,
+            // so the redundant store is now optimized away.
+            assert_eq!(list.len(), 1);
         }
     }
 

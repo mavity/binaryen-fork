@@ -321,7 +321,7 @@ pub static PASS_REGISTRY: &[PassInfo] = &[
     PassInfo {
         name: "avoid-reinterprets",
         description: "optimizes reinterpret instructions",
-        create: |_| Box::new(crate::passes::avoid_reinterprets::AvoidReinterprets),
+        create: |_| Box::new(crate::passes::avoid_reinterprets::AvoidReinterprets::new()),
     },
     PassInfo {
         name: "const-hoisting",
